@@ -29,10 +29,12 @@ type DeletionRequest struct {
 	Before     time.Time    `json:"before,omitempty"`
 }
 type DeletionPreview struct {
-	Token        string    `json:"token"`
-	Confirmation string    `json:"confirmation"`
-	TotalRows    int64     `json:"totalRows"`
-	ExpiresAt    time.Time `json:"expiresAt"`
+	Token        string          `json:"token"`
+	Confirmation string          `json:"confirmation"`
+	TotalRows    int64           `json:"totalRows"`
+	ExpiresAt    time.Time       `json:"expiresAt"`
+	Scope        DeletionRequest `json:"scope"`
+	FenceAt      time.Time       `json:"fenceAt"`
 }
 type DeletionJob struct {
 	ID                     string       `json:"id"`
@@ -49,6 +51,15 @@ func (m *Manager) PreviewDeletion(ctx context.Context, request DeletionRequest) 
 	}
 	if err := validDeletion(request); err != nil {
 		return DeletionPreview{}, err
+	}
+	if request.Kind == DeleteResource || request.Kind == DeleteArchived {
+		var status string
+		if err := m.db.QueryRowContext(ctx, "SELECT status FROM resources WHERE id=?", request.ResourceID).Scan(&status); err != nil {
+			return DeletionPreview{}, errors.New("resource not found")
+		}
+		if request.Kind == DeleteArchived && status != "archived" {
+			return DeletionPreview{}, errors.New("resource is not archived")
+		}
 	}
 	now := time.Now().UTC()
 	fence := now.UnixMilli()
@@ -71,7 +82,7 @@ func (m *Manager) PreviewDeletion(ctx context.Context, request DeletionRequest) 
 	if err != nil {
 		return DeletionPreview{}, err
 	}
-	return DeletionPreview{Token: token, Confirmation: confirmation, TotalRows: total, ExpiresAt: expires}, nil
+	return DeletionPreview{Token: token, Confirmation: confirmation, TotalRows: total, ExpiresAt: expires, Scope: request, FenceAt: time.UnixMilli(fence).UTC()}, nil
 }
 func (m *Manager) CreateDeletion(ctx context.Context, token, confirmation, actor string) (DeletionJob, error) {
 	if m.db == nil {
@@ -123,12 +134,26 @@ func (m *Manager) DeletionJob(ctx context.Context, id string) (DeletionJob, erro
 	return j, err
 }
 func (m *Manager) CancelDeletion(ctx context.Context, id string) error {
-	_, err := m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='cancelling' WHERE id=? AND state IN ('queued','running')", id)
-	return err
+	r, err := m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state=CASE WHEN state='queued' THEN 'cancelled' ELSE 'cancelling' END,finished_at=CASE WHEN state='queued' THEN ? ELSE finished_at END WHERE id=? AND state IN ('queued','running')", time.Now().UTC().UnixMilli(), id)
+	if err != nil {
+		return err
+	}
+	n, _ := r.RowsAffected()
+	if n != 1 {
+		return errors.New("deletion job is not cancellable")
+	}
+	return nil
 }
 func (m *Manager) RetryDeletion(ctx context.Context, id string) error {
-	_, err := m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='queued',error_message=NULL,finished_at=NULL WHERE id=? AND state IN ('cancelled','failed')", id)
-	return err
+	r, err := m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='queued',error_message=NULL,finished_at=NULL WHERE id=? AND state IN ('cancelled','failed')", id)
+	if err != nil {
+		return err
+	}
+	n, _ := r.RowsAffected()
+	if n != 1 {
+		return errors.New("deletion job is not retryable")
+	}
+	return nil
 }
 func (m *Manager) RunDeletion(ctx context.Context, id string) error {
 	var kind DeletionKind

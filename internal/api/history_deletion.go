@@ -2,7 +2,6 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
@@ -10,6 +9,9 @@ import (
 )
 
 type CSRFValidator interface{ ValidCSRF(*http.Request) bool }
+type ActorProvider interface {
+	Actor(*http.Request) (string, bool)
+}
 
 // EnableHistoryDeletion exposes destructive history management behind the existing authorizer.
 func (s *Server) EnableHistoryDeletion(store *storage.Manager, auth Authorizer, csrf CSRFValidator) {
@@ -60,12 +62,15 @@ func (s *Server) EnableHistoryDeletion(store *storage.Manager, auth Authorizer, 
 			WriteError(w, 400, Error{Code: "invalid_request", Message: "A preview token and confirmation are required."})
 			return
 		}
-		job, err := store.CreateDeletion(r.Context(), body.Token, body.Confirmation, "")
+		actor := ""
+		if provider, ok := auth.(ActorProvider); ok {
+			actor, _ = provider.Actor(r)
+		}
+		job, err := store.CreateDeletion(r.Context(), body.Token, body.Confirmation, actor)
 		if err != nil {
 			WriteError(w, 409, Error{Code: "deletion_not_available", Message: "The deletion cannot be started."})
 			return
 		}
-		go func() { _ = store.RunDeletion(context.Background(), job.ID) }()
 		WriteJSON(w, 202, job)
 	}))
 	s.Handle(prefix+"/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -99,9 +104,6 @@ func (s *Server) EnableHistoryDeletion(store *storage.Manager, auth Authorizer, 
 				err = store.CancelDeletion(r.Context(), id)
 			} else if parts[1] == "retry" {
 				err = store.RetryDeletion(r.Context(), id)
-				if err == nil {
-					go func() { _ = store.RunDeletion(context.Background(), id) }()
-				}
 			} else {
 				WriteError(w, 404, Error{Code: "not_found", Message: "Deletion job not found."})
 				return

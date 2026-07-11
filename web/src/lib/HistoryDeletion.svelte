@@ -107,7 +107,7 @@
     >{/if}<button type="button" onclick={requestPreview}
     >Preview deletion</button
   >{#if preview}<p>
-      {preview.totalRows} rows will be deleted. Type
+      {preview.totalRows} rows in the selected {kind} scope will be deleted. Type
       <code>{preview.confirmation}</code> to confirm.
     </p>
     <label>Confirmation <input bind:value={confirmation} /></label><button

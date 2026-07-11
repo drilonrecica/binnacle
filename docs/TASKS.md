@@ -678,6 +678,7 @@ Rules for every task:
 
 ### T072 — Implement manual history deletion operations
 
+- **Status:** Complete
 - **Commit:** `feat(storage): add scoped history deletion jobs`
 - **Description:** Add controlled operations for one-resource history deletion, delete-before-date, reset-all history, and archived-resource purge with bounded batches and progress state.
 - **Implement:** Require exact scope preview and typed confirmation at API/UI layers; never delete configuration unless explicitly requested; block conflicting deletion jobs.

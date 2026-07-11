@@ -74,6 +74,11 @@ func (s *Sessions) Authorize(r *http.Request) bool {
 	_, err := s.Authenticate(r.Context(), TokenFromRequest(r))
 	return err == nil
 }
+func (s *Sessions) Actor(r *http.Request) (string, bool) {
+	var id string
+	err := s.db.QueryRowContext(r.Context(), "SELECT user_id FROM sessions WHERE id_hash=? AND revoked_at IS NULL", tokenHash(TokenFromRequest(r))).Scan(&id)
+	return id, err == nil
+}
 
 func (s *Sessions) ValidCSRF(r *http.Request) bool {
 	token := TokenFromRequest(r)
