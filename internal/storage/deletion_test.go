@@ -3,10 +3,25 @@ package storage
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestDeletionJobJSONProgressContract(t *testing.T) {
+	encoded, err := json.Marshal(DeletionJob{TotalRows: 10, DeletedRows: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var progress map[string]any
+	if err := json.Unmarshal(encoded, &progress); err != nil {
+		t.Fatal(err)
+	}
+	if progress["totalRows"] != float64(10) || progress["deletedRows"] != float64(4) {
+		t.Fatalf("progress=%v", progress)
+	}
+}
 
 func TestScopedDeletionPreservesConfigurationAndSupportsRetry(t *testing.T) {
 	ctx := context.Background()

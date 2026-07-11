@@ -40,6 +40,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	}
 	workerCtx, cancel := context.WithCancel(ctx)
 	if err := m.recoverDeletionJobs(ctx); err != nil {
+		cancel()
 		_ = m.Close()
 		return err
 	}

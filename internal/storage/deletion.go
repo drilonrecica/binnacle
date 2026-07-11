@@ -38,12 +38,13 @@ type DeletionPreview struct {
 	FenceAt      time.Time       `json:"fenceAt"`
 }
 type DeletionJob struct {
-	ID                     string       `json:"id"`
-	Kind                   DeletionKind `json:"kind"`
-	ResourceID             string       `json:"resourceId,omitempty"`
-	State                  string       `json:"state"`
-	TotalRows, DeletedRows int64        `json:"totalRows","deletedRows"`
-	Error                  string       `json:"error,omitempty"`
+	ID          string       `json:"id"`
+	Kind        DeletionKind `json:"kind"`
+	ResourceID  string       `json:"resourceId,omitempty"`
+	State       string       `json:"state"`
+	TotalRows   int64        `json:"totalRows"`
+	DeletedRows int64        `json:"deletedRows"`
+	Error       string       `json:"error,omitempty"`
 }
 
 func (m *Manager) PreviewDeletion(ctx context.Context, request DeletionRequest) (DeletionPreview, error) {
