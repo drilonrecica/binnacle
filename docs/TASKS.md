@@ -577,6 +577,7 @@ Rules for every task:
 
 ### T061 — Implement self-observation instrumentation
 
+- **Status:** Complete
 - **Commit:** `feat(app): collect TALOS self-observation metrics`
 - **Description:** Measure TALOS CPU/RSS, Go heap/goroutines, database/WAL size, write/rollup/retention durations, samples/sec, collector durations, dropped batches, queue depth, SSE clients, and Docker request duration/errors.
 - **Implement:** Keep collection lightweight and internal; avoid recursively persisting high-rate self-metrics into unbounded storage; make values available to diagnostics and current UI.
