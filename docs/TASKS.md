@@ -660,6 +660,7 @@ Rules for every task:
 
 ### T070 — Expose the historical metrics API contract
 
+- **Status:** Complete
 - **Commit:** `feat(api): add metrics history endpoint`
 - **Description:** Implement authenticated `GET /api/v1/metrics` with scope, ID, metric list, from/to range, and structured series/gap response.
 - **Implement:** Limit requested metric count and date span, rate-limit expensive queries, name units explicitly, return RFC 3339 points, and never zero-fill missing values.
