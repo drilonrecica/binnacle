@@ -642,6 +642,7 @@ Rules for every task:
 
 ### T068 — Add database budget monitoring and emergency policy
 
+- **Status:** Complete
 - **Commit:** `feat(storage): enforce database budget safeguards`
 - **Description:** Monitor database/WAL size against target, warning, critical, and emergency ratios; trigger aggressive expired cleanup at critical and pause highest-resolution raw persistence only at emergency.
 - **Implement:** Never silently delete in-retention data to satisfy soft budget; preserve settings/auth/events/aggregates before sacrificing oldest queued raw samples; surface current state/reason.
