@@ -90,6 +90,7 @@ Rules for every task:
 
 ### T008 — Implement typed configuration defaults and validation
 
+- **Status:** Complete
 - **Commit:** `feat(config): add typed defaults and validation`
 - **Description:** Define the complete typed configuration model and normative defaults for collection, persistence, retention, database budgets, API limits, sessions, Docker concurrency, paths, demo mode, and deployment-critical settings.
 - **Implement:** Validate minimum collection interval, positive durations/budgets, valid retention ordering, safe queue limits, and required paths. Separate live-editable values from restart-required values in the type model.
