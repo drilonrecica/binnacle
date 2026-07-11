@@ -117,6 +117,7 @@ Rules for every task:
 
 ### T011 — Define core domain types and nullable metric semantics
 
+- **Status:** Complete
 - **Commit:** `feat(metrics): define observations snapshots and events`
 - **Description:** Introduce shared typed domain models for host/container observations, metadata, logical resources, current snapshots, collector health, events, persistence batches, time ranges, units, and explicit missing values.
 - **Implement:** Keep Docker IDs ephemeral and logical resource IDs stable; use UTC timestamps plus monotonic elapsed durations for rate calculations; include boot identity, freshness, and monotonic snapshot sequence fields.
