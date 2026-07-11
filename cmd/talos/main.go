@@ -60,6 +60,9 @@ func main() {
 			setup.SetDB(store.DB())
 			credentials.SetDB(store.DB())
 			sessions.SetDB(store.DB())
+			if _, err := auth.BootstrapAdmin(ctx, credentials, setup); err != nil {
+				return err
+			}
 			setupToken, err := auth.SetupTokenFromEnvironment()
 			if err != nil {
 				return err

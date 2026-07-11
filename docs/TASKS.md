@@ -725,6 +725,7 @@ Rules for every task:
 
 ### T077 — Add bootstrap credentials and encrypted UI-secret service
 
+- **Status:** Complete
 - **Commit:** `feat(auth): support credential bootstrap and encrypted secrets`
 - **Description:** Support admin bootstrap credentials from environment/Docker secrets and add authenticated encryption for future UI-entered secrets using an externally supplied master key.
 - **Implement:** Auto-create only when no user exists; store ciphertext/nonce/algorithm/key version, never return secret values via API, and fail safely when UI-secret encryption is requested without master key.

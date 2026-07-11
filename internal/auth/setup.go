@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"time"
 )
@@ -35,21 +34,21 @@ func NewSetupService(db *sql.DB) *SetupService {
 // source is intended for Docker secrets and takes precedence only when the
 // direct value is absent; configuring both is rejected to avoid ambiguity.
 func SetupTokenFromEnvironment() (string, error) {
-	value := os.Getenv("TALOS_SETUP_TOKEN")
-	path := os.Getenv("TALOS_SETUP_TOKEN_FILE")
-	if value != "" && path != "" {
-		return "", errors.New("configure only one of TALOS_SETUP_TOKEN or TALOS_SETUP_TOKEN_FILE")
-	}
-	if path == "" {
-		return value, nil
-	}
-	contents, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("read setup token file: %w", err)
-	}
-	return strings.TrimRight(string(contents), "\r\n"), nil
+	return EnvironmentSecret("TALOS_SETUP_TOKEN")
 }
 func (s *SetupService) SetDB(db *sql.DB) { s.db = db }
+
+// Disable permanently records that first-run setup has completed. It is used
+// by non-browser bootstrap paths as well as the browser claim transaction.
+func (s *SetupService) Disable(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return ErrSetupUnavailable
+	}
+	now := s.now().UTC().UnixMilli()
+	_, err := s.db.ExecContext(ctx, `INSERT INTO setup_state(id,token_hash,expires_at,claimed_at,created_at)
+		VALUES(1,NULL,NULL,?,?) ON CONFLICT(id) DO UPDATE SET token_hash=NULL,claimed_at=COALESCE(setup_state.claimed_at,excluded.claimed_at)`, now, now)
+	return err
+}
 
 // Initialize creates an operator token only for loopback-only installations. A
 // public listener must be supplied an operator token out of band.
