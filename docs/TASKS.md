@@ -45,6 +45,7 @@ Rules for every task:
 
 ### T003 — Initialize the pinned Go module and baseline dependencies
 
+- **Status:** Complete
 - **Commit:** `build(go): initialize module and pinned toolchain`
 - **Description:** Create `go.mod` for Go 1.26, add only the initial dependencies needed by the selected architecture: the CGO SQLite driver, Docker Engine client, TOML parser, and `x/crypto`.
 - **Implement:** Use module paths and SPDX-compatible dependency licenses; do not add a router, ORM, migration framework, dependency-injection container, metrics suite, or logging framework without a concrete task requiring it.
