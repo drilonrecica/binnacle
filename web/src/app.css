@@ -216,6 +216,16 @@ nav a[aria-current='page'] {
 .stale {
   opacity: 0.78;
 }
+.resource-tabs {
+  display: flex;
+  gap: var(--space-3);
+  border: 0;
+  padding: 0 0 var(--space-4);
+}
+.archived-resource,
+.archived-detail {
+  border-left: 0.25rem solid var(--unknown);
+}
 .card {
   padding: var(--space-4);
   border: 1px solid var(--border);

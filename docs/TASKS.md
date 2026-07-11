@@ -808,6 +808,7 @@ Rules for every task:
 
 ### T086 — Add archived-resource experience and purge UI
 
+- **Status:** Complete
 - **Commit:** `feat(web): manage archived resource history`
 - **Description:** Complete Archived navigation/detail presentation and connect typed-confirmation purge/history-deletion flows with scope preview and progress feedback.
 - **Implement:** Make archived state unmistakable, keep historical charts/events accessible until deletion, and prevent destructive controls from appearing in ordinary active-resource quick actions.

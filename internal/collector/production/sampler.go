@@ -20,6 +20,7 @@ import (
 	"github.com/drilonrecica/talos/internal/events"
 	"github.com/drilonrecica/talos/internal/metrics"
 	"github.com/drilonrecica/talos/internal/resources"
+	"github.com/drilonrecica/talos/internal/storage"
 	"golang.org/x/sys/unix"
 )
 
@@ -30,16 +31,21 @@ type Sampler struct {
 	DataDir              string
 	Interval             func() time.Duration
 	MaxDockerConcurrency int
-	cancel               context.CancelFunc
-	mu                   sync.Mutex
-	previousCPU          hostcollector.CPUCounters
-	haveCPU              bool
-	previousNetwork      hostcollector.NetworkCounters
-	previousNetworkAt    time.Time
-	previousStats        map[string]dockerSample
-	lastResources        []metrics.ResourceSnapshot
-	hostFailures         int
-	dockerFailures       int
+	Store                interface {
+		UpsertHost(context.Context, string, string, string) error
+		UpsertResource(context.Context, storage.Resource) error
+		ArchiveMissingResources(context.Context, []string, time.Time) error
+	}
+	cancel            context.CancelFunc
+	mu                sync.Mutex
+	previousCPU       hostcollector.CPUCounters
+	haveCPU           bool
+	previousNetwork   hostcollector.NetworkCounters
+	previousNetworkAt time.Time
+	previousStats     map[string]dockerSample
+	lastResources     []metrics.ResourceSnapshot
+	hostFailures      int
+	dockerFailures    int
 }
 type dockerSample struct {
 	value dockerapi.Stats
@@ -122,6 +128,15 @@ func (s *Sampler) collect(ctx context.Context, pending []metrics.Event) {
 		s.dockerFailures = 0
 		collectors["docker"] = health("docker", 0, nil, now)
 		s.lastResources = append([]metrics.ResourceSnapshot(nil), resourceValues...)
+		if s.Store != nil {
+			_ = s.Store.UpsertHost(ctx, "host", storage.HostIdentity("", "talos-local-host"), "Server")
+			ids := make([]string, 0, len(resourceValues))
+			for _, resource := range resourceValues {
+				ids = append(ids, string(resource.ID))
+				_ = s.Store.UpsertResource(ctx, storage.Resource{ID: string(resource.ID), HostID: "host", StableKey: resource.StableKey, SourceKind: resource.SourceKind, Name: resource.Name, ProjectName: resource.Project, EnvironmentName: resource.Environment, Category: resource.Category, Status: string(resource.Status)})
+			}
+			_ = s.Store.ArchiveMissingResources(ctx, ids, now.Add(-5*time.Minute))
+		}
 	}
 	s.Engine.Publish(metrics.Snapshot{At: now, BootIdentity: metrics.BootIdentity(boot), Host: host, Resources: resourceValues, Collectors: collectors}, pending...)
 }
@@ -284,7 +299,7 @@ func (s *Sampler) collectDocker(ctx context.Context, now time.Time, hostTotal *i
 	result := make([]metrics.ResourceSnapshot, 0, len(groups))
 	for stable, group := range groups {
 		id := resourceID(stable)
-		result = append(result, metrics.ResourceSnapshot{ID: id, Name: group.identity.Name, Status: resources.RollupStatus(group.status), CPUHostPercent: number(group.cpu, group.cpuOK), MemoryBytes: integer(group.memory, group.memoryOK), RXBPS: number(group.rx, group.rxOK), TXBPS: number(group.tx, group.txOK), BlockReadBPS: number(group.read, group.readOK), BlockWriteBPS: number(group.write, group.writeOK), LastSeenAt: now, Category: group.category, Project: group.identity.Project, Environment: group.environment, Infrastructure: group.infrastructure, Components: group.components})
+		result = append(result, metrics.ResourceSnapshot{ID: id, Name: group.identity.Name, Status: resources.RollupStatus(group.status), CPUHostPercent: number(group.cpu, group.cpuOK), MemoryBytes: integer(group.memory, group.memoryOK), RXBPS: number(group.rx, group.rxOK), TXBPS: number(group.tx, group.txOK), BlockReadBPS: number(group.read, group.readOK), BlockWriteBPS: number(group.write, group.writeOK), LastSeenAt: now, Category: group.category, Project: group.identity.Project, Environment: group.environment, Infrastructure: group.infrastructure, Components: group.components, StableKey: stable, SourceKind: group.identity.Source})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result, nil

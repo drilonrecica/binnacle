@@ -1,4 +1,5 @@
 <script lang="ts">
+  let { archivedResourceId = '' }: { archivedResourceId?: string } = $props();
   type Preview = {
     token: string;
     confirmation: string;
@@ -7,6 +8,12 @@
   };
   let kind = $state('before');
   let resourceId = $state('');
+  $effect(() => {
+    if (archivedResourceId) {
+      kind = 'archived_resource';
+      resourceId = archivedResourceId;
+    }
+  });
   let before = $state('');
   let preview = $state<Preview | null>(null);
   let confirmation = $state('');
@@ -89,20 +96,20 @@
     History deletion is irreversible. Monitoring configuration and user access
     are preserved.
   </p>
-  <label
-    >Scope <select bind:value={kind}
-      ><option value="before">Delete data before a date</option><option
-        value="resource">Delete one resource’s history</option
-      ><option value="archived_resource">Purge an archived resource</option
-      ><option value="all">Reset all monitoring history</option></select
-    ></label
-  >{#if kind === 'before'}<label
+  {#if !archivedResourceId}<label
+      >Scope <select bind:value={kind}
+        ><option value="before">Delete data before a date</option><option
+          value="resource">Delete one resource’s history</option
+        ><option value="archived_resource">Purge an archived resource</option
+        ><option value="all">Reset all monitoring history</option></select
+      ></label
+    >{/if}{#if kind === 'before'}<label
       >Before <input
         type="datetime-local"
         bind:value={before}
         required
       /></label
-    >{:else if kind !== 'all'}<label
+    >{:else if kind !== 'all' && !archivedResourceId}<label
       >Resource ID <input bind:value={resourceId} required /></label
     >{/if}<button type="button" onclick={requestPreview}
     >Preview deletion</button
@@ -127,5 +134,8 @@
           type="button"
           onclick={() => change('retry')}>Retry deletion</button
         >{/if}{#if job.error}<p role="alert">{job.error}</p>{/if}
+      {#if archivedResourceId && job.state === 'completed'}<p>
+          <a href="/resources?view=archived">Return to archived resources</a>
+        </p>{/if}
     </section>{/if}
 </section>

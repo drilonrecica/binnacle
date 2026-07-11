@@ -113,6 +113,8 @@ type ResourceSnapshot struct {
 	Environment    string              `json:"environment,omitempty"`
 	Infrastructure bool                `json:"infrastructure,omitempty"`
 	Components     []ResourceComponent `json:"components,omitempty"`
+	StableKey      string              `json:"-"`
+	SourceKind     string              `json:"-"`
 }
 type CollectorHealth struct {
 	Name    string         `json:"name"`

@@ -75,7 +75,7 @@ func main() {
 			os.Exit(1)
 		}
 		onboardingService.SetDocker(dockerEngine)
-		application.Add(&production.Sampler{Engine: engine, Docker: dockerEngine, HostProc: config.Paths.HostProc, DataDir: config.Paths.DataDir, MaxDockerConcurrency: config.Docker.MaxConcurrency, Interval: func() time.Duration {
+		application.Add(&production.Sampler{Engine: engine, Docker: dockerEngine, Store: store, HostProc: config.Paths.HostProc, DataDir: config.Paths.DataDir, MaxDockerConcurrency: config.Docker.MaxConcurrency, Interval: func() time.Duration {
 			return settingsService.Current().Collection.HostInterval
 		}})
 		application.Add(app.ComponentFuncs{StartFunc: func(ctx context.Context) error {
@@ -114,7 +114,7 @@ func main() {
 	}
 	apiServer.EnableLive(engine, authorizer)
 	apiServer.EnableCurrent(engine, authorizer)
-	apiServer.EnableResources(engine, authorizer)
+	apiServer.EnableResources(engine, authorizer, store)
 	apiServer.EnableMetrics(store, authorizer, protection)
 	apiServer.EnableEvents(store, authorizer)
 	apiServer.EnableHistoryDeletion(store, authorizer, sessions)
