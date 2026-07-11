@@ -4,7 +4,9 @@ package webembed
 
 import (
 	"embed"
+	"io"
 	"io/fs"
+	"mime"
 	"net/http"
 	"path"
 	"strings"
@@ -18,28 +20,41 @@ func Handler() http.Handler {
 	if err != nil {
 		panic(err)
 	}
-	fileServer := http.FileServer(http.FS(assets))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if name == "" || uiRoute(name) {
 			name = "index.html"
 		}
-		if strings.Contains(name, "/") || strings.Contains(name, ".") {
-			if strings.Contains(name, "assets/") {
-				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-			}
+		f, err := assets.Open(name)
+		if err != nil && name != "index.html" {
+			name = "index.html"
+			f, err = assets.Open(name)
 		}
-		if name == "index.html" {
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer f.Close()
+		if strings.HasPrefix(name, "assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else if name == "index.html" {
 			w.Header().Set("Cache-Control", "no-cache")
 		}
-		r2 := r.Clone(r.Context())
-		r2.URL.Path = "/" + name
-		fileServer.ServeHTTP(w, r2)
+		stat, err := f.Stat()
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		contentType := mime.TypeByExtension(path.Ext(name))
+		if contentType != "" {
+			w.Header().Set("Content-Type", contentType)
+		}
+		http.ServeContent(w, r, name, stat.ModTime(), f.(io.ReadSeeker))
 	})
 }
 func uiRoute(name string) bool {
 	switch name {
-	case "overview", "resources", "server", "events", "checks", "settings", "login", "setup":
+	case "overview", "resources", "server", "events", "checks", "settings", "login", "setup", "onboarding":
 		return true
 	}
 	return false

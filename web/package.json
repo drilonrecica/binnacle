@@ -13,7 +13,8 @@
     "format:write": "prettier --write .",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:visual": "playwright test --config=playwright.visual.config.ts visual.spec.ts"
   },
   "dependencies": {
     "svelte": "^5.0.0",
