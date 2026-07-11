@@ -63,6 +63,7 @@ Rules for every task:
 
 ### T005 — Add the root Makefile and local development commands
 
+- **Status:** Complete
 - **Commit:** `build(dev): add reproducible Make targets`
 - **Description:** Implement `make dev`, `make dev-demo`, `make dev-host`, `make test`, `make check`, and `make build` as the documented entry points.
 - **Implement:** Make targets must clearly separate synthetic-demo and real-host execution, use temporary development database locations, forward failure exit codes, and avoid destructive cleanup. Stub unavailable later commands only if they fail with actionable guidance until their prerequisites are implemented.
