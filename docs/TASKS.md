@@ -393,6 +393,7 @@ Rules for every task:
 
 ### T041 — Implement bounded concurrent Docker stats collection
 
+- **Status:** Complete
 - **Commit:** `feat(docker): collect container stats with concurrency limits`
 - **Description:** Schedule running-container stats reads every configured interval with a maximum of four concurrent Engine requests by default, cancellation, durations, and per-container partial failures.
 - **Implement:** Reuse metadata cache; do not create an unbounded goroutine per container; retain recent known lifecycle state when a single stats request fails while exposing freshness correctly.

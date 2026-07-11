@@ -26,7 +26,18 @@ type Mount struct{ Source, Destination, Type string }
 type Event struct{ ID, Action, Time string }
 type Version struct{ APIVersion string }
 type Diagnostics struct{ Containers int }
-type Stats struct{}
+type Stats struct {
+	CPU    CPUStats
+	Memory MemoryStats
+	IO     IOCounters
+	PIDs   *uint64
+}
+type CPUStats struct {
+	TotalUsage, SystemUsage uint64
+	OnlineCPUs              int
+}
+type MemoryStats struct{ Usage, Limit, InactiveFile uint64 }
+type IOCounters struct{ RX, TX, Read, Write uint64 }
 type Limited struct {
 	Client Client
 	sem    chan struct{}
