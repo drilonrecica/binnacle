@@ -61,6 +61,11 @@ func TestSessionLifecycleAndHashedPersistence(t *testing.T) {
 	if _, err = sessions.Authenticate(ctx, token); err == nil {
 		t.Fatal("idle-expired session accepted")
 	}
+	now = now.Add(25 * time.Hour)
+	removed, err := sessions.Cleanup(ctx, 500)
+	if err != nil || removed != 1 {
+		t.Fatalf("cleanup removed=%d err=%v", removed, err)
+	}
 }
 
 func TestConcurrentSessionsAndLogoutAll(t *testing.T) {
@@ -109,5 +114,26 @@ func TestSessionCookieFlags(t *testing.T) {
 	cookie := w.Result().Cookies()[0]
 	if !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != 2 || cookie.Path != "/" {
 		t.Fatalf("cookie=%+v", cookie)
+	}
+}
+
+func TestCurrentSessionRevocation(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	manager := storage.New(filepath.Join(dir, "talos.db"), filepath.Join(dir, "run"))
+	if err := manager.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	sessions := NewSessions(manager.DB(), SessionConfig{IdleTimeout: time.Hour, AbsoluteLifetime: 24 * time.Hour})
+	token, _, err := sessions.Issue(ctx, "usr_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = sessions.Revoke(ctx, token); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = sessions.Authenticate(ctx, token); err == nil {
+		t.Fatal("revoked current session accepted")
 	}
 }
