@@ -80,6 +80,7 @@ func NewService(store *Store, base Config, effective map[string]Effective, apply
 	return &Service{store: store, base: base, effective: effective, current: base, apply: apply}
 }
 func (s *Service) SetDB(db *sql.DB) { s.store.SetDB(db) }
+func (s *Service) Current() Config  { s.mu.RLock(); defer s.mu.RUnlock(); return s.current }
 func (s *Service) Initialize(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

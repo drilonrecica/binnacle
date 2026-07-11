@@ -16,8 +16,10 @@ import (
 	"github.com/drilonrecica/talos/internal/api"
 	"github.com/drilonrecica/talos/internal/app"
 	"github.com/drilonrecica/talos/internal/auth"
+	"github.com/drilonrecica/talos/internal/collector/production"
 	"github.com/drilonrecica/talos/internal/demo"
 	"github.com/drilonrecica/talos/internal/diagnostics"
+	"github.com/drilonrecica/talos/internal/dockerapi"
 	"github.com/drilonrecica/talos/internal/metrics"
 	"github.com/drilonrecica/talos/internal/onboarding"
 	"github.com/drilonrecica/talos/internal/settings"
@@ -57,6 +59,7 @@ func main() {
 	var sessions *auth.Sessions
 	var onboardingService *onboarding.Service
 	var settingsService *settings.Service
+	var dockerEngine *dockerapi.Engine
 	if !*demoMode && !config.Demo {
 		setup = auth.NewSetupService(nil)
 		credentials = auth.NewCredentials(nil)
@@ -66,6 +69,15 @@ func main() {
 		settingsService = settings.NewService(settings.NewStore(nil), config, effectiveSettings, func(updated settings.Config) {
 			sessions.SetConfig(auth.SessionConfig{IdleTimeout: updated.Sessions.IdleTimeout, AbsoluteLifetime: updated.Sessions.AbsoluteLifetime})
 		})
+		dockerEngine, err = dockerapi.NewEngine(config.Docker.SocketPath)
+		if err != nil {
+			log.Error("Docker client configuration is invalid", "error", err)
+			os.Exit(1)
+		}
+		onboardingService.SetDocker(dockerEngine)
+		application.Add(&production.Sampler{Engine: engine, Docker: dockerEngine, HostProc: config.Paths.HostProc, DataDir: config.Paths.DataDir, MaxDockerConcurrency: config.Docker.MaxConcurrency, Interval: func() time.Duration {
+			return settingsService.Current().Collection.HostInterval
+		}})
 		application.Add(app.ComponentFuncs{StartFunc: func(ctx context.Context) error {
 			setup.SetDB(store.DB())
 			credentials.SetDB(store.DB())
@@ -113,21 +125,31 @@ func main() {
 		if sizeErr == nil {
 			databaseBytes = stat.Size()
 		}
+		var dockerVersion any
+		failures := []string{}
+		if dockerEngine != nil {
+			value, versionErr := dockerEngine.Version(ctx)
+			if versionErr == nil {
+				dockerVersion = value.APIVersion
+			} else {
+				failures = append(failures, "Docker version unavailable")
+			}
+		} else {
+			failures = append(failures, "Docker version unavailable")
+		}
 		fields := map[string]any{
 			"version": version, "os": runtime.GOOS, "architecture": runtime.GOARCH,
 			"schemaVersion": schema, "collectorHealth": engine.Snapshot().Collectors,
 			"configuration": effectiveSettings, "resourceCount": len(engine.Snapshot().Resources),
 			"databaseBytes": databaseBytes, "recentInternalErrors": []string{},
-			"dockerVersion": nil, "selfMetrics": map[string]int64{},
+			"dockerVersion": dockerVersion, "selfMetrics": map[string]int64{},
 		}
-		failures := []string{}
 		if schemaErr != nil {
 			failures = append(failures, "database schema version unavailable")
 		}
 		if sizeErr != nil {
 			failures = append(failures, "database size unavailable")
 		}
-		failures = append(failures, "Docker version unavailable")
 		return diagnostics.BundleData{Fields: fields, PartialFailures: failures}
 	})
 	apiServer.EnableDiagnostics(bundleService, authorizer, protection)

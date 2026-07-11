@@ -68,13 +68,17 @@ func (s CollectorState) Valid() bool {
 }
 
 type HostObservation struct {
-	At              time.Time `json:"at"`
-	CPUPercent      *float64  `json:"cpuPct"`
-	MemoryUsedBytes *int64    `json:"memoryUsedBytes"`
-	MemoryPercent   *float64  `json:"memoryPct"`
-	Load1           *float64  `json:"load1"`
-	NetworkRXBPS    *float64  `json:"networkRxBps"`
-	NetworkTXBPS    *float64  `json:"networkTxBps"`
+	At               time.Time `json:"at"`
+	CPUPercent       *float64  `json:"cpuPct"`
+	MemoryUsedBytes  *int64    `json:"memoryUsedBytes"`
+	MemoryPercent    *float64  `json:"memoryPct"`
+	Load1            *float64  `json:"load1"`
+	NetworkRXBPS     *float64  `json:"networkRxBps"`
+	NetworkTXBPS     *float64  `json:"networkTxBps"`
+	MemoryTotalBytes *int64    `json:"memoryTotalBytes"`
+	DiskUsedBytes    *int64    `json:"diskUsedBytes"`
+	DiskTotalBytes   *int64    `json:"diskTotalBytes"`
+	UptimeSeconds    *float64  `json:"uptimeSeconds"`
 }
 type ContainerObservation struct {
 	ID             ContainerID    `json:"id"`
@@ -88,17 +92,27 @@ type ContainerObservation struct {
 	BlockWriteBPS  *float64       `json:"blockWriteBps"`
 	Status         ResourceStatus `json:"status"`
 }
+type ResourceComponent struct {
+	ID     ContainerID    `json:"id"`
+	Name   string         `json:"name"`
+	Status ResourceStatus `json:"status"`
+}
 type ResourceSnapshot struct {
-	ID             ResourceID     `json:"id"`
-	Name           string         `json:"name"`
-	Status         ResourceStatus `json:"status"`
-	CPUHostPercent *float64       `json:"cpuHostPct"`
-	MemoryBytes    *int64         `json:"memoryBytes"`
-	RXBPS          *float64       `json:"rxBps"`
-	TXBPS          *float64       `json:"txBps"`
-	BlockReadBPS   *float64       `json:"blockReadBps"`
-	BlockWriteBPS  *float64       `json:"blockWriteBps"`
-	LastSeenAt     time.Time      `json:"lastSeenAt"`
+	ID             ResourceID          `json:"id"`
+	Name           string              `json:"name"`
+	Status         ResourceStatus      `json:"status"`
+	CPUHostPercent *float64            `json:"cpuHostPct"`
+	MemoryBytes    *int64              `json:"memoryBytes"`
+	RXBPS          *float64            `json:"rxBps"`
+	TXBPS          *float64            `json:"txBps"`
+	BlockReadBPS   *float64            `json:"blockReadBps"`
+	BlockWriteBPS  *float64            `json:"blockWriteBps"`
+	LastSeenAt     time.Time           `json:"lastSeenAt"`
+	Category       string              `json:"category,omitempty"`
+	Project        string              `json:"project,omitempty"`
+	Environment    string              `json:"environment,omitempty"`
+	Infrastructure bool                `json:"infrastructure,omitempty"`
+	Components     []ResourceComponent `json:"components,omitempty"`
 }
 type CollectorHealth struct {
 	Name    string         `json:"name"`

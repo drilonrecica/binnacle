@@ -194,6 +194,28 @@ nav a[aria-current='page'] {
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   gap: var(--space-4);
 }
+.health-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.health-strip article {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.health-strip h2 {
+  margin: 0 0 var(--space-2);
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.health-strip strong {
+  font-size: 1.35rem;
+}
+.stale {
+  opacity: 0.78;
+}
 .card {
   padding: var(--space-4);
   border: 1px solid var(--border);
@@ -237,5 +259,14 @@ nav a[aria-current='page'] {
   header {
     gap: 1rem;
     flex-wrap: wrap;
+  }
+  main {
+    padding: var(--space-4);
+  }
+  .health-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .attention {
+    order: -1;
   }
 }

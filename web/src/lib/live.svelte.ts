@@ -3,13 +3,30 @@ export interface LiveSnapshot {
   seq: number;
   ts: string;
   bootIdentity: string;
-  host: Record<string, number | null>;
+  host: {
+    cpuPct?: number | null;
+    memoryUsedBytes?: number | null;
+    memoryTotalBytes?: number | null;
+    memoryPct?: number | null;
+    diskUsedBytes?: number | null;
+    diskTotalBytes?: number | null;
+    load1?: number | null;
+    uptimeSeconds?: number | null;
+    networkRxBps?: number | null;
+    networkTxBps?: number | null;
+  };
   resources: Array<{
     id: string;
     name: string;
     status: string;
     cpuHostPct?: number | null;
     memoryBytes?: number | null;
+    lastSeenAt?: string;
+    category?: string;
+    project?: string;
+    environment?: string;
+    infrastructure?: boolean;
+    components?: Array<{ id: string; name: string; status: string }>;
   }>;
   collectors: Record<
     string,

@@ -790,6 +790,7 @@ Rules for every task:
 
 ### T084 — Complete production overview behavior
 
+- **Status:** Complete
 - **Commit:** `feat(web): complete live operational overview`
 - **Description:** Replace demo-only assumptions with production Overview composition: server health/CPU/RAM/disk, active resource groups, infrastructure, collector/persistence warnings, and recent events.
 - **Implement:** Prioritize unhealthy/stale resources and critical storage state; show no alert/incident UI beyond alpha scope; maintain usable mobile first viewport.

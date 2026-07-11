@@ -16,6 +16,7 @@ type Engine struct {
 	subscribers map[uint64]chan Snapshot
 	live        map[uint64]chan LiveMessage
 	nextSub     uint64
+	nextMessage Sequence
 }
 
 func (e *Engine) PersistenceBatch() PersistenceBatch {
@@ -50,7 +51,8 @@ func (e *Engine) Stop(context.Context) error  { return nil }
 func (e *Engine) Publish(snapshot Snapshot, events ...Event) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	snapshot.Sequence = e.snapshot.Sequence + 1
+	e.nextMessage++
+	snapshot.Sequence = e.nextMessage
 	if snapshot.At.IsZero() {
 		snapshot.At = time.Now().UTC()
 	}
@@ -60,7 +62,8 @@ func (e *Engine) Publish(snapshot Snapshot, events ...Event) {
 	e.snapshot = snapshot
 	for _, event := range events {
 		if event.ID == 0 {
-			event.ID = snapshot.Sequence
+			e.nextMessage++
+			event.ID = e.nextMessage
 		}
 		event.At = event.At.UTC()
 		e.events = append(e.events, event)
@@ -123,6 +126,9 @@ func (e *Engine) EventsAfter(id Sequence) []Event {
 }
 func clone(s Snapshot) Snapshot {
 	s.Resources = append([]ResourceSnapshot(nil), s.Resources...)
+	for index := range s.Resources {
+		s.Resources[index].Components = append([]ResourceComponent(nil), s.Resources[index].Components...)
+	}
 	s.Collectors = copyCollectors(s.Collectors)
 	return s
 }

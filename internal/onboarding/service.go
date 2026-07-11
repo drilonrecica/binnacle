@@ -33,6 +33,7 @@ func (s *Service) SetDB(db *sql.DB) {
 	s.db = db
 	s.checker.DB = db
 }
+func (s *Service) SetDocker(client diagnostics.DockerDiagnostics) { s.checker.Docker = client }
 
 func (s *Service) State(ctx context.Context) (State, error) {
 	if s == nil || s.db == nil {
