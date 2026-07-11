@@ -494,6 +494,7 @@ Rules for every task:
 
 ### T052 — Expose resource list and detail current-state APIs
 
+- **Status:** Complete
 - **Commit:** `feat(api): add current resource endpoints`
 - **Description:** Implement authenticated `GET /api/v1/resources` and `GET /api/v1/resources/{id}` with stable metadata, current aggregate metrics, component detail, status, archive state, and freshness.
 - **Implement:** Support bounded category/archive filtering and stable ordering; return 404 for unknown IDs without revealing unrelated data; read only Metrics Engine state plus controlled metadata repository data.
