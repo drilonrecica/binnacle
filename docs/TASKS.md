@@ -440,6 +440,7 @@ Rules for every task:
 
 ### T046 — Add isolated Coolify-aware resolver rules
 
+- **Status:** Complete
 - **Commit:** `feat(coolify): resolve Coolify resource metadata`
 - **Description:** Add fixture-driven Coolify label mapping in the resolver layer, including project/environment/name signals and infrastructure classification, without accessing Coolify internals.
 - **Implement:** Keep undocumented label mappings isolated and versioned by fixtures; fall back cleanly to Compose/derived identity when labels are absent or change.
