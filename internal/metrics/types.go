@@ -84,6 +84,8 @@ type ContainerObservation struct {
 	MemoryBytes    *int64         `json:"memoryBytes"`
 	RXBPS          *float64       `json:"rxBps"`
 	TXBPS          *float64       `json:"txBps"`
+	BlockReadBPS   *float64       `json:"blockReadBps"`
+	BlockWriteBPS  *float64       `json:"blockWriteBps"`
 	Status         ResourceStatus `json:"status"`
 }
 type ResourceSnapshot struct {
@@ -94,6 +96,8 @@ type ResourceSnapshot struct {
 	MemoryBytes    *int64         `json:"memoryBytes"`
 	RXBPS          *float64       `json:"rxBps"`
 	TXBPS          *float64       `json:"txBps"`
+	BlockReadBPS   *float64       `json:"blockReadBps"`
+	BlockWriteBPS  *float64       `json:"blockWriteBps"`
 	LastSeenAt     time.Time      `json:"lastSeenAt"`
 }
 type CollectorHealth struct {

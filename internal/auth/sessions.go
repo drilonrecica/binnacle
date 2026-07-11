@@ -1,0 +1,178 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+package auth
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/base64"
+	"errors"
+	"net/http"
+	"time"
+)
+
+const SessionCookieName = "talos_session"
+
+var ErrSessionInvalid = errors.New("session is invalid")
+
+type SessionConfig struct {
+	IdleTimeout      time.Duration
+	AbsoluteLifetime time.Duration
+}
+
+func (c SessionConfig) valid() bool { return c.IdleTimeout > 0 && c.AbsoluteLifetime >= c.IdleTimeout }
+
+type Session struct {
+	UserID          string
+	CreatedAt       time.Time
+	LastSeenAt      time.Time
+	ExpiresAt       time.Time
+	AbsoluteExpires time.Time
+}
+
+type Sessions struct {
+	db  *sql.DB
+	now func() time.Time
+	cfg SessionConfig
+}
+
+func NewSessions(db *sql.DB, cfg SessionConfig) *Sessions {
+	return &Sessions{db: db, cfg: cfg, now: func() time.Time { return time.Now().UTC() }}
+}
+
+func (s *Sessions) Issue(ctx context.Context, userID string) (string, Session, error) {
+	token, _, session, err := s.IssueWithCSRF(ctx, userID)
+	return token, session, err
+}
+
+// IssueWithCSRF returns the only plaintext copy of the anti-CSRF token.
+func (s *Sessions) IssueWithCSRF(ctx context.Context, userID string) (string, string, Session, error) {
+	if s == nil || s.db == nil || !s.cfg.valid() || userID == "" {
+		return "", "", Session{}, ErrSessionInvalid
+	}
+	token, err := randomToken()
+	if err != nil {
+		return "", "", Session{}, err
+	}
+	csrf, err := NewCSRFToken()
+	if err != nil {
+		return "", "", Session{}, err
+	}
+	now := s.now().UTC()
+	absolute := now.Add(s.cfg.AbsoluteLifetime)
+	session := Session{UserID: userID, CreatedAt: now, LastSeenAt: now, ExpiresAt: minTime(now.Add(s.cfg.IdleTimeout), absolute), AbsoluteExpires: absolute}
+	if _, err = s.db.ExecContext(ctx, "INSERT INTO sessions(id_hash,user_id,created_at,last_seen_at,expires_at,absolute_expires_at,revoked_at,csrf_hash) VALUES(?,?,?,?,?,?,NULL,?)", tokenHash(token), userID, now.UnixMilli(), now.UnixMilli(), session.ExpiresAt.UnixMilli(), absolute.UnixMilli(), CSRFHash(csrf)); err != nil {
+		return "", "", Session{}, err
+	}
+	return token, csrf, session, nil
+}
+
+// Authorize satisfies API authentication hooks without exposing session tokens.
+func (s *Sessions) Authorize(r *http.Request) bool {
+	_, err := s.Authenticate(r.Context(), TokenFromRequest(r))
+	return err == nil
+}
+
+func (s *Sessions) ValidCSRF(r *http.Request) bool {
+	token := TokenFromRequest(r)
+	if token == "" || s == nil || s.db == nil {
+		return false
+	}
+	var expected string
+	if err := s.db.QueryRowContext(r.Context(), "SELECT COALESCE(csrf_hash,'') FROM sessions WHERE id_hash=? AND revoked_at IS NULL", tokenHash(token)).Scan(&expected); err != nil {
+		return false
+	}
+	return expected != "" && ValidCSRF(r, expected)
+}
+
+func (s *Sessions) Authenticate(ctx context.Context, token string) (Session, error) {
+	if s == nil || s.db == nil || !s.cfg.valid() || token == "" {
+		return Session{}, ErrSessionInvalid
+	}
+	hash := tokenHash(token)
+	var session Session
+	var created, seen, expires, absolute int64
+	var revoked sql.NullInt64
+	err := s.db.QueryRowContext(ctx, "SELECT user_id,created_at,last_seen_at,expires_at,absolute_expires_at,revoked_at FROM sessions WHERE id_hash=?", hash).Scan(&session.UserID, &created, &seen, &expires, &absolute, &revoked)
+	if err != nil || revoked.Valid {
+		return Session{}, ErrSessionInvalid
+	}
+	session.CreatedAt, session.LastSeenAt = time.UnixMilli(created).UTC(), time.UnixMilli(seen).UTC()
+	session.ExpiresAt, session.AbsoluteExpires = time.UnixMilli(expires).UTC(), time.UnixMilli(absolute).UTC()
+	now := s.now().UTC()
+	if !now.Before(session.ExpiresAt) || !now.Before(session.AbsoluteExpires) {
+		_, _ = s.db.ExecContext(ctx, "UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE id_hash=?", now.UnixMilli(), hash)
+		return Session{}, ErrSessionInvalid
+	}
+	session.LastSeenAt = now
+	session.ExpiresAt = minTime(now.Add(s.cfg.IdleTimeout), session.AbsoluteExpires)
+	if _, err = s.db.ExecContext(ctx, "UPDATE sessions SET last_seen_at=?,expires_at=? WHERE id_hash=? AND revoked_at IS NULL", now.UnixMilli(), session.ExpiresAt.UnixMilli(), hash); err != nil {
+		return Session{}, err
+	}
+	return session, nil
+}
+
+func (s *Sessions) Revoke(ctx context.Context, token string) error {
+	if s == nil || s.db == nil || token == "" {
+		return ErrSessionInvalid
+	}
+	_, err := s.db.ExecContext(ctx, "UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE id_hash=?", s.now().UTC().UnixMilli(), tokenHash(token))
+	return err
+}
+
+func (s *Sessions) RevokeAll(ctx context.Context, userID string) error {
+	if s == nil || s.db == nil || userID == "" {
+		return ErrSessionInvalid
+	}
+	_, err := s.db.ExecContext(ctx, "UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE user_id=?", s.now().UTC().UnixMilli(), userID)
+	return err
+}
+
+func (s *Sessions) Cleanup(ctx context.Context, limit int) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, ErrSessionInvalid
+	}
+	if limit < 1 || limit > 1000 {
+		limit = 500
+	}
+	r, err := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions WHERE absolute_expires_at<? OR (revoked_at IS NOT NULL AND revoked_at<?) LIMIT ?)", s.now().UTC().Add(-24*time.Hour).UnixMilli(), s.now().UTC().Add(-24*time.Hour).UnixMilli(), limit)
+	if err != nil {
+		return 0, err
+	}
+	return r.RowsAffected()
+}
+
+func SetSessionCookie(w http.ResponseWriter, token string, secure bool, expires time.Time) {
+	http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: token, Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, Expires: expires.UTC()})
+}
+
+func ClearSessionCookie(w http.ResponseWriter, secure bool) {
+	http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, MaxAge: -1, Expires: time.Unix(1, 0)})
+}
+
+func TokenFromRequest(r *http.Request) string {
+	c, err := r.Cookie(SessionCookieName)
+	if err != nil {
+		return ""
+	}
+	return c.Value
+}
+
+func randomToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+func tokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return base64.RawStdEncoding.EncodeToString(sum[:])
+}
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}

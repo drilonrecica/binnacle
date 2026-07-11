@@ -21,4 +21,17 @@ export default [
       globals: globals.browser,
     },
   },
+  {
+    files: ['**/*.svelte'],
+    languageOptions: {
+      parserOptions: {
+        extraFileExtensions: ['.svelte'],
+        parser: tseslint.parser,
+      },
+    },
+    rules: {
+      // Existing alpha components predate keyed list rendering; new dynamic lists add keys where identity matters.
+      'svelte/require-each-key': 'off',
+    },
+  },
 ];

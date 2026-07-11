@@ -1,0 +1,180 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+package auth
+
+import (
+	"container/list"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"net"
+	"net/http"
+	"net/netip"
+	"strings"
+	"sync"
+	"time"
+)
+
+// TrustedProxies only affects forwarding-header provenance, never authentication.
+type TrustedProxies struct{ prefixes []netip.Prefix }
+
+func ParseTrustedProxies(values []string) (TrustedProxies, error) {
+	p := TrustedProxies{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			return TrustedProxies{}, err
+		}
+		p.prefixes = append(p.prefixes, prefix)
+	}
+	return p, nil
+}
+func (p TrustedProxies) trusted(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	for _, prefix := range p.prefixes {
+		if prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+func (p TrustedProxies) Secure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	if !p.trusted(r) {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]), "https")
+}
+func (p TrustedProxies) ClientPrefix(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	if p.trusted(r) {
+		values := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+		if len(values) > 0 && len(values) <= 16 {
+			for _, value := range values {
+				if addr, err := netip.ParseAddr(strings.TrimSpace(value)); err == nil {
+					host = addr.String()
+					break
+				}
+			}
+		}
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return "unknown"
+	}
+	if addr.Is4() {
+		return netip.PrefixFrom(addr, 24).Masked().String()
+	}
+	return netip.PrefixFrom(addr, 56).Masked().String()
+}
+
+type BucketPolicy struct {
+	Capacity float64
+	Refill   time.Duration
+}
+type bucket struct {
+	tokens float64
+	at     time.Time
+	used   time.Time
+}
+type bucketEntry struct {
+	key   string
+	value bucket
+}
+type Limiter struct {
+	mu     sync.Mutex
+	values map[string]*list.Element
+	order  *list.List
+	max    int
+	now    func() time.Time
+}
+
+func NewLimiter(max int) *Limiter {
+	if max < 1 {
+		max = 4096
+	}
+	return &Limiter{values: map[string]*list.Element{}, order: list.New(), max: max, now: time.Now}
+}
+
+// Allow is bounded even when an attacker presents unlimited distinct keys.
+func (l *Limiter) Allow(key string, policy BucketPolicy) (bool, time.Duration) {
+	if policy.Capacity <= 0 || policy.Refill <= 0 {
+		return true, 0
+	}
+	now := l.now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	entry, ok := l.values[key]
+	if !ok {
+		for l.order.Len() >= l.max {
+			oldest := l.order.Back()
+			delete(l.values, oldest.Value.(bucketEntry).key)
+			l.order.Remove(oldest)
+		}
+		entry = l.order.PushFront(bucketEntry{key: key, value: bucket{tokens: policy.Capacity, at: now, used: now}})
+		l.values[key] = entry
+	}
+	v := entry.Value.(bucketEntry)
+	elapsed := now.Sub(v.value.at)
+	v.value.tokens += elapsed.Seconds() * policy.Capacity / policy.Refill.Seconds()
+	if v.value.tokens > policy.Capacity {
+		v.value.tokens = policy.Capacity
+	}
+	v.value.at, v.value.used = now, now
+	if v.value.tokens < 1 {
+		entry.Value = v
+		l.order.MoveToFront(entry)
+		return false, time.Duration((1-v.value.tokens)*policy.Refill.Seconds()/policy.Capacity) * time.Second
+	}
+	v.value.tokens--
+	entry.Value = v
+	l.order.MoveToFront(entry)
+	return true, 0
+}
+
+const CSRFCookieName = "talos_csrf"
+
+func NewCSRFToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+func CSRFHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return base64.RawStdEncoding.EncodeToString(sum[:])
+}
+func SetCSRFCookie(w http.ResponseWriter, token string, secure bool) {
+	http.SetCookie(w, &http.Cookie{Name: CSRFCookieName, Value: token, Path: "/", HttpOnly: false, Secure: secure, SameSite: http.SameSiteLaxMode})
+}
+func ValidCSRF(r *http.Request, expectedHash string) bool {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+		return true
+	}
+	cookie, err := r.Cookie(CSRFCookieName)
+	if err != nil {
+		return false
+	}
+	header := r.Header.Get("X-CSRF-Token")
+	if header == "" || subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(header)) != 1 {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(CSRFHash(header)), []byte(expectedHash)) == 1
+}

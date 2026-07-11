@@ -45,11 +45,15 @@ func main() {
 	if *demoMode || config.Demo {
 		application.Add(&demo.Component{Generator: demo.New(*demoSeed, realClock{}), Engine: engine})
 	}
-	application.Add(storage.New(config.Paths.DatabasePath, config.Paths.RuntimeDir))
+	store := storage.New(config.Paths.DatabasePath, config.Paths.RuntimeDir)
+	application.Add(store)
 	apiServer := api.New()
 	apiServer.EnableLive(engine, api.DemoAuthorizer(*demoMode || config.Demo))
 	apiServer.EnableCurrent(engine, api.DemoAuthorizer(*demoMode || config.Demo))
 	apiServer.EnableResources(engine, api.DemoAuthorizer(*demoMode || config.Demo))
+	apiServer.EnableMetrics(store, api.DemoAuthorizer(*demoMode || config.Demo))
+	apiServer.EnableEvents(store, api.DemoAuthorizer(*demoMode || config.Demo))
+	apiServer.EnableHistoryDeletion(store, api.DemoAuthorizer(*demoMode || config.Demo), nil)
 	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, version, application, apiServer.Handler(), webembed.Handler()))
 	if err := application.Run(ctx); err != nil {
 		log.Error("application exited with error", "error", err)

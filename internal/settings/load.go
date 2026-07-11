@@ -129,7 +129,7 @@ func readTOML(path string) (map[string]string, error) {
 }
 
 var environment = map[string]string{
-	"TALOS_DATA_DIR": "paths.data_dir", "TALOS_DATABASE_PATH": "paths.database_path", "TALOS_RUNTIME_DIR": "paths.runtime_dir", "TALOS_HOST_PROC": "paths.host_proc", "TALOS_HOST_SYS": "paths.host_sys", "TALOS_MASTER_KEY": "paths.master_key", "TALOS_LISTEN_ADDRESS": "http.listen_address", "TALOS_HOST_INTERVAL": "collection.host_interval", "TALOS_CONTAINER_INTERVAL": "collection.container_interval", "TALOS_MINIMUM_INTERVAL": "collection.minimum_interval", "TALOS_SSE_INTERVAL": "live.sse_interval", "TALOS_RAW_INTERVAL": "persistence.raw_interval", "TALOS_QUEUE_BATCH_LIMIT": "persistence.queue_batch_limit", "TALOS_RETENTION_PRESET": "retention.preset", "TALOS_RETENTION_RAW": "retention.raw", "TALOS_RETENTION_ONE_MINUTE": "retention.one_minute", "TALOS_RETENTION_FIFTEEN_MINUTE": "retention.fifteen_minute", "TALOS_RETENTION_ONE_HOUR": "retention.one_hour", "TALOS_DATABASE_TARGET_BUDGET_BYTES": "database.target_budget_bytes", "TALOS_DATABASE_WARNING_RATIO": "database.warning_ratio", "TALOS_DATABASE_CRITICAL_RATIO": "database.critical_ratio", "TALOS_DATABASE_EMERGENCY_PAUSE_RATIO": "database.emergency_pause_ratio", "TALOS_CHARTS_MAX_POINTS": "charts.max_points_per_series", "TALOS_DOCKER_SOCKET": "docker.socket_path", "TALOS_DOCKER_MAX_CONCURRENCY": "docker.max_concurrency", "TALOS_CHECKS_MAX_CONCURRENCY": "checks.max_concurrency", "TALOS_LOGS_MAX_RESPONSE_BYTES": "logs.max_response_bytes", "TALOS_LOGS_MAX_LINES": "logs.max_lines", "TALOS_SESSION_IDLE_TIMEOUT": "sessions.idle_timeout", "TALOS_SESSION_ABSOLUTE_LIFETIME": "sessions.absolute_lifetime", "TALOS_DEMO": "demo"}
+	"TALOS_DATA_DIR": "paths.data_dir", "TALOS_DATABASE_PATH": "paths.database_path", "TALOS_RUNTIME_DIR": "paths.runtime_dir", "TALOS_HOST_PROC": "paths.host_proc", "TALOS_HOST_SYS": "paths.host_sys", "TALOS_MASTER_KEY": "paths.master_key", "TALOS_LISTEN_ADDRESS": "http.listen_address", "TALOS_TRUSTED_PROXY_CIDRS": "http.trusted_proxy_cidrs", "TALOS_HOST_INTERVAL": "collection.host_interval", "TALOS_CONTAINER_INTERVAL": "collection.container_interval", "TALOS_MINIMUM_INTERVAL": "collection.minimum_interval", "TALOS_SSE_INTERVAL": "live.sse_interval", "TALOS_RAW_INTERVAL": "persistence.raw_interval", "TALOS_QUEUE_BATCH_LIMIT": "persistence.queue_batch_limit", "TALOS_RETENTION_PRESET": "retention.preset", "TALOS_RETENTION_RAW": "retention.raw", "TALOS_RETENTION_ONE_MINUTE": "retention.one_minute", "TALOS_RETENTION_FIFTEEN_MINUTE": "retention.fifteen_minute", "TALOS_RETENTION_ONE_HOUR": "retention.one_hour", "TALOS_DATABASE_TARGET_BUDGET_BYTES": "database.target_budget_bytes", "TALOS_DATABASE_WARNING_RATIO": "database.warning_ratio", "TALOS_DATABASE_CRITICAL_RATIO": "database.critical_ratio", "TALOS_DATABASE_EMERGENCY_PAUSE_RATIO": "database.emergency_pause_ratio", "TALOS_CHARTS_MAX_POINTS": "charts.max_points_per_series", "TALOS_DOCKER_SOCKET": "docker.socket_path", "TALOS_DOCKER_MAX_CONCURRENCY": "docker.max_concurrency", "TALOS_CHECKS_MAX_CONCURRENCY": "checks.max_concurrency", "TALOS_LOGS_MAX_RESPONSE_BYTES": "logs.max_response_bytes", "TALOS_LOGS_MAX_LINES": "logs.max_lines", "TALOS_SESSION_IDLE_TIMEOUT": "sessions.idle_timeout", "TALOS_SESSION_ABSOLUTE_LIFETIME": "sessions.absolute_lifetime", "TALOS_DEMO": "demo"}
 var supported = func() map[string]bool {
 	m := map[string]bool{}
 	for _, k := range environment {
@@ -184,6 +184,13 @@ func apply(c *Config, values map[string]string) error {
 			c.Paths.MasterKey = value
 		case "http.listen_address":
 			c.HTTP.ListenAddress = value
+		case "http.trusted_proxy_cidrs":
+			c.HTTP.TrustedProxyCIDRs = nil
+			for _, cidr := range strings.Split(value, ",") {
+				if cidr = strings.TrimSpace(cidr); cidr != "" {
+					c.HTTP.TrustedProxyCIDRs = append(c.HTTP.TrustedProxyCIDRs, cidr)
+				}
+			}
 		case "collection.host_interval":
 			d(&c.Collection.HostInterval)
 		case "collection.container_interval":

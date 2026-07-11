@@ -2,36 +2,61 @@
 package api
 
 import (
-	"github.com/drilonrecica/talos/internal/storage"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
+
+	authpkg "github.com/drilonrecica/talos/internal/auth"
+	"github.com/drilonrecica/talos/internal/storage"
 )
 
 func (s *Server) EnableMetrics(store *storage.Manager, auth Authorizer) {
+	limiter := authpkg.NewLimiter(4096)
 	s.Handle("/api/v1/metrics", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
-			WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only GET is supported."})
+			WriteError(w, http.StatusMethodNotAllowed, Error{Code: "method_not_allowed", Message: "Only GET is supported."})
 			return
 		}
 		if auth == nil || !auth.Authorize(r) {
-			WriteError(w, 401, Error{Code: "unauthorized", Message: "Authentication is required."})
+			WriteError(w, http.StatusUnauthorized, Error{Code: "unauthorized", Message: "Authentication is required."})
 			return
 		}
-		from, e := time.Parse(time.RFC3339, r.URL.Query().Get("from"))
-		if e != nil {
+		key := authpkg.TrustedProxies{}.ClientPrefix(r)
+		if ok, retry := limiter.Allow("metrics:"+key, authpkg.BucketPolicy{Capacity: 60, Refill: time.Minute}); !ok {
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", maxRetry(retry)))
+			WriteError(w, http.StatusTooManyRequests, Error{Code: "rate_limited", Message: "Too many metric queries. Try again shortly.", Details: map[string]int{"retryAfterSeconds": maxRetry(retry)}})
+			return
+		}
+		q := r.URL.Query()
+		from, err := time.Parse(time.RFC3339, q.Get("from"))
+		if err != nil {
 			WriteError(w, 400, Error{Code: "invalid_time_range", Message: "A valid from timestamp is required."})
 			return
 		}
-		to, e := time.Parse(time.RFC3339, r.URL.Query().Get("to"))
-		if e != nil || !from.Before(to) {
-			WriteError(w, 400, Error{Code: "invalid_time_range", Message: "The requested start time must be before the end time."})
+		to, err := time.Parse(time.RFC3339, q.Get("to"))
+		if err != nil {
+			WriteError(w, 400, Error{Code: "invalid_time_range", Message: "A valid to timestamp is required."})
 			return
 		}
-		points, e := store.HostCPU(r.Context(), from, to, 1000)
-		if e != nil {
-			WriteError(w, 500, Error{Code: "storage_error", Message: "Metric history is unavailable."})
+		metrics := []storage.Metric{}
+		for _, value := range strings.Split(q.Get("metrics"), ",") {
+			if value = strings.TrimSpace(value); value != "" {
+				metrics = append(metrics, storage.Metric(value))
+			}
+		}
+		result, err := store.QueryMetrics(r.Context(), storage.MetricQuery{Scope: q.Get("scope"), ID: q.Get("id"), Metrics: metrics, From: from, To: to})
+		if err != nil {
+			WriteError(w, 400, Error{Code: "invalid_metrics_query", Message: "The metrics request is invalid."})
 			return
 		}
-		WriteJSON(w, 200, map[string]any{"scope": "host", "from": from.UTC(), "to": to.UTC(), "resolution": "10s", "series": points})
+		WriteJSON(w, http.StatusOK, result)
 	}))
+}
+
+func maxRetry(d time.Duration) int {
+	if d < time.Second {
+		return 1
+	}
+	return int(d.Round(time.Second).Seconds())
 }

@@ -5,6 +5,7 @@ package settings
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"path/filepath"
 	"time"
 )
@@ -33,7 +34,8 @@ type Paths struct {
 	MasterKey    string `toml:"master_key"`
 }
 type HTTP struct {
-	ListenAddress string `toml:"listen_address"`
+	ListenAddress     string   `toml:"listen_address"`
+	TrustedProxyCIDRs []string `toml:"trusted_proxy_cidrs"`
 }
 type Collection struct {
 	HostInterval      time.Duration `toml:"host_interval"`
@@ -112,6 +114,11 @@ func (c Config) Validate() error {
 	}
 	if _, _, err := net.SplitHostPort(c.HTTP.ListenAddress); err != nil {
 		return fmt.Errorf("http.listen_address: %w", err)
+	}
+	for _, cidr := range c.HTTP.TrustedProxyCIDRs {
+		if _, err := netip.ParsePrefix(cidr); err != nil {
+			return fmt.Errorf("http.trusted_proxy_cidrs: %w", err)
+		}
 	}
 	if c.Collection.MinimumInterval <= 0 || c.Collection.HostInterval < c.Collection.MinimumInterval || c.Collection.ContainerInterval < c.Collection.MinimumInterval {
 		return fmt.Errorf("collection intervals must be at least minimum_interval")

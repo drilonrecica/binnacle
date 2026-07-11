@@ -29,12 +29,32 @@ type Manager struct {
 	Path, RuntimeDir string
 	db               *sql.DB
 	mu               sync.Mutex
+	workerCancel     context.CancelFunc
 }
 
-func New(path, runtimeDir string) *Manager         { return &Manager{Path: path, RuntimeDir: runtimeDir} }
-func (m *Manager) Start(ctx context.Context) error { return m.Open(ctx) }
-func (m *Manager) Stop(context.Context) error      { return m.Close() }
-func (m *Manager) DB() *sql.DB                     { return m.db }
+func New(path, runtimeDir string) *Manager { return &Manager{Path: path, RuntimeDir: runtimeDir} }
+func (m *Manager) Start(ctx context.Context) error {
+	if err := m.Open(ctx); err != nil {
+		return err
+	}
+	workerCtx, cancel := context.WithCancel(ctx)
+	m.mu.Lock()
+	m.workerCancel = cancel
+	m.mu.Unlock()
+	go m.runDeletionWorker(workerCtx)
+	return nil
+}
+func (m *Manager) Stop(context.Context) error {
+	m.mu.Lock()
+	cancel := m.workerCancel
+	m.workerCancel = nil
+	m.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	return m.Close()
+}
+func (m *Manager) DB() *sql.DB { return m.db }
 func (m *Manager) SchemaVersion(ctx context.Context) (int, error) {
 	if m.db == nil {
 		return 0, errors.New("storage is not open")
