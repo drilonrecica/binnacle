@@ -689,6 +689,7 @@ Rules for every task:
 
 ### T073 — Implement local admin credentials and Argon2id hashing
 
+- **Status:** Complete
 - **Commit:** `feat(auth): add single-admin credential service`
 - **Description:** Implement one-local-admin creation, username/password validation, Argon2id hashing with calibrated parameters, and safe credential repository operations.
 - **Implement:** Reject duplicate or invalid usernames; do not implement teams, roles, invitations, or password recovery in alpha; keep password values out of logs/errors.
