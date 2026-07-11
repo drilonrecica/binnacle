@@ -28,3 +28,4 @@ jobs:
       - run: docker build -f packaging/docker/Dockerfile -t talos:ci .
       - run: docker run --rm --entrypoint /usr/local/bin/talos talos:ci --help || test $$? -eq 1
       - run: TALOS_SETUP_TOKEN=dummy docker compose -f packaging/docker/docker-compose.yml config
+      - run: scripts/validate-coolify-template.sh
