@@ -184,6 +184,40 @@ func TestDeletionJobsConflict(t *testing.T) {
 	}
 }
 
+func TestDeletionJobsRecoverAfterRestart(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	m := New(filepath.Join(dir, "talos.db"), filepath.Join(dir, "run"))
+	if err := m.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	insert := func(id, state string) {
+		if _, err := m.db.ExecContext(ctx, "INSERT INTO history_deletion_jobs(id,kind,fence_ts,confirmation,state,requested_at,total_rows) VALUES(?,'all',?,'RESET ALL HISTORY',?,?,0)", id, time.Now().UnixMilli(), state, time.Now().UnixMilli()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert("job_running", "running")
+	if err := m.recoverDeletionJobs(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var running string
+	_ = m.db.QueryRowContext(ctx, "SELECT state FROM history_deletion_jobs WHERE id='job_running'").Scan(&running)
+	if running != "queued" {
+		t.Fatalf("running=%s", running)
+	}
+	_, _ = m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='completed' WHERE id='job_running'")
+	insert("job_cancelling", "cancelling")
+	if err := m.recoverDeletionJobs(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var cancelling string
+	_ = m.db.QueryRowContext(ctx, "SELECT state FROM history_deletion_jobs WHERE id='job_cancelling'").Scan(&cancelling)
+	if cancelling != "cancelled" {
+		t.Fatalf("cancelling=%s", cancelling)
+	}
+}
+
 func newID(t *testing.T) string {
 	t.Helper()
 	id, err := newDeletionID()

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -62,6 +63,7 @@ func (m *Manager) PreviewDeletion(ctx context.Context, request DeletionRequest) 
 		}
 	}
 	now := time.Now().UTC()
+	_, _ = m.db.ExecContext(ctx, "DELETE FROM history_deletion_previews WHERE rowid IN (SELECT rowid FROM history_deletion_previews WHERE expires_at<? OR (used_at IS NOT NULL AND used_at<?) LIMIT 500)", now.UnixMilli(), now.Add(-24*time.Hour).UnixMilli())
 	fence := now.UnixMilli()
 	before := request.Before.UTC().UnixMilli()
 	if request.Kind == DeleteBefore && before > fence {
@@ -189,24 +191,26 @@ func (m *Manager) RunDeletion(ctx context.Context, id string) error {
 			}
 		}
 	}
-	if kind == DeleteArchived {
-		for _, query := range []string{"DELETE FROM container_instances WHERE resource_id=?", "DELETE FROM resources WHERE id=? AND status='archived'"} {
-			result, e := m.db.ExecContext(ctx, query, resource.String)
-			if e != nil {
-				return e
+	for _, table := range metadataDeletionTables(kind) {
+		for {
+			var state string
+			if err := m.db.QueryRowContext(ctx, "SELECT state FROM history_deletion_jobs WHERE id=?", id).Scan(&state); err != nil {
+				return err
 			}
-			n, _ := result.RowsAffected()
-			deleted += n
-		}
-	}
-	if kind == DeleteAll {
-		for _, query := range []string{"DELETE FROM container_instances", "DELETE FROM resources", "DELETE FROM boot_sessions", "DELETE FROM hosts"} {
-			result, e := m.db.ExecContext(ctx, query)
-			if e != nil {
-				return e
+			if state == "cancelling" {
+				_, err := m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='cancelled',finished_at=? WHERE id=?", time.Now().UTC().UnixMilli(), id)
+				return err
 			}
-			n, _ := result.RowsAffected()
+			n, err := m.deleteMetadataBatch(ctx, table, kind, resource.String)
+			if err != nil {
+				_, _ = m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='failed',error_message=?,finished_at=? WHERE id=?", safeDeletionError(err), time.Now().UTC().UnixMilli(), id)
+				return err
+			}
 			deleted += n
+			_, _ = m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET deleted_rows=?,current_table=? WHERE id=?", deleted, table, id)
+			if n == 0 {
+				break
+			}
 		}
 	}
 	_, err := m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='completed',deleted_rows=?,finished_at=?,current_table=NULL WHERE id=?", deleted, time.Now().UTC().UnixMilli(), id)
@@ -231,6 +235,14 @@ func (m *Manager) runDeletionWorker(ctx context.Context) {
 		case <-tick.C:
 		}
 	}
+}
+func (m *Manager) recoverDeletionJobs(ctx context.Context) error {
+	now := time.Now().UTC().UnixMilli()
+	if _, err := m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='queued',started_at=NULL,error_message=NULL WHERE state='running'"); err != nil {
+		return err
+	}
+	_, err := m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='cancelled',finished_at=? WHERE state='cancelling'", now)
+	return err
 }
 func deletionTables(kind DeletionKind) []string {
 	tables := []string{"container_instance_samples_10s", "resource_samples_10s", "resource_rollups_1m", "resource_rollups_15m", "resource_rollups_1h", "events"}
@@ -323,10 +335,36 @@ func (m *Manager) deletionCountTx(ctx context.Context, q queryer, k DeletionKind
 func resourceScopedTable(table string) bool {
 	return table == "resource_samples_10s" || table == "resource_rollups_1m" || table == "resource_rollups_15m" || table == "resource_rollups_1h" || table == "events"
 }
+func metadataDeletionTables(kind DeletionKind) []string {
+	if kind == DeleteArchived {
+		return []string{"container_instances", "resources"}
+	}
+	if kind == DeleteAll {
+		return []string{"container_instances", "resources", "boot_sessions", "hosts"}
+	}
+	return nil
+}
+func (m *Manager) deleteMetadataBatch(ctx context.Context, table string, kind DeletionKind, resource string) (int64, error) {
+	where := "1=1"
+	args := []any{}
+	if kind == DeleteArchived && table == "container_instances" {
+		where = "resource_id=?"
+		args = append(args, resource)
+	}
+	if kind == DeleteArchived && table == "resources" {
+		where = "id=? AND status='archived'"
+		args = append(args, resource)
+	}
+	result, err := m.db.ExecContext(ctx, "DELETE FROM "+table+" WHERE rowid IN (SELECT rowid FROM "+table+" WHERE "+where+" LIMIT 500)", args...)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
 func validDeletion(r DeletionRequest) error {
 	switch r.Kind {
 	case DeleteResource, DeleteArchived:
-		if r.ResourceID == "" {
+		if len(r.ResourceID) < 5 || len(r.ResourceID) > 128 || !strings.HasPrefix(r.ResourceID, "res_") {
 			return errors.New("resource id is required")
 		}
 	case DeleteBefore:

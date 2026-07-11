@@ -30,6 +30,7 @@ type Manager struct {
 	db               *sql.DB
 	mu               sync.Mutex
 	workerCancel     context.CancelFunc
+	workerWG         sync.WaitGroup
 }
 
 func New(path, runtimeDir string) *Manager { return &Manager{Path: path, RuntimeDir: runtimeDir} }
@@ -38,11 +39,16 @@ func (m *Manager) Start(ctx context.Context) error {
 		return err
 	}
 	workerCtx, cancel := context.WithCancel(ctx)
+	if err := m.recoverDeletionJobs(ctx); err != nil {
+		_ = m.Close()
+		return err
+	}
 	m.mu.Lock()
 	m.workerCancel = cancel
 	m.mu.Unlock()
-	go m.runDeletionWorker(workerCtx)
-	go m.runRollups(workerCtx)
+	m.workerWG.Add(2)
+	go func() { defer m.workerWG.Done(); m.runDeletionWorker(workerCtx) }()
+	go func() { defer m.workerWG.Done(); m.runRollups(workerCtx) }()
 	return nil
 }
 func (m *Manager) Stop(context.Context) error {
@@ -53,6 +59,7 @@ func (m *Manager) Stop(context.Context) error {
 	if cancel != nil {
 		cancel()
 	}
+	m.workerWG.Wait()
 	return m.Close()
 }
 func (m *Manager) DB() *sql.DB { return m.db }
