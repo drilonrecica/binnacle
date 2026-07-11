@@ -384,6 +384,7 @@ Rules for every task:
 
 ### T040 — Normalize Docker network and block-I/O rates
 
+- **Status:** Complete
 - **Commit:** `feat(docker): normalize container network and block I/O`
 - **Description:** Sum per-container interface counters and block-I/O counters, compute RX/TX and read/write rates, and preserve reset boundaries.
 - **Implement:** Treat a replacement as a new instance series; do not merge distinct instance counters before resource aggregation; keep fields null when Docker omits a metric.
