@@ -743,6 +743,7 @@ Rules for every task:
 
 ### T079 — Implement onboarding diagnostics service
 
+- **Status:** Complete
 - **Commit:** `feat(onboarding): add independent installation diagnostics`
 - **Description:** Add checks for host metrics access, Docker API access, cgroup access, Compose/Coolify detection, persistent storage writability, database initialization, and informational outbound availability.
 - **Implement:** Each diagnostic returns independent status, clear reason, suggested fix, and expandable technical detail; optional failures never block unrelated setup completion.
