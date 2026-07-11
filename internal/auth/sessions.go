@@ -43,12 +43,18 @@ func NewSessions(db *sql.DB, cfg SessionConfig) *Sessions {
 func (s *Sessions) SetDB(db *sql.DB) { s.db = db }
 
 func (s *Sessions) Issue(ctx context.Context, userID string) (string, Session, error) {
-	token, _, session, err := s.IssueWithCSRF(ctx, userID)
+	token, _, session, err := s.issue(ctx, userID, "", "")
 	return token, session, err
 }
 
 // IssueWithCSRF returns the only plaintext copy of the anti-CSRF token.
 func (s *Sessions) IssueWithCSRF(ctx context.Context, userID string) (string, string, Session, error) {
+	return s.issue(ctx, userID, "", "")
+}
+func (s *Sessions) IssueForRequest(ctx context.Context, userID string, r *http.Request, proxies TrustedProxies) (string, string, Session, error) {
+	return s.issue(ctx, userID, fingerprint(r.UserAgent()), fingerprint(proxies.ClientPrefix(r)))
+}
+func (s *Sessions) issue(ctx context.Context, userID, userAgentHash, ipPrefixHash string) (string, string, Session, error) {
 	if s == nil || s.db == nil || !s.cfg.valid() || userID == "" {
 		return "", "", Session{}, ErrSessionInvalid
 	}
@@ -63,7 +69,7 @@ func (s *Sessions) IssueWithCSRF(ctx context.Context, userID string) (string, st
 	now := s.now().UTC()
 	absolute := now.Add(s.cfg.AbsoluteLifetime)
 	session := Session{UserID: userID, CreatedAt: now, LastSeenAt: now, ExpiresAt: minTime(now.Add(s.cfg.IdleTimeout), absolute), AbsoluteExpires: absolute}
-	if _, err = s.db.ExecContext(ctx, "INSERT INTO sessions(id_hash,user_id,created_at,last_seen_at,expires_at,absolute_expires_at,revoked_at,csrf_hash) VALUES(?,?,?,?,?,?,NULL,?)", tokenHash(token), userID, now.UnixMilli(), now.UnixMilli(), session.ExpiresAt.UnixMilli(), absolute.UnixMilli(), CSRFHash(csrf)); err != nil {
+	if _, err = s.db.ExecContext(ctx, "INSERT INTO sessions(id_hash,user_id,created_at,last_seen_at,expires_at,absolute_expires_at,revoked_at,csrf_hash,user_agent_hash,ip_prefix_hash) VALUES(?,?,?,?,?,?,NULL,?,?,?)", tokenHash(token), userID, now.UnixMilli(), now.UnixMilli(), session.ExpiresAt.UnixMilli(), absolute.UnixMilli(), CSRFHash(csrf), nullFingerprint(userAgentHash), nullFingerprint(ipPrefixHash)); err != nil {
 		return "", "", Session{}, err
 	}
 	return token, csrf, session, nil
@@ -142,12 +148,35 @@ func (s *Sessions) Cleanup(ctx context.Context, limit int) (int64, error) {
 	if limit < 1 || limit > 1000 {
 		limit = 500
 	}
-	r, err := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions WHERE absolute_expires_at<? OR (revoked_at IS NOT NULL AND revoked_at<?) LIMIT ?)", s.now().UTC().Add(-24*time.Hour).UnixMilli(), s.now().UTC().Add(-24*time.Hour).UnixMilli(), limit)
+	cutoff := s.now().UTC().Add(-24 * time.Hour).UnixMilli()
+	r, err := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions WHERE expires_at<? OR absolute_expires_at<? OR (revoked_at IS NOT NULL AND revoked_at<?) LIMIT ?)", cutoff, cutoff, cutoff, limit)
 	if err != nil {
 		return 0, err
 	}
 	return r.RowsAffected()
 }
+
+func (s *Sessions) Start(ctx context.Context) error {
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				for {
+					n, err := s.Cleanup(ctx, 500)
+					if err != nil || n < 500 {
+						break
+					}
+				}
+			}
+		}
+	}()
+	return nil
+}
+func (s *Sessions) Stop(context.Context) error { return nil }
 
 func SetSessionCookie(w http.ResponseWriter, token string, secure bool, expires time.Time) {
 	http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: token, Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, Expires: expires.UTC()})
@@ -181,4 +210,17 @@ func minTime(a, b time.Time) time.Time {
 		return a
 	}
 	return b
+}
+func fingerprint(value string) string {
+	if value == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(value))
+	return base64.RawStdEncoding.EncodeToString(sum[:])
+}
+func nullFingerprint(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }

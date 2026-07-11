@@ -36,7 +36,10 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 			WriteError(w, 401, Error{Code: "invalid_credentials", Message: "Invalid username or password."})
 			return
 		}
-		token, csrf, session, err := sessions.IssueWithCSRF(r.Context(), user.ID)
+		if previous := auth.TokenFromRequest(r); previous != "" {
+			_ = sessions.Revoke(r.Context(), previous)
+		}
+		token, csrf, session, err := sessions.IssueForRequest(r.Context(), user.ID, r, proxies)
 		if err != nil {
 			WriteError(w, 500, Error{Code: "session_error", Message: "Could not start session."})
 			return

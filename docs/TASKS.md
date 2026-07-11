@@ -698,6 +698,7 @@ Rules for every task:
 
 ### T074 — Implement hashed session lifecycle and logout controls
 
+- **Status:** Complete
 - **Commit:** `feat(auth): add secure browser session lifecycle`
 - **Description:** Add opaque random session tokens stored only as hashes, secure HttpOnly cookies, idle/absolute expiry, rotation after login, current-session logout, and logout-all.
 - **Implement:** Use Secure cookies when HTTPS/proxy signals warrant it, SameSite policy appropriate to the flow, optional hashed user-agent/IP-prefix binding for diagnostics, and expiry cleanup.

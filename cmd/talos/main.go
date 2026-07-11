@@ -65,6 +65,7 @@ func main() {
 			}
 			return err
 		}})
+		application.Add(sessions)
 	}
 	apiServer := api.New()
 	var authorizer api.Authorizer = api.DemoAuthorizer(*demoMode || config.Demo)
