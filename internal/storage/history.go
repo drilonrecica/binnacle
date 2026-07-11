@@ -126,7 +126,7 @@ func (m *Manager) QueryMetrics(ctx context.Context, q MetricQuery) (MetricsRespo
 			for i := range gaps {
 				gaps[i].Reason = m.classifyGap(ctx, q, gaps[i])
 			}
-			r.Gaps = gaps
+			r.Gaps = mergeGaps(gaps)
 		}
 	}
 	return r, nil
@@ -234,10 +234,31 @@ func findGaps(from, to time.Time, res Resolution, points []Point) []Gap {
 		if p.At.Sub(cursor) > step*2 {
 			out = append(out, Gap{From: cursor, To: p.At, Reason: "missing"})
 		}
+		if p.Avg == nil {
+			out = append(out, Gap{From: p.At, To: p.At.Add(step), Reason: "missing"})
+		}
 		cursor = p.At.Add(step)
 	}
 	if to.UTC().Sub(cursor) > step*2 {
 		out = append(out, Gap{From: cursor, To: to.UTC(), Reason: "missing"})
+	}
+	return out
+}
+
+func mergeGaps(gaps []Gap) []Gap {
+	if len(gaps) < 2 {
+		return gaps
+	}
+	out := []Gap{gaps[0]}
+	for _, gap := range gaps[1:] {
+		last := &out[len(out)-1]
+		if gap.Reason == last.Reason && !gap.From.After(last.To) {
+			if gap.To.After(last.To) {
+				last.To = gap.To
+			}
+			continue
+		}
+		out = append(out, gap)
 	}
 	return out
 }

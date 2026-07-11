@@ -54,3 +54,16 @@ func TestGapClassification(t *testing.T) {
 		}
 	}
 }
+
+func TestNullBucketsBecomeExplicitMergedGaps(t *testing.T) {
+	base := time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC)
+	gaps := findGaps(base, base.Add(40*time.Second), ResolutionRaw, []Point{{At: base, Avg: nil}, {At: base.Add(10 * time.Second), Avg: nil}, {At: base.Add(20 * time.Second), Avg: floatPtr(2)}})
+	for i := range gaps {
+		gaps[i].Reason = "inactive"
+	}
+	merged := mergeGaps(gaps)
+	if len(merged) != 1 || !merged[0].From.Equal(base) || !merged[0].To.Equal(base.Add(20*time.Second)) {
+		t.Fatalf("gaps=%+v", merged)
+	}
+}
+func floatPtr(v float64) *float64 { return &v }

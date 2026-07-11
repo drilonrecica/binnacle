@@ -48,6 +48,7 @@ func main() {
 	}
 	store := storage.New(config.Paths.DatabasePath, config.Paths.RuntimeDir)
 	application.Add(store)
+	application.Add(storage.NewPersistence(engine, store, config.Persistence.RawInterval, config.Persistence.QueueBatchLimit))
 	var setup *auth.SetupService
 	var credentials *auth.Credentials
 	var sessions *auth.Sessions
