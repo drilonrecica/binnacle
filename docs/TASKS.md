@@ -541,6 +541,7 @@ Rules for every task:
 
 ### T057 — Add bounded persistence queue and overflow behavior
 
+- **Status:** Complete
 - **Commit:** `feat(metrics): bound persistence backlog and overflow`
 - **Description:** Add the 60-batch persistence queue with oldest-batch drop policy, queue depth, dropped-batch counter, degraded state, and recovery notification.
 - **Implement:** Producers never block indefinitely on writer slowness; queue overflow must retain the newest current history opportunity and create a user-visible internal event/state.
