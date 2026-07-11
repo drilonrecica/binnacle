@@ -13,13 +13,15 @@ import (
 // Persistence schedules immutable current snapshots into a bounded writer
 // queue. Storage failure never blocks collectors or the live Metrics Engine.
 type Persistence struct {
-	Engine     *metrics.Engine
-	Store      *Manager
-	Interval   time.Duration
-	QueueLimit int
-	Dropped    atomic.Uint64
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
+	Engine         *metrics.Engine
+	Store          *Manager
+	Interval       time.Duration
+	QueueLimit     int
+	Dropped        atomic.Uint64
+	QueueDepth     atomic.Int64
+	LastWriteNanos atomic.Int64
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
 }
 
 func NewPersistence(engine *metrics.Engine, store *Manager, interval time.Duration, limit int) *Persistence {
@@ -43,16 +45,19 @@ func (p *Persistence) Start(parent context.Context) error {
 		}
 		select {
 		case queue <- batch:
+			p.QueueDepth.Store(int64(len(queue)))
 		default:
 			select {
 			case <-queue:
 				p.Dropped.Add(1)
+				p.QueueDepth.Store(int64(len(queue)))
 			default:
 				{
 				}
 			}
 			select {
 			case queue <- batch:
+				p.QueueDepth.Store(int64(len(queue)))
 			default:
 				p.Dropped.Add(1)
 			}
@@ -80,12 +85,18 @@ func (p *Persistence) Start(parent context.Context) error {
 			case <-ctx.Done():
 				return
 			case batch := <-queue:
+				p.QueueDepth.Store(int64(len(queue)))
+				started := time.Now()
 				_ = Retry(ctx, func() error { return p.Store.WriteBatch(ctx, batch) })
+				p.LastWriteNanos.Store(time.Since(started).Nanoseconds())
 			}
 		}
 	}()
 	return nil
 }
+func (p *Persistence) Queue() int64                { return p.QueueDepth.Load() }
+func (p *Persistence) DroppedCount() uint64        { return p.Dropped.Load() }
+func (p *Persistence) WriteLatency() time.Duration { return time.Duration(p.LastWriteNanos.Load()) }
 func (p *Persistence) Stop(context.Context) error {
 	if p.cancel != nil {
 		p.cancel()

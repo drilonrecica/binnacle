@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	dockercollector "github.com/drilonrecica/talos/internal/collector/docker"
@@ -46,6 +47,7 @@ type Sampler struct {
 	lastResources     []metrics.ResourceSnapshot
 	hostFailures      int
 	dockerFailures    int
+	LastDurationNanos atomic.Int64
 }
 type dockerSample struct {
 	value dockerapi.Stats
@@ -109,6 +111,8 @@ func (s *Sampler) run(ctx context.Context) {
 }
 
 func (s *Sampler) collect(ctx context.Context, pending []metrics.Event) {
+	started := time.Now()
+	defer func() { s.LastDurationNanos.Store(time.Since(started).Nanoseconds()) }()
 	now := time.Now().UTC()
 	host, boot, hostErr := s.collectHost(now)
 	collectors := map[string]metrics.CollectorHealth{}
@@ -139,6 +143,12 @@ func (s *Sampler) collect(ctx context.Context, pending []metrics.Event) {
 		}
 	}
 	s.Engine.Publish(metrics.Snapshot{At: now, BootIdentity: metrics.BootIdentity(boot), Host: host, Resources: resourceValues, Collectors: collectors}, pending...)
+}
+func (s *Sampler) CollectionDuration() time.Duration {
+	if s == nil {
+		return 0
+	}
+	return time.Duration(s.LastDurationNanos.Load())
 }
 
 func (s *Sampler) collectHost(now time.Time) (metrics.HostObservation, string, error) {

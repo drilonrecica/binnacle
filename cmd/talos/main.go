@@ -53,13 +53,15 @@ func main() {
 	}
 	store := storage.New(config.Paths.DatabasePath, config.Paths.RuntimeDir)
 	application.Add(store)
-	application.Add(storage.NewPersistence(engine, store, config.Persistence.RawInterval, config.Persistence.QueueBatchLimit))
+	persistence := storage.NewPersistence(engine, store, config.Persistence.RawInterval, config.Persistence.QueueBatchLimit)
+	application.Add(persistence)
 	var setup *auth.SetupService
 	var credentials *auth.Credentials
 	var sessions *auth.Sessions
 	var onboardingService *onboarding.Service
 	var settingsService *settings.Service
 	var dockerEngine *dockerapi.Engine
+	var productionSampler *production.Sampler
 	if !*demoMode && !config.Demo {
 		setup = auth.NewSetupService(nil)
 		credentials = auth.NewCredentials(nil)
@@ -75,9 +77,10 @@ func main() {
 			os.Exit(1)
 		}
 		onboardingService.SetDocker(dockerEngine)
-		application.Add(&production.Sampler{Engine: engine, Docker: dockerEngine, Store: store, HostProc: config.Paths.HostProc, DataDir: config.Paths.DataDir, MaxDockerConcurrency: config.Docker.MaxConcurrency, Interval: func() time.Duration {
+		productionSampler = &production.Sampler{Engine: engine, Docker: dockerEngine, Store: store, HostProc: config.Paths.HostProc, DataDir: config.Paths.DataDir, MaxDockerConcurrency: config.Docker.MaxConcurrency, Interval: func() time.Duration {
 			return settingsService.Current().Collection.HostInterval
-		}})
+		}}
+		application.Add(productionSampler)
 		application.Add(app.ComponentFuncs{StartFunc: func(ctx context.Context) error {
 			setup.SetDB(store.DB())
 			credentials.SetDB(store.DB())
@@ -118,6 +121,8 @@ func main() {
 	apiServer.EnableMetrics(store, authorizer, protection)
 	apiServer.EnableEvents(store, authorizer)
 	apiServer.EnableHistoryDeletion(store, authorizer, sessions)
+	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, Persistence: persistence, Collector: productionSampler}
+	apiServer.EnableMonitorHealth(monitor, authorizer)
 	bundleService := diagnostics.NewBundleService(func(ctx context.Context) diagnostics.BundleData {
 		schema, schemaErr := store.SchemaVersion(ctx)
 		var databaseBytes int64
@@ -142,7 +147,7 @@ func main() {
 			"schemaVersion": schema, "collectorHealth": engine.Snapshot().Collectors,
 			"configuration": effectiveSettings, "resourceCount": len(engine.Snapshot().Resources),
 			"databaseBytes": databaseBytes, "recentInternalErrors": []string{},
-			"dockerVersion": dockerVersion, "selfMetrics": map[string]int64{},
+			"dockerVersion": dockerVersion, "selfMetrics": monitor.Snapshot(),
 		}
 		if schemaErr != nil {
 			failures = append(failures, "database schema version unavailable")

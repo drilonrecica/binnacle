@@ -113,6 +113,7 @@ func (e *Engine) Subscribe() *Subscription {
 	}}
 }
 func (e *Engine) Snapshot() Snapshot { e.mu.RLock(); defer e.mu.RUnlock(); return clone(e.snapshot) }
+func (e *Engine) SSEClients() int    { e.mu.RLock(); defer e.mu.RUnlock(); return len(e.live) }
 func (e *Engine) EventsAfter(id Sequence) []Event {
 	e.mu.RLock()
 	defer e.mu.RUnlock()

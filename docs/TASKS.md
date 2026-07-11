@@ -817,6 +817,7 @@ Rules for every task:
 
 ### T087 — Build monitor-health page
 
+- **Status:** Complete
 - **Commit:** `feat(web): expose TALOS self-observation`
 - **Description:** Implement Settings → System → Monitor health with TALOS CPU/RSS/heap/goroutines, DB/WAL sizes, queue depth, dropped batches, write latency, worker durations, collector durations, SSE clients, and Docker API health.
 - **Implement:** Explain units and threshold states; show unavailable measurements honestly; link persistence/storage states to relevant settings/recovery guidance.

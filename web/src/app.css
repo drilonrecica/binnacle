@@ -99,6 +99,15 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
   gap: var(--space-4);
 }
+.monitor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--space-4);
+}
+.monitor-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
 .settings-grid section {
   display: grid;
   align-content: start;
