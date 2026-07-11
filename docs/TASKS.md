@@ -36,6 +36,7 @@ Rules for every task:
 
 ### T002 — Create the monorepo skeleton and ignore rules
 
+- **Status:** Complete
 - **Commit:** `chore(repo): create TALOS monorepo layout`
 - **Description:** Create the required `cmd`, `internal`, `web`, `migrations`, `packaging`, `scripts`, and `adr` structure with minimal package documentation; replace the generic ignore file with Go, pnpm, Vite, SQLite runtime, coverage, and local-secret exclusions.
 - **Implement:** Establish only acyclic package boundaries described by the specification; add placeholder directories only where Git needs tracked files; never commit generated frontend output, database files, local profiles, or `.env` files.
