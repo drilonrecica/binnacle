@@ -151,14 +151,14 @@ func (m *Manager) classifyGap(ctx context.Context, q MetricQuery, gap Gap) strin
 	return "missing"
 }
 func (m *Manager) metricPoints(ctx context.Context, q MetricQuery, metric Metric, res Resolution) ([]Point, error) {
-	column, table, err := metricSource(q.Scope, metric, res)
+	minColumn, avgColumn, maxColumn, countColumn, table, err := metricSource(q.Scope, metric, res)
 	if err != nil {
 		return nil, err
 	}
 	var query string
 	args := []any{}
 	if res == ResolutionRaw {
-		query = "SELECT ts," + column + " FROM " + table + " WHERE ts>=? AND ts<=?"
+		query = "SELECT ts," + avgColumn + " FROM " + table + " WHERE ts>=? AND ts<=?"
 		args = []any{q.From.UnixMilli(), q.To.UnixMilli()}
 		if q.Scope == "resource" {
 			query += " AND resource_id=?"
@@ -166,7 +166,7 @@ func (m *Manager) metricPoints(ctx context.Context, q MetricQuery, metric Metric
 		}
 		query += " ORDER BY ts"
 	} else {
-		query = "SELECT ts," + column + "," + column + "," + column + ",sample_count FROM " + table + " WHERE ts>=? AND ts<=?"
+		query = "SELECT ts," + minColumn + "," + avgColumn + "," + maxColumn + "," + countColumn + " FROM " + table + " WHERE ts>=? AND ts<=?"
 		args = []any{q.From.UnixMilli(), q.To.UnixMilli()}
 		if q.Scope == "resource" {
 			query += " AND resource_id=?"
@@ -202,26 +202,29 @@ func (m *Manager) metricPoints(ctx context.Context, q MetricQuery, metric Metric
 	}
 	return out, rows.Err()
 }
-func metricSource(scope string, metric Metric, res Resolution) (string, string, error) {
+func metricSource(scope string, metric Metric, res Resolution) (string, string, string, string, string, error) {
 	raw := map[Metric]string{MetricCPU: "cpu_busy_pct", MetricMemory: "memory_used_bytes", MetricNetworkRX: "network_rx_bps", MetricNetworkTX: "network_tx_bps", MetricBlockRead: "block_read_bps", MetricBlockWrite: "block_write_bps"}
-	roll := map[Metric]string{MetricCPU: "cpu_avg", MetricMemory: "memory_avg", MetricNetworkRX: "network_rx_avg", MetricNetworkTX: "network_tx_avg", MetricBlockRead: "block_read_avg", MetricBlockWrite: "block_write_avg"}
-	column := raw[metric]
-	if res != ResolutionRaw {
-		column = roll[metric]
-	}
-	if column == "" {
-		return "", "", fmt.Errorf("unsupported metric")
-	}
-	if scope == "host" {
-		if res == ResolutionRaw {
-			return column, "host_samples_10s", nil
-		}
-		return column, "host_rollups_" + string(res), nil
+	prefix := map[Metric]string{MetricCPU: "cpu", MetricMemory: "memory", MetricNetworkRX: "network_rx", MetricNetworkTX: "network_tx", MetricBlockRead: "block_read", MetricBlockWrite: "block_write"}[metric]
+	if raw[metric] == "" || prefix == "" {
+		return "", "", "", "", "", fmt.Errorf("unsupported metric")
 	}
 	if res == ResolutionRaw {
-		return column, "resource_samples_10s", nil
+		table := "resource_samples_10s"
+		if scope == "host" {
+			table = "host_samples_10s"
+		}
+		column := raw[metric]
+		return column, column, column, "", table, nil
 	}
-	return column, "resource_rollups_" + string(res), nil
+	count := prefix + "_count"
+	if metric == MetricCPU {
+		count = "sample_count"
+	}
+	tablePrefix := "resource_rollups_"
+	if scope == "host" {
+		tablePrefix = "host_rollups_"
+	}
+	return prefix + "_min", prefix + "_avg", prefix + "_max", count, tablePrefix + string(res), nil
 }
 func findGaps(from, to time.Time, res Resolution, points []Point) []Gap {
 	step := map[Resolution]time.Duration{ResolutionRaw: 10 * time.Second, Resolution1m: time.Minute, Resolution15m: 15 * time.Minute, Resolution1h: time.Hour}[res]
