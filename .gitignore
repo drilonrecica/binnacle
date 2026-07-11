@@ -73,6 +73,9 @@ talos.db-shm
 benchmark-report.json
 benchmark-reports/
 
+# Release records
+release-record/
+
 # Logs and local diagnostic artifacts
 *.log
 *.log.*
