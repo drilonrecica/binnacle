@@ -14,6 +14,7 @@ import (
 
 	"github.com/drilonrecica/talos/internal/api"
 	"github.com/drilonrecica/talos/internal/app"
+	"github.com/drilonrecica/talos/internal/auth"
 	"github.com/drilonrecica/talos/internal/demo"
 	"github.com/drilonrecica/talos/internal/metrics"
 	"github.com/drilonrecica/talos/internal/settings"
@@ -47,6 +48,18 @@ func main() {
 	}
 	store := storage.New(config.Paths.DatabasePath, config.Paths.RuntimeDir)
 	application.Add(store)
+	var setup *auth.SetupService
+	if !*demoMode && !config.Demo {
+		setup = auth.NewSetupService(nil)
+		application.Add(app.ComponentFuncs{StartFunc: func(ctx context.Context) error {
+			setup.SetDB(store.DB())
+			generated, err := setup.Initialize(ctx, config.HTTP.ListenAddress, os.Getenv("TALOS_SETUP_TOKEN"))
+			if generated != "" {
+				log.Warn("local setup token generated", "setup_token", generated)
+			}
+			return err
+		}})
+	}
 	apiServer := api.New()
 	apiServer.EnableLive(engine, api.DemoAuthorizer(*demoMode || config.Demo))
 	apiServer.EnableCurrent(engine, api.DemoAuthorizer(*demoMode || config.Demo))
@@ -54,6 +67,10 @@ func main() {
 	apiServer.EnableMetrics(store, api.DemoAuthorizer(*demoMode || config.Demo))
 	apiServer.EnableEvents(store, api.DemoAuthorizer(*demoMode || config.Demo))
 	apiServer.EnableHistoryDeletion(store, api.DemoAuthorizer(*demoMode || config.Demo), nil)
+	if setup != nil {
+		proxies, _ := auth.ParseTrustedProxies(config.HTTP.TrustedProxyCIDRs)
+		apiServer.EnableSetup(setup, auth.NewLimiter(4096), proxies)
+	}
 	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, version, application, apiServer.Handler(), webembed.Handler()))
 	if err := application.Run(ctx); err != nil {
 		log.Error("application exited with error", "error", err)
