@@ -2,6 +2,8 @@
 package storage
 
 import (
+	"context"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -18,5 +20,37 @@ func TestMetricQueryValidationAndResolution(t *testing.T) {
 	q.Scope = "host"
 	if err := q.Validate(); err == nil {
 		t.Fatal("host block metric accepted")
+	}
+}
+
+func TestGapClassification(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	m := New(filepath.Join(dir, "talos.db"), filepath.Join(dir, "run"))
+	if err := m.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	base := time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC)
+	ms := base.UnixMilli()
+	if _, err := m.db.ExecContext(ctx, "INSERT INTO resource_samples_10s(ts,resource_id,active_instance_count,status) VALUES(?,'res_test',0,'paused')", ms+1000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.db.ExecContext(ctx, "INSERT INTO collector_state_events(id,ts,collector_name,new_state) VALUES('collector',?,'docker','down')", ms+61_000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.db.ExecContext(ctx, "INSERT INTO events(id,ts,type,severity,summary,source,created_at) VALUES('persistence',?,'persistence_gap','warning','gap','talos',?)", ms+121_000, ms+121_000); err != nil {
+		t.Fatal(err)
+	}
+	q := MetricQuery{Scope: "resource", ID: "res_test"}
+	cases := []struct {
+		from time.Time
+		want string
+	}{{base, "inactive"}, {base.Add(time.Minute), "collector_unavailable"}, {base.Add(2 * time.Minute), "persistence_failure"}}
+	for _, tc := range cases {
+		gap := Gap{From: tc.from, To: tc.from.Add(time.Minute)}
+		if got := m.classifyGap(ctx, q, gap); got != tc.want {
+			t.Fatalf("gap %s=%s want %s", tc.from, got, tc.want)
+		}
 	}
 }

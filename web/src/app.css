@@ -80,6 +80,19 @@ a {
 }
 main {
   padding: var(--space-8);
+  min-width: 0;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+.history,
+.history .card,
+.chart-canvas,
+.chart-canvas .uplot {
+  min-width: 0;
+  max-width: 100%;
+}
+.chart-canvas {
+  overflow: hidden;
 }
 .shell {
   display: grid;
@@ -179,5 +192,6 @@ nav a[aria-current='page'] {
   }
   header {
     gap: 1rem;
+    flex-wrap: wrap;
   }
 }

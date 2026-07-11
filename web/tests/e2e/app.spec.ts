@@ -31,13 +31,17 @@ test('switches every historical range without hiding gaps', async ({
       ],
     }),
   );
-  await page.route('**/api/v1/metrics?*', (route) =>
-    route.fulfill({
+  await page.route('**/api/v1/metrics?*', (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    const span =
+      new Date(query.get('to')!).getTime() -
+      new Date(query.get('from')!).getTime();
+    return route.fulfill({
       json: {
         scope: 'host',
         from: '2026-07-11T11:00:00Z',
         to: '2026-07-11T12:00:00Z',
-        resolution: '10s',
+        resolution: span > 10 * 24 * 60 * 60 * 1000 ? '1h' : '10s',
         series: [
           {
             metric: 'cpu',
@@ -55,8 +59,8 @@ test('switches every historical range without hiding gaps', async ({
           },
         ],
       },
-    }),
-  );
+    });
+  });
   await page.goto('/');
   await page.getByRole('link', { name: 'server', exact: true }).click();
   await expect(
@@ -64,8 +68,33 @@ test('switches every historical range without hiding gaps', async ({
   ).toBeVisible();
   for (const range of ['1h', '6h', '24h', '7d', '30d'])
     await page.getByRole('button', { name: range, exact: true }).click();
+  await expect(page.getByText('Resolution: 1h.')).toBeVisible();
   await expect(page.getByText('1 explicit data gap.')).toBeVisible();
   await expect(page.getByText('1 event annotation')).toBeVisible();
+  await page.getByText('1 data gap', { exact: true }).click();
+  await expect(page.getByText(/collector unavailable/)).toBeVisible();
+  const inspector = page.getByRole('button', {
+    name: 'CPU (host-normalized %) chart inspection',
+  });
+  await inspector.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(inspector).toContainText('Selected point');
+  await page.getByRole('button', { name: 'Custom' }).click();
+  await page
+    .getByRole('textbox', { name: 'From', exact: true })
+    .fill('2026-07-11T12:00');
+  await page
+    .getByRole('textbox', { name: 'To', exact: true })
+    .fill('2026-07-10T12:00');
+  await page.getByRole('button', { name: 'Apply range' }).click();
+  await expect(page.getByRole('alert')).toContainText(
+    'end time after the start',
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  const box = await page
+    .getByRole('heading', { name: 'Historical telemetry' })
+    .boundingBox();
+  expect(box?.width).toBeLessThanOrEqual(390);
 });
 
 test('requires typed confirmation for history deletion', async ({ page }) => {

@@ -84,7 +84,7 @@
   }
 </script>
 
-<div bind:this={root} aria-hidden="true"></div>
+<div class="chart-canvas" bind:this={root} aria-hidden="true"></div>
 <button
   type="button"
   class="chart-inspector"

@@ -144,6 +144,22 @@
             </li>{/each}
         </ul>
       </details>{/if}
+    {#if data.gaps.length}<details class="chart-gaps">
+        <summary
+          >{data.gaps.length} data gap{data.gaps.length === 1
+            ? ''
+            : 's'}</summary
+        >
+        <ul>
+          {#each data.gaps as gap (gap.from + gap.to + gap.reason)}<li>
+              <time datetime={gap.from}
+                >{new Date(gap.from).toLocaleString()}</time
+              >–<time datetime={gap.to}
+                >{new Date(gap.to).toLocaleString()}</time
+              >: {gap.reason.replaceAll('_', ' ')}
+            </li>{/each}
+        </ul>
+      </details>{/if}
     {#each data.series as series (series.metric)}<article class="card">
         <h3>{labels[series.metric]}</h3>
         <TimeSeries
