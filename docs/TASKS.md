@@ -651,6 +651,7 @@ Rules for every task:
 
 ### T069 — Implement historical metrics query service
 
+- **Status:** Complete
 - **Commit:** `feat(storage): query historical metrics by resolution`
 - **Description:** Implement validated historical host/resource metrics queries with automatic raw/1m/15m/1h resolution selection and approximately 1000-point cap.
 - **Implement:** Apply documented range mapping as default, choose a coarser tier when needed, return min/avg/max/count and explicit gap metadata, and reject invalid scope/ID/metric/range combinations.
