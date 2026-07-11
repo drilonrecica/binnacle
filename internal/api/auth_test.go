@@ -1,0 +1,120 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+package api
+
+import (
+	"bytes"
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/drilonrecica/talos/internal/auth"
+	"github.com/drilonrecica/talos/internal/storage"
+)
+
+func TestLoginRotationAndLogoutControls(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	manager := storage.New(filepath.Join(dir, "talos.db"), filepath.Join(dir, "run"))
+	if err := manager.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	credentials := auth.NewCredentials(manager.DB())
+	user, err := credentials.CreateAdmin(ctx, "admin", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions := auth.NewSessions(manager.DB(), auth.SessionConfig{IdleTimeout: time.Hour, AbsoluteLifetime: 24 * time.Hour})
+	protection := auth.NewProtection(128, auth.TrustedProxies{})
+	server := New()
+	server.EnableAuth(credentials, sessions, protection)
+	login := func(previous *http.Cookie) (*http.Cookie, *http.Cookie) {
+		request := httptest.NewRequest(http.MethodPost, "http://talos.test/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin","password":"correct horse battery staple"}`))
+		request.RemoteAddr = "192.0.2.10:1234"
+		request.Header.Set("Content-Type", "application/json")
+		if previous != nil {
+			request.AddCookie(previous)
+		}
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("login status=%d body=%s", response.Code, response.Body.String())
+		}
+		var session, csrf *http.Cookie
+		for _, cookie := range response.Result().Cookies() {
+			if cookie.Name == auth.SessionCookieName {
+				session = cookie
+			}
+			if cookie.Name == auth.CSRFCookieName {
+				csrf = cookie
+			}
+		}
+		if session == nil || csrf == nil {
+			t.Fatal("missing auth cookies")
+		}
+		return session, csrf
+	}
+	first, _ := login(nil)
+	second, secondCSRF := login(first)
+	if _, err = sessions.Authenticate(ctx, first.Value); err == nil {
+		t.Fatal("pre-login session was not rotated")
+	}
+	if _, err = sessions.Authenticate(ctx, second.Value); err != nil {
+		t.Fatal(err)
+	}
+	missing := httptest.NewRequest(http.MethodPost, "http://talos.test/api/v1/auth/logout", nil)
+	missing.Header.Set("Origin", "http://talos.test")
+	missing.AddCookie(second)
+	denied := httptest.NewRecorder()
+	server.Handler().ServeHTTP(denied, missing)
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("missing CSRF status=%d", denied.Code)
+	}
+	invalid := httptest.NewRequest(http.MethodPost, "http://talos.test/api/v1/auth/logout", nil)
+	invalid.Header.Set("Origin", "http://talos.test")
+	invalid.Header.Set("X-CSRF-Token", "invalid")
+	invalid.AddCookie(second)
+	invalid.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: "invalid"})
+	denied = httptest.NewRecorder()
+	server.Handler().ServeHTTP(denied, invalid)
+	if denied.Code != http.StatusForbidden {
+		t.Fatalf("invalid CSRF status=%d", denied.Code)
+	}
+	logout := httptest.NewRequest(http.MethodPost, "http://talos.test/api/v1/auth/logout", nil)
+	logout.Header.Set("Origin", "http://talos.test")
+	logout.Header.Set("X-CSRF-Token", secondCSRF.Value)
+	logout.AddCookie(second)
+	logout.AddCookie(secondCSRF)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, logout)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("logout status=%d", response.Code)
+	}
+	if _, err = sessions.Authenticate(ctx, second.Value); err == nil {
+		t.Fatal("logged-out session accepted")
+	}
+	one, csrf, _, err := sessions.IssueWithCSRF(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := sessions.Issue(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := httptest.NewRequest(http.MethodPost, "http://talos.test/api/v1/auth/logout-all", nil)
+	all.Header.Set("Origin", "http://talos.test")
+	all.Header.Set("X-CSRF-Token", csrf)
+	all.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: one})
+	all.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: csrf})
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, all)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("logout-all status=%d body=%s", response.Code, response.Body.String())
+	}
+	if _, err = sessions.Authenticate(ctx, other); err == nil {
+		t.Fatal("logout-all left concurrent session active")
+	}
+}
