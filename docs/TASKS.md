@@ -274,6 +274,7 @@ Rules for every task:
 
 ### T028 — Collect and classify host network interfaces
 
+- **Status:** Complete
 - **Commit:** `feat(host): collect network interface rates`
 - **Description:** Parse `/proc/net/dev`, compute byte/packet/error/drop rates, and classify interfaces for aggregate versus detailed display.
 - **Implement:** Exclude loopback by default and avoid obvious Docker bridge/veth double counting in host aggregate while retaining interface detail; counter decreases create reset boundaries.
