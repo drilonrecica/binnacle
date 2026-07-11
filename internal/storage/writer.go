@@ -21,3 +21,7 @@ func (m *Manager) WriteBatch(ctx context.Context, b metrics.PersistenceBatch) er
 	}
 	return tx.Commit()
 }
+func (m *Manager) WriteEvent(ctx context.Context, e metrics.Event) error {
+	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO events(id,ts,type,severity,summary,source,created_at) VALUES(?,?,?,?,?,?,?)", e.ID, e.At.UnixMilli(), e.Type, "info", e.Message, "talos", e.At.UnixMilli())
+	return err
+}

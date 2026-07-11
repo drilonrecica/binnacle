@@ -568,6 +568,7 @@ Rules for every task:
 
 ### T060 — Persist normalized events and collector transitions
 
+- **Status:** Complete
 - **Commit:** `feat(storage): persist events and collector health history`
 - **Description:** Write normalized events and state transitions with correlation keys, safe details JSON, severity, source, and resource/instance references.
 - **Implement:** Ensure event insertion is idempotent under retry/replay where IDs are reused; retain recent in-memory event ring for live UI while SQLite serves history.
