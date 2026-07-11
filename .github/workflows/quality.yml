@@ -8,6 +8,11 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/setup-go@v5
         with: { go-version: '1.26.x', check-latest: true }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm --dir web install --frozen-lockfile
+      - run: pnpm --dir web build
       - run: gofmt -l cmd internal | (! grep .)
       - run: go vet ./...
       - run: go test ./...
@@ -16,7 +21,6 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: pnpm/action-setup@v4
-        with: { version: 10 }
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm --dir web install --frozen-lockfile
