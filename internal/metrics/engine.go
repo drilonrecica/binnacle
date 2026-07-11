@@ -18,6 +18,12 @@ type Engine struct {
 	nextSub     uint64
 }
 
+func (e *Engine) PersistenceBatch() PersistenceBatch {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return PersistenceBatch{Snapshot: clone(e.snapshot), Events: append([]Event(nil), e.events...)}
+}
+
 func NewEngine(maxEvents int) *Engine {
 	if maxEvents < 1 {
 		maxEvents = 128

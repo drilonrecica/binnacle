@@ -532,6 +532,7 @@ Rules for every task:
 
 ### T056 — Build immutable persistence batches and scheduler
 
+- **Status:** Complete
 - **Commit:** `feat(metrics): create scheduled persistence batches`
 - **Description:** Have the Metrics Engine create immutable 10-second batches containing host/resource/optional instance records, slower filesystem/interface samples, pending normalized events, and collector state changes.
 - **Implement:** Use one normalized/aggregated snapshot per cycle; avoid persistence when no meaningful sample exists; preserve explicit gaps and boot IDs.
