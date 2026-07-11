@@ -1,0 +1,4 @@
+CREATE TABLE resources (id TEXT PRIMARY KEY, host_id TEXT NOT NULL REFERENCES hosts(id), stable_key TEXT NOT NULL, source_kind TEXT NOT NULL, source_external_id TEXT, name TEXT NOT NULL, project_name TEXT, environment_name TEXT, category TEXT NOT NULL, status TEXT NOT NULL, archived_at INTEGER, first_seen_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL, user_category_override TEXT, UNIQUE(host_id, stable_key));
+CREATE TABLE container_instances (id TEXT PRIMARY KEY, resource_id TEXT REFERENCES resources(id), name TEXT NOT NULL, compose_project TEXT, compose_service TEXT, image_ref TEXT, image_digest TEXT, created_at INTEGER NOT NULL, started_at INTEGER, stopped_at INTEGER, destroyed_at INTEGER, exit_code INTEGER, oom_killed INTEGER NOT NULL DEFAULT 0, metadata_json TEXT);
+CREATE INDEX container_instances_resource_started ON container_instances(resource_id, started_at);
+CREATE INDEX container_instances_stopped ON container_instances(stopped_at);

@@ -422,6 +422,7 @@ Rules for every task:
 
 ### T044 — Add resource and container-instance schema
 
+- **Status:** Complete
 - **Commit:** `feat(storage): add resource identity schema`
 - **Description:** Add typed migrations for `resources` and `container_instances`, required indexes, source kinds, archive fields, category override fields, and sanitized metadata JSON.
 - **Implement:** Enforce unique `(host_id, stable_key)` identity; use container ID only as the instance primary key; preserve historical instances after replacement.
