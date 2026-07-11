@@ -2,6 +2,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/drilonrecica/talos/internal/auth"
@@ -10,12 +11,13 @@ import (
 func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessions, protection *auth.Protection) {
 	proxies := protection.Proxies()
 	limited := func(w http.ResponseWriter, r *http.Request, username string) bool {
-		ok, _ := protection.AllowLogin(r, username)
+		ok, retry := protection.AllowLogin(r, username)
 		if ok {
 			return true
 		}
-		w.Header().Set("Retry-After", "60")
-		WriteError(w, 429, Error{Code: "rate_limited", Message: "Too many login attempts. Try again later."})
+		seconds := maxRetry(retry)
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", seconds))
+		WriteError(w, 429, Error{Code: "rate_limited", Message: "Too many login attempts. Try again later.", Details: map[string]int{"retryAfterSeconds": seconds}})
 		return false
 	}
 	s.Handle("/api/v1/auth/login", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +29,11 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 			Username string `json:"username"`
 			Password string `json:"password"`
 		}
-		if DecodeJSON(r, &body) != nil || !limited(w, r, body.Username) {
+		if DecodeJSON(r, &body) != nil {
+			WriteError(w, http.StatusBadRequest, Error{Code: "invalid_request", Message: "A username and password are required."})
+			return
+		}
+		if !limited(w, r, body.Username) {
 			return
 		}
 		user, err := credentials.Authenticate(r.Context(), body.Username, body.Password)
@@ -44,8 +50,8 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 			return
 		}
 		secure := proxies.Secure(r)
-		auth.SetSessionCookie(w, token, secure, session.ExpiresAt)
-		auth.SetCSRFCookie(w, csrf, secure)
+		auth.SetSessionCookie(w, token, secure, session.AbsoluteExpires)
+		auth.SetCSRFCookie(w, csrf, secure, session.AbsoluteExpires)
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	s.Handle("/api/v1/auth/logout", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,6 +65,7 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 		}
 		_ = sessions.Revoke(r.Context(), auth.TokenFromRequest(r))
 		auth.ClearSessionCookie(w, proxies.Secure(r))
+		auth.ClearCSRFCookie(w, proxies.Secure(r))
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	s.Handle("/api/v1/auth/logout-all", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,6 +84,7 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 		}
 		_ = sessions.RevokeAll(r.Context(), session.UserID)
 		auth.ClearSessionCookie(w, proxies.Secure(r))
+		auth.ClearCSRFCookie(w, proxies.Secure(r))
 		w.WriteHeader(http.StatusNoContent)
 	}))
 }

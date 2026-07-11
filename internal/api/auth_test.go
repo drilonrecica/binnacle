@@ -55,6 +55,12 @@ func TestLoginRotationAndLogoutControls(t *testing.T) {
 		if session == nil || csrf == nil {
 			t.Fatal("missing auth cookies")
 		}
+		if !session.HttpOnly || session.SameSite != http.SameSiteLaxMode || session.Expires.Before(time.Now().Add(23*time.Hour)) {
+			t.Fatalf("session cookie=%+v", session)
+		}
+		if csrf.HttpOnly || csrf.SameSite != http.SameSiteLaxMode || csrf.Expires.Before(time.Now().Add(23*time.Hour)) {
+			t.Fatalf("csrf cookie=%+v", csrf)
+		}
 		return session, csrf
 	}
 	first, _ := login(nil)
@@ -92,6 +98,15 @@ func TestLoginRotationAndLogoutControls(t *testing.T) {
 	server.Handler().ServeHTTP(response, logout)
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("logout status=%d", response.Code)
+	}
+	cleared := map[string]bool{}
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.MaxAge < 0 {
+			cleared[cookie.Name] = true
+		}
+	}
+	if !cleared[auth.SessionCookieName] || !cleared[auth.CSRFCookieName] {
+		t.Fatalf("cleared cookies=%v", cleared)
 	}
 	if _, err = sessions.Authenticate(ctx, second.Value); err == nil {
 		t.Fatal("logged-out session accepted")

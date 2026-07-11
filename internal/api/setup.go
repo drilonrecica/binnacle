@@ -2,6 +2,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/drilonrecica/talos/internal/auth"
@@ -18,9 +19,9 @@ func (s *Server) EnableSetup(setup *auth.SetupService, protection *auth.Protecti
 		if ok {
 			return true
 		}
-		w.Header().Set("Retry-After", "300")
-		WriteError(w, http.StatusTooManyRequests, Error{Code: "rate_limited", Message: "Too many setup attempts. Try again later."})
-		_ = retry
+		seconds := maxRetry(retry)
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", seconds))
+		WriteError(w, http.StatusTooManyRequests, Error{Code: "rate_limited", Message: "Too many setup attempts. Try again later.", Details: map[string]int{"retryAfterSeconds": seconds}})
 		return false
 	}
 	s.Handle("/api/v1/setup", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

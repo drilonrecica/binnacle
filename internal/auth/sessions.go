@@ -153,7 +153,7 @@ func (s *Sessions) Cleanup(ctx context.Context, limit int) (int64, error) {
 	if limit < 1 || limit > 1000 {
 		limit = 500
 	}
-	cutoff := s.now().UTC().Add(-24 * time.Hour).UnixMilli()
+	cutoff := s.now().UTC().UnixMilli()
 	r, err := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions WHERE expires_at<? OR absolute_expires_at<? OR (revoked_at IS NOT NULL AND revoked_at<?) LIMIT ?)", cutoff, cutoff, cutoff, limit)
 	if err != nil {
 		return 0, err

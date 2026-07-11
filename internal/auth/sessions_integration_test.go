@@ -61,7 +61,7 @@ func TestSessionLifecycleAndHashedPersistence(t *testing.T) {
 	if _, err = sessions.Authenticate(ctx, token); err == nil {
 		t.Fatal("idle-expired session accepted")
 	}
-	now = now.Add(25 * time.Hour)
+	now = now.Add(time.Second)
 	removed, err := sessions.Cleanup(ctx, 500)
 	if err != nil || removed != 1 {
 		t.Fatalf("cleanup removed=%d err=%v", removed, err)

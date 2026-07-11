@@ -43,6 +43,9 @@ func (p TrustedProxies) trusted(r *http.Request) bool {
 	if err != nil {
 		return false
 	}
+	return p.trustedAddr(addr)
+}
+func (p TrustedProxies) trustedAddr(addr netip.Addr) bool {
 	for _, prefix := range p.prefixes {
 		if prefix.Contains(addr) {
 			return true
@@ -67,11 +70,16 @@ func (p TrustedProxies) ClientPrefix(r *http.Request) string {
 	if p.trusted(r) {
 		values := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
 		if len(values) > 0 && len(values) <= 16 {
-			for _, value := range values {
-				if addr, err := netip.ParseAddr(strings.TrimSpace(value)); err == nil {
-					host = addr.String()
-					break
+			for i := len(values) - 1; i >= 0; i-- {
+				addr, parseErr := netip.ParseAddr(strings.TrimSpace(values[i]))
+				if parseErr != nil {
+					continue
 				}
+				if p.trustedAddr(addr) {
+					continue
+				}
+				host = addr.String()
+				break
 			}
 		}
 	}
@@ -192,8 +200,11 @@ func CSRFHash(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return base64.RawStdEncoding.EncodeToString(sum[:])
 }
-func SetCSRFCookie(w http.ResponseWriter, token string, secure bool) {
-	http.SetCookie(w, &http.Cookie{Name: CSRFCookieName, Value: token, Path: "/", HttpOnly: false, Secure: secure, SameSite: http.SameSiteLaxMode})
+func SetCSRFCookie(w http.ResponseWriter, token string, secure bool, expires time.Time) {
+	http.SetCookie(w, &http.Cookie{Name: CSRFCookieName, Value: token, Path: "/", HttpOnly: false, Secure: secure, SameSite: http.SameSiteLaxMode, Expires: expires.UTC()})
+}
+func ClearCSRFCookie(w http.ResponseWriter, secure bool) {
+	http.SetCookie(w, &http.Cookie{Name: CSRFCookieName, Value: "", Path: "/", Secure: secure, SameSite: http.SameSiteLaxMode, MaxAge: -1, Expires: time.Unix(1, 0)})
 }
 func ValidCSRF(r *http.Request, expectedHash string) bool {
 	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
