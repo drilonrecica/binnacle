@@ -1,0 +1,15 @@
+{
+  "name": "talos",
+  "private": true,
+  "packageManager": "pnpm@11.4.0",
+  "engines": {
+    "node": ">=24.14.1 <25",
+    "pnpm": "11.4.0"
+  },
+  "scripts": {
+    "web:build": "pnpm --dir web build",
+    "web:check": "pnpm --dir web check",
+    "web:lint": "pnpm --dir web lint",
+    "web:test": "pnpm --dir web test:run"
+  }
+}

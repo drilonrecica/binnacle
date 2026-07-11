@@ -17,6 +17,7 @@ go.work
 go.work.sum
 
 # Frontend dependencies and generated Svelte/Vite output
+/node_modules/
 /web/node_modules/
 /web/dist/
 /web/.vite/

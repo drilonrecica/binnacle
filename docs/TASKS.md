@@ -54,6 +54,7 @@ Rules for every task:
 
 ### T004 — Bootstrap the Svelte 5 frontend workspace
 
+- **Status:** Complete
 - **Commit:** `build(web): initialize Svelte 5 TypeScript workspace`
 - **Description:** Initialize the `web` workspace with Svelte 5 runes, TypeScript, Vite, pnpm, ESLint, Prettier, Vitest, Playwright, and a committed lockfile/Corepack package-manager declaration.
 - **Implement:** Configure local assets only, strict TypeScript, browser targets matching the specification, and separate development/build/test scripts. Do not include a visual component framework or external font/icon CDN.
