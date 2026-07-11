@@ -586,6 +586,7 @@ Rules for every task:
 
 ### T062 — Add events history API with validated filtering
 
+- **Status:** Complete
 - **Commit:** `feat(api): add events history endpoint`
 - **Description:** Implement authenticated `GET /api/v1/events` over SQLite with bounded time range, resource/type/severity/source filters, cursor or limit pagination, and stable chronological ordering.
 - **Implement:** Validate all filters, cap response size, use indexes, return safe expanded details only on request, and avoid leaking secrets from stored payloads.
