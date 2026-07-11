@@ -606,6 +606,7 @@ Rules for every task:
 
 ### T064 — Add typed one-minute rollup tables and worker
 
+- **Status:** Complete
 - **Commit:** `feat(rollup): aggregate one-minute telemetry rollups`
 - **Description:** Add typed host/resource one-minute rollup schema and worker that processes only closed raw buckets into min/max/avg/sample-count rows.
 - **Implement:** Use deterministic UTC bucket starts and idempotent upsert behavior; never count null/missing samples as zero; record duration and failure health.
