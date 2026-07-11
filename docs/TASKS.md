@@ -339,6 +339,7 @@ Rules for every task:
 
 ### T035 — Create the narrow read-only Docker client boundary
 
+- **Status:** Complete
 - **Commit:** `feat(docker): add read-only Engine API client`
 - **Description:** Wrap the Docker Engine client in interfaces exposing only list, inspect, stats, events, version/system diagnostics, and later bounded logs—not mutation methods.
 - **Implement:** Centralize socket path, context deadlines, Docker API version handling, error normalization, and concurrency cap; prevent the rest of the codebase from accessing the raw Docker client.
