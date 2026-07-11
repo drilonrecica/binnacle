@@ -1,0 +1,55 @@
+name: supply-chain
+on: [pull_request, push]
+permissions: { contents: read }
+jobs:
+  vuln:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: golang/govulncheck-action@b73395a6ff0ffd4a95bfc2e37b1c1857829f6f5e
+        with:
+          go-version-input: '1.26.x'
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm --dir web audit --audit-level moderate
+
+  licenses:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.26.x', check-latest: true }
+      - run: go install github.com/google/go-licenses@v1.6.0
+      - run: go-licenses check ./... --allowed_licenses=MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0,ISC,MPL-2.0
+
+  sbom:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: anchore/sbom-action@v0
+        with:
+          format: spdx-json
+          output-file: talos.spdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: talos.spdx.json
+
+  scan:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: docker build -f packaging/docker/Dockerfile -t talos:scan .
+      - uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: talos:scan
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif

@@ -52,6 +52,23 @@ image-multi: ## Build a multi-arch container image (requires buildx and a regist
 
 	$(DOCKER) buildx build --platform linux/amd64,linux/arm64 -f packaging/docker/Dockerfile -t ghcr.io/drilonrecica/talos:$(VERSION) --push .
 
+vuln: ## Run dependency vulnerability scans (requires govulncheck and pnpm).
+
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	$(PNPM) --dir web audit --audit-level moderate
+
+licenses: ## Check Go dependency licenses (requires go-licenses).
+
+	go-licenses check ./... --allowed_licenses=MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0,ISC,MPL-2.0
+
+sbom: ## Generate an SPDX SBOM for the container image (requires syft).
+
+	$(DOCKER) build -f packaging/docker/Dockerfile -t ghcr.io/drilonrecica/talos:sbom . && syft ghcr.io/drilonrecica/talos:sbom -o spdx-json=talos.spdx.json
+
+scan: ## Scan the container image for vulnerabilities (requires trivy).
+
+	$(DOCKER) build -f packaging/docker/Dockerfile -t ghcr.io/drilonrecica/talos:scan . && trivy image ghcr.io/drilonrecica/talos:scan
+
 format-check: ## Check Go and frontend formatting without modifying source.
 
 	@if test -n "$(GO_SOURCE_FILES)"; then \
