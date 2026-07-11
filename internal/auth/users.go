@@ -25,6 +25,7 @@ type User struct {
 type Credentials struct{ db *sql.DB }
 
 func NewCredentials(db *sql.DB) *Credentials { return &Credentials{db: db} }
+func (c *Credentials) SetDB(db *sql.DB)      { c.db = db }
 
 func (c *Credentials) CreateAdmin(ctx context.Context, username, password string) (User, error) {
 	if c == nil || c.db == nil {

@@ -40,6 +40,7 @@ type Sessions struct {
 func NewSessions(db *sql.DB, cfg SessionConfig) *Sessions {
 	return &Sessions{db: db, cfg: cfg, now: func() time.Time { return time.Now().UTC() }}
 }
+func (s *Sessions) SetDB(db *sql.DB) { s.db = db }
 
 func (s *Sessions) Issue(ctx context.Context, userID string) (string, Session, error) {
 	token, _, session, err := s.IssueWithCSRF(ctx, userID)

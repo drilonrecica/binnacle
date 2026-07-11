@@ -49,10 +49,16 @@ func main() {
 	store := storage.New(config.Paths.DatabasePath, config.Paths.RuntimeDir)
 	application.Add(store)
 	var setup *auth.SetupService
+	var credentials *auth.Credentials
+	var sessions *auth.Sessions
 	if !*demoMode && !config.Demo {
 		setup = auth.NewSetupService(nil)
+		credentials = auth.NewCredentials(nil)
+		sessions = auth.NewSessions(nil, auth.SessionConfig{IdleTimeout: config.Sessions.IdleTimeout, AbsoluteLifetime: config.Sessions.AbsoluteLifetime})
 		application.Add(app.ComponentFuncs{StartFunc: func(ctx context.Context) error {
 			setup.SetDB(store.DB())
+			credentials.SetDB(store.DB())
+			sessions.SetDB(store.DB())
 			generated, err := setup.Initialize(ctx, config.HTTP.ListenAddress, os.Getenv("TALOS_SETUP_TOKEN"))
 			if generated != "" {
 				log.Warn("local setup token generated", "setup_token", generated)
@@ -61,15 +67,20 @@ func main() {
 		}})
 	}
 	apiServer := api.New()
-	apiServer.EnableLive(engine, api.DemoAuthorizer(*demoMode || config.Demo))
-	apiServer.EnableCurrent(engine, api.DemoAuthorizer(*demoMode || config.Demo))
-	apiServer.EnableResources(engine, api.DemoAuthorizer(*demoMode || config.Demo))
-	apiServer.EnableMetrics(store, api.DemoAuthorizer(*demoMode || config.Demo))
-	apiServer.EnableEvents(store, api.DemoAuthorizer(*demoMode || config.Demo))
-	apiServer.EnableHistoryDeletion(store, api.DemoAuthorizer(*demoMode || config.Demo), nil)
+	var authorizer api.Authorizer = api.DemoAuthorizer(*demoMode || config.Demo)
+	if sessions != nil {
+		authorizer = sessions
+	}
+	apiServer.EnableLive(engine, authorizer)
+	apiServer.EnableCurrent(engine, authorizer)
+	apiServer.EnableResources(engine, authorizer)
+	apiServer.EnableMetrics(store, authorizer)
+	apiServer.EnableEvents(store, authorizer)
+	apiServer.EnableHistoryDeletion(store, authorizer, sessions)
 	if setup != nil {
 		proxies, _ := auth.ParseTrustedProxies(config.HTTP.TrustedProxyCIDRs)
 		apiServer.EnableSetup(setup, auth.NewLimiter(4096), proxies)
+		apiServer.EnableAuth(credentials, sessions, auth.NewLimiter(4096), proxies)
 	}
 	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, version, application, apiServer.Handler(), webembed.Handler()))
 	if err := application.Run(ctx); err != nil {
