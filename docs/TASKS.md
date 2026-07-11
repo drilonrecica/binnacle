@@ -283,6 +283,7 @@ Rules for every task:
 
 ### T029 — Collect and classify host disk I/O
 
+- **Status:** Complete
 - **Commit:** `feat(host): collect disk I/O rates and devices`
 - **Description:** Parse `/proc/diskstats`, resolve block metadata from host sysfs, calculate read/write bytes and operations per second, and provide relevant device aggregation.
 - **Implement:** Centralize Linux sector conversion; exclude loop/ram/synthetic devices by default; avoid double-counting whole disks and partitions; preserve per-device detail and reset handling.
