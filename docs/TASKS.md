@@ -411,6 +411,7 @@ Rules for every task:
 
 ### T043 — Add Docker collector health and outage semantics
 
+- **Status:** Complete
 - **Commit:** `feat(docker): isolate Docker collector failures`
 - **Description:** Implement Docker collector healthy/degraded/down state transitions, freshness aging, recovery events, and continued host monitoring during Engine outage.
 - **Implement:** Avoid user-visible degradation for a single transient timeout; clear stale resource current values to Unknown once freshness expires rather than presenting old metrics as live.
