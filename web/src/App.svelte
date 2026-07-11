@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { LiveStore, sessionActive } from './lib/live';
+  import { applyPreferences, preferences, type Density, type Theme } from './lib/preferences';
 
   const live = new LiveStore();
   const routes = [
@@ -14,7 +15,11 @@
   let loading = $state(true);
   let allowed = $state(false);
   let route = $state(location.pathname.split('/')[1] || 'overview');
+  let theme = $state<Theme>('system');
+  let density = $state<Density>('comfortable');
   onMount(() => {
+    ({ theme, density } = preferences());
+    applyPreferences({ theme, density });
     void sessionActive()
       .catch(() => false)
       .then((active) => {
@@ -28,6 +33,8 @@
       });
     return () => live.close();
   });
+  function setTheme(value: Theme) { theme = value; applyPreferences({ theme, density }); }
+  function setDensity(value: Density) { density = value; applyPreferences({ theme, density }); }
 </script>
 
 <svelte:head><title>TALOS</title></svelte:head>
@@ -50,6 +57,8 @@
           route = 'overview';
         }}>TALOS</a
       ><span>Live monitoring</span>
+      <label>Theme <select value={theme} onchange={(e) => setTheme(e.currentTarget.value as Theme)}><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
+      <label>Density <select value={density} onchange={(e) => setDensity(e.currentTarget.value as Density)}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
     </header>
     <nav aria-label="Primary navigation">
       {#each routes as item (item)}<a

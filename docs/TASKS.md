@@ -209,6 +209,7 @@ Rules for every task:
 
 ### T021 — Establish design tokens, themes, density, and motion policy
 
+- **Status:** Complete
 - **Commit:** `feat(web): add TALOS design tokens and preferences`
 - **Description:** Create project-owned color, typography, spacing, elevation, status, focus, and chart tokens; implement System/Dark/Light theme selection and Comfortable/Compact density preference.
 - **Implement:** Persist display preferences locally or in eligible settings later; honor `prefers-reduced-motion`; use text/icon/color for all status states; keep fonts local/system-only.
