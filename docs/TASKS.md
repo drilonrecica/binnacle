@@ -559,6 +559,7 @@ Rules for every task:
 
 ### T059 — Add writer retry, disk-full, and corruption degradation handling
 
+- **Status:** Complete
 - **Commit:** `feat(storage): degrade safely on persistence failures`
 - **Description:** Add exponential backoff with jitter for transient writer failures, disk-full/I/O state reporting, and corruption behavior that stops unsafe writes without deleting data.
 - **Implement:** Keep collectors/SSE alive, retain bounded queued batches, expose `History persistence degraded`, and avoid crash loops/recreate-on-corruption behavior.
