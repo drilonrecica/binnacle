@@ -236,6 +236,7 @@ Rules for every task:
 
 ### T024 — Build the shared uPlot chart foundation
 
+- **Status:** Complete
 - **Commit:** `feat(web): add incremental time-series chart foundation`
 - **Description:** Wrap uPlot in a Svelte component with stable lifecycle, resize handling, theme tokens, line/area/sparkline variants, tooltip/focus inspection, min/avg/max summary, and an accessible text summary.
 - **Implement:** Update series incrementally; never destroy/recreate a chart every live tick; render missing samples as gaps and support event/deployment markers; cap input at backend-provided point limits.

@@ -61,6 +61,7 @@ nav a[aria-current='page'] {
 :root[data-density='compact'] main { padding: var(--space-4); }
 :root[data-density='compact'] nav a, :root[data-density='compact'] header { padding: var(--space-2); }
 .status { display:inline-flex; gap:var(--space-1); align-items:center; font-weight:600; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 .status[data-state='healthy'] { color:var(--ok); }.status[data-state='degraded'] { color:var(--warn); }.status[data-state='down'] { color:var(--bad); }.status[data-state='unknown'] { color:var(--unknown); }
 @media (max-width: 640px) {
   .shell {
