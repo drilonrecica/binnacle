@@ -42,6 +42,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.workerCancel = cancel
 	m.mu.Unlock()
 	go m.runDeletionWorker(workerCtx)
+	go m.runRollups(workerCtx)
 	return nil
 }
 func (m *Manager) Stop(context.Context) error {

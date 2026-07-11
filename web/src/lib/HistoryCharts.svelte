@@ -23,6 +23,9 @@
   let error = $state('');
   let loading = $state(false);
   let controller: AbortController | undefined;
+  let annotations = $state<
+    Array<{ ts: string; type: string; summary: string }>
+  >([]);
   const labels: Record<Metric, string> = {
     cpu: 'CPU (host-normalized %)',
     memory: 'Memory',
@@ -61,6 +64,19 @@
         selected.to,
         controller.signal,
       );
+      const events = await fetch(
+        `/api/v1/events?from=${encodeURIComponent(selected.from.toISOString())}`,
+        { credentials: 'same-origin', signal: controller.signal },
+      );
+      annotations = events.ok
+        ? (
+            (await events.json()) as Array<{
+              ts: string;
+              type: string;
+              summary: string;
+            }>
+          ).filter((event) => event.ts <= selected.to.toISOString())
+        : [];
     } catch (e) {
       if ((e as Error).name !== 'AbortError') error = (e as Error).message;
     } finally {
@@ -113,6 +129,20 @@
   {#if data}<p class="resolution">
       Resolution: {data.resolution}. Gaps are shown as broken lines.
     </p>
+    {#if annotations.length}<details class="chart-annotations">
+        <summary
+          >{annotations.length} event annotation{annotations.length === 1
+            ? ''
+            : 's'}</summary
+        >
+        <ul>
+          {#each annotations as event (event.ts + event.type)}<li>
+              <time datetime={event.ts}
+                >{new Date(event.ts).toLocaleString()}</time
+              >: {event.summary}
+            </li>{/each}
+        </ul>
+      </details>{/if}
     {#each data.series as series (series.metric)}<article class="card">
         <h3>{labels[series.metric]}</h3>
         <TimeSeries
