@@ -12,6 +12,11 @@
     type RangeKey,
   } from './history';
   import { formatBytes, formatNumber, formatRate } from './i18n';
+  import {
+    boundAnnotations,
+    type ChartAnnotation,
+    type OperationalEvent,
+  } from './annotations';
 
   let {
     scope,
@@ -25,9 +30,8 @@
   let error = $state('');
   let loading = $state(false);
   let controller: AbortController | undefined;
-  let annotations = $state<
-    Array<{ ts: string; type: string; summary: string }>
-  >([]);
+  let annotations = $state<OperationalEvent[]>([]);
+  let markers = $state<ChartAnnotation[]>([]);
   const labels: Record<Metric, string> = {
     cpu: 'CPU (host-normalized %)',
     memory: 'Memory',
@@ -88,14 +92,11 @@
         },
       );
       annotations = events.ok
-        ? (
-            (await events.json()) as Array<{
-              ts: string;
-              type: string;
-              summary: string;
-            }>
-          ).filter((event) => event.ts <= selected.to.toISOString())
+        ? ((await events.json()) as OperationalEvent[]).filter(
+            (event) => event.ts <= selected.to.toISOString(),
+          )
         : [];
+      markers = boundAnnotations(annotations, selected.from, selected.to);
     } catch (e) {
       if ((e as Error).name !== 'AbortError') error = (e as Error).message;
     } finally {
@@ -156,9 +157,14 @@
         >
         <ul>
           {#each annotations as event (event.ts + event.type)}<li>
-              <time datetime={event.ts}
-                >{new Date(event.ts).toLocaleString()}</time
-              >: {event.summary}
+              <a
+                href={event.resourceId
+                  ? `/resources/${event.resourceId}`
+                  : '/events'}
+                ><time datetime={event.ts}
+                  >{new Date(event.ts).toLocaleString()}</time
+                >: {event.summary}</a
+              >
             </li>{/each}
         </ul>
       </details>{/if}
@@ -184,10 +190,7 @@
           label={labels[series.metric]}
           points={chartPoints(series, data.gaps)}
           gaps={data.gaps}
-          markers={annotations.map((event) => ({
-            at: new Date(event.ts).getTime() / 1000,
-            label: event.summary,
-          }))}
+          {markers}
         />
         <dl>
           <dt>Current</dt>

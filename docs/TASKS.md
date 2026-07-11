@@ -799,6 +799,7 @@ Rules for every task:
 
 ### T085 — Add deployment and event annotations to charts
 
+- **Status:** Complete
 - **Commit:** `feat(web): annotate charts with operational events`
 - **Description:** Render deployment/replacement, OOM, lifecycle, boot, collector-failure, and persistence-gap annotations on applicable host/resource charts.
 - **Implement:** Keep marker density bounded, provide keyboard/focus accessible event summaries, and link markers to events/resource details; do not invent incident correlations.

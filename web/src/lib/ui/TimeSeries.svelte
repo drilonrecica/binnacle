@@ -4,7 +4,7 @@
   import 'uplot/dist/uPlot.min.css';
   import { summary, toSeries, type Point } from '../chart';
   type Gap = { from: string; to: string; reason: string };
-  type Marker = { at: number; label: string };
+  type Marker = { at: number; label: string; count?: number; href?: string };
   let {
     points,
     label,
@@ -42,6 +42,21 @@
               (u) => {
                 const ctx = u.ctx;
                 ctx.save();
+                ctx.fillStyle = 'rgba(245,196,81,.10)';
+                for (const gap of gaps) {
+                  const left = Math.round(
+                    u.valToPos(new Date(gap.from).getTime() / 1000, 'x', true),
+                  );
+                  const right = Math.round(
+                    u.valToPos(new Date(gap.to).getTime() / 1000, 'x', true),
+                  );
+                  ctx.fillRect(
+                    left,
+                    u.bbox.top,
+                    Math.max(2, right - left),
+                    u.bbox.height,
+                  );
+                }
                 ctx.strokeStyle = 'rgba(245,196,81,.8)';
                 for (const marker of markers) {
                   const x = Math.round(u.valToPos(marker.at, 'x', true));
@@ -118,6 +133,9 @@
 >
 {#if markers.length}<ul class="sr-only" aria-label="Chart event annotations">
     {#each markers as marker (marker.at + marker.label)}<li>
-        {new Date(marker.at * 1000).toLocaleString()}: {marker.label}
+        {#if marker.href}<a href={marker.href}
+            >{new Date(marker.at * 1000).toLocaleString()}: {marker.label}</a
+          >
+        {:else}{new Date(marker.at * 1000).toLocaleString()}: {marker.label}{/if}
       </li>{/each}
   </ul>{/if}
