@@ -155,6 +155,7 @@ Rules for every task:
 
 ### T015 — Add deterministic demo clock and scenario generator
 
+- **Status:** Complete
 - **Commit:** `feat(demo): add seeded synthetic monitoring scenarios`
 - **Description:** Implement `talos --demo` and seedable deterministic host/resource/event scenarios that require neither Docker nor host mounts.
 - **Implement:** Model normal load, deployment overlap, restart, OOM, collector degradation, archived resource, and recovery states using a controllable clock. Ensure generated data contains no real host identifiers or secrets.
