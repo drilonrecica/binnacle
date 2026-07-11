@@ -48,6 +48,7 @@ func main() {
 	application.Add(storage.New(config.Paths.DatabasePath, config.Paths.RuntimeDir))
 	apiServer := api.New()
 	apiServer.EnableLive(engine, api.DemoAuthorizer(*demoMode || config.Demo))
+	apiServer.EnableCurrent(engine, api.DemoAuthorizer(*demoMode || config.Demo))
 	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, version, application, apiServer.Handler(), webembed.Handler()))
 	if err := application.Run(ctx); err != nil {
 		log.Error("application exited with error", "error", err)

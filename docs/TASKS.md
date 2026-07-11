@@ -319,6 +319,7 @@ Rules for every task:
 
 ### T033 — Expose current server summary and collector health APIs
 
+- **Status:** Complete
 - **Commit:** `feat(api): add server and collector-health endpoints`
 - **Description:** Implement authenticated `GET /api/v1/server` and `GET /api/v1/collector-health` backed only by the Metrics Engine.
 - **Implement:** Return documented CPU/memory/load/freshness contracts, explicit nulls, independent collector states/reasons, and no storage query on the hot path.
