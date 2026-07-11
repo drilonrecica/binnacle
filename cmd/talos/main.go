@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/drilonrecica/talos/internal/api"
 	"github.com/drilonrecica/talos/internal/app"
 	"github.com/drilonrecica/talos/internal/settings"
 	"github.com/drilonrecica/talos/internal/storage"
@@ -28,7 +29,7 @@ func main() {
 	defer stop()
 	application := app.New(log)
 	application.Add(storage.New(config.Paths.DatabasePath, config.Paths.RuntimeDir))
-	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, version, application))
+	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, version, application, api.New().Handler()))
 	if err := application.Run(ctx); err != nil {
 		log.Error("application exited with error", "error", err)
 		os.Exit(1)

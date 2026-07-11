@@ -126,6 +126,7 @@ Rules for every task:
 
 ### T012 — Add HTTP foundation, error handling, and request limits
 
+- **Status:** Complete
 - **Commit:** `feat(api): add HTTP foundation and safe error responses`
 - **Description:** Implement the `net/http` server foundation, route registration, JSON response helpers, RFC 3339 encoding, error envelope, request IDs, body-size limits, and recovery middleware.
 - **Implement:** Reserve `/api/v1/` and static frontend routing; add no unrestricted Docker proxying. Centralize query parsing and prohibit cacheable authenticated responses by default.

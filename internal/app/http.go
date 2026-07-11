@@ -20,10 +20,13 @@ type HTTPServer struct {
 	mu       sync.Mutex
 }
 
-func NewHTTPServer(address, version string, application *Application) *HTTPServer {
+func NewHTTPServer(address, version string, application *Application, apiHandler http.Handler) *HTTPServer {
 	h := &HTTPServer{address: address, version: version, app: application}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", h.health)
+	if apiHandler != nil {
+		mux.Handle("/api/v1/", apiHandler)
+	}
 	h.server = &http.Server{Addr: address, Handler: mux}
 	return h
 }
