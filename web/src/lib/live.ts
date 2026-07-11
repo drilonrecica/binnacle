@@ -4,8 +4,8 @@ export interface LiveSnapshot {
   ts: string;
   bootIdentity: string;
   host: Record<string, number | null>;
-  resources: Array<{ id: string; name: string; status: string }>;
-  collectors: Record<string, { state: CollectorState }>;
+  resources: Array<{ id: string; name: string; status: string; cpuHostPct?: number | null; memoryBytes?: number | null }>;
+  collectors: Record<string, { state: CollectorState; reason?: string; freshAt?: string }>;
 }
 export interface LiveEvent {
   id: number;

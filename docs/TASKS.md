@@ -245,6 +245,7 @@ Rules for every task:
 
 ### T025 — Deliver the demo overview vertical slice
 
+- **Status:** Complete
 - **Commit:** `feat(web): add demo overview live dashboard`
 - **Description:** Implement a demo-backed overview showing host health summary, resource status/CPU/memory, infrastructure grouping, recent events, collector state, and clear loading/degraded/empty states.
 - **Implement:** Make the first viewport answer server health, affected resources, and recent change within five seconds; avoid cockpit-density and decorative gauges.
