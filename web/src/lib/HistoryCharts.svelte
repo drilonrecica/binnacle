@@ -145,7 +145,9 @@
       ><button type="submit">Apply range</button>
     </form>{/if}
   {#if loading}<p role="status">Loading historical telemetry…</p>{/if}
-  {#if error}<p role="alert">{error}</p>{/if}
+  {#if error}<p role="alert">
+      {error} <button type="button" onclick={load}>Retry</button>
+    </p>{/if}
   {#if data}<p class="resolution">
       Resolution: {data.resolution}. Gaps are shown as broken lines.
     </p>

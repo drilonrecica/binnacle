@@ -22,6 +22,7 @@
   import Onboarding from './lib/Onboarding.svelte';
   import Diagnostics from './lib/Diagnostics.svelte';
   import MonitorHealth from './lib/MonitorHealth.svelte';
+  import ConnectionNotice from './lib/ConnectionNotice.svelte';
 
   const live = new LiveStore();
   const routes = [
@@ -153,6 +154,7 @@
         >{/each}
     </nav>
     <main id="content">
+      <ConnectionNotice {live} />
       {#if route !== 'onboarding'}<h1>
           {route[0].toUpperCase() + route.slice(1)}
         </h1>{/if}

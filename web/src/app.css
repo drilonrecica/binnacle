@@ -116,6 +116,12 @@ body {
 .warning {
   color: var(--warn);
 }
+.connection-notice {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--warn);
+  background: var(--surface-raised);
+}
 a {
   color: inherit;
 }

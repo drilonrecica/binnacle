@@ -826,6 +826,7 @@ Rules for every task:
 
 ### T088 — Add frontend error, stale, and offline resilience states
 
+- **Status:** Complete
 - **Commit:** `fix(web): harden stale and disconnected UI states`
 - **Description:** Standardize live-stream reconnect, API failure, stale-domain, partial-data, empty, and retry states across overview, server, resources, charts, events, and settings.
 - **Implement:** Preserve last known display only when explicitly marked stale; prevent stale values from appearing current; give concise actionable error text plus technical disclosure.
