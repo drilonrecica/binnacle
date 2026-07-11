@@ -200,6 +200,7 @@ Rules for every task:
 
 ### T020 — Implement the application shell and route guards
 
+- **Status:** Complete
 - **Commit:** `feat(web): add authenticated application shell`
 - **Description:** Build the primary navigation, responsive shell, page routing, loading/error boundaries, login/setup route guards, and unavailable-state handling.
 - **Implement:** Use semantic landmarks and skip navigation; include Overview, Resources, Server, Events, Checks placeholder, and Settings; do not expose protected content before auth state resolves.
