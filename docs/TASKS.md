@@ -716,6 +716,7 @@ Rules for every task:
 
 ### T076 — Implement secure first-run setup-token policy
 
+- **Status:** Complete
 - **Commit:** `feat(auth): require secure first-run setup token`
 - **Description:** Implement fresh-instance state machine requiring a high-entropy operator-provided secret/environment setup token for public/non-loopback setup, with generated startup-log token allowed only in local/development mode.
 - **Implement:** Expire/disable setup permanently after successful admin creation; never silently re-enable it; avoid logging supplied tokens and make exposure classification conservative.

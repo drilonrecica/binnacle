@@ -60,7 +60,11 @@ func main() {
 			setup.SetDB(store.DB())
 			credentials.SetDB(store.DB())
 			sessions.SetDB(store.DB())
-			generated, err := setup.Initialize(ctx, config.HTTP.ListenAddress, os.Getenv("TALOS_SETUP_TOKEN"))
+			setupToken, err := auth.SetupTokenFromEnvironment()
+			if err != nil {
+				return err
+			}
+			generated, err := setup.Initialize(ctx, config.HTTP.ListenAddress, setupToken)
 			if generated != "" {
 				log.Warn("local setup token generated", "setup_token", generated)
 			}

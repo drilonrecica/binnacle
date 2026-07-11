@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"time"
 )
@@ -28,6 +29,25 @@ type SetupService struct {
 
 func NewSetupService(db *sql.DB) *SetupService {
 	return &SetupService{db: db, now: func() time.Time { return time.Now().UTC() }, tokenTTL: 24 * time.Hour}
+}
+
+// SetupTokenFromEnvironment reads the operator-provided setup token. A file
+// source is intended for Docker secrets and takes precedence only when the
+// direct value is absent; configuring both is rejected to avoid ambiguity.
+func SetupTokenFromEnvironment() (string, error) {
+	value := os.Getenv("TALOS_SETUP_TOKEN")
+	path := os.Getenv("TALOS_SETUP_TOKEN_FILE")
+	if value != "" && path != "" {
+		return "", errors.New("configure only one of TALOS_SETUP_TOKEN or TALOS_SETUP_TOKEN_FILE")
+	}
+	if path == "" {
+		return value, nil
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read setup token file: %w", err)
+	}
+	return strings.TrimRight(string(contents), "\r\n"), nil
 }
 func (s *SetupService) SetDB(db *sql.DB) { s.db = db }
 
