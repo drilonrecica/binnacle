@@ -81,6 +81,7 @@ Rules for every task:
 
 ### T007 — Add architecture decision records 001–014
 
+- **Status:** Complete
 - **Commit:** `docs(adr): record initial architecture decisions`
 - **Description:** Add ADRs for the binding decisions in the specification: Go, Svelte, typed SQLite, Docker/Coolify deployment, read-only operations, AGPL, SSE, single binary, Metrics Engine, identities, retention, Coolify model, telemetry, and bounded degradation.
 - **Implement:** Each ADR states context, decision, consequences, and rejected alternatives; link to `SPEC.md` rather than duplicating it wholesale.
