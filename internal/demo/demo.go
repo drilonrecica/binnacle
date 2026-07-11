@@ -3,6 +3,7 @@
 package demo
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"time"
 
@@ -11,24 +12,40 @@ import (
 
 type Clock interface{ Now() time.Time }
 type Generator struct {
-	seed  uint64
-	clock Clock
+	seed       uint64
+	clock      Clock
+	Containers int
 }
 
-func New(seed uint64, clock Clock) *Generator { return &Generator{seed: seed, clock: clock} }
+func New(seed uint64, clock Clock) *Generator {
+	return &Generator{seed: seed, clock: clock, Containers: 1}
+}
 func (g *Generator) Snapshot(step uint64) metrics.Snapshot {
 	r := rand.New(rand.NewPCG(g.seed, step))
 	now := g.clock.Now().UTC()
 	cpu := 5 + r.Float64()*40
 	memory := int64(2<<30) + int64(r.Uint64()%uint64(2<<30))
-	status := metrics.StatusHealthy
-	if step%11 == 0 {
-		status = metrics.StatusDegraded
+	count := g.Containers
+	if count < 1 {
+		count = 1
 	}
-	if step%17 == 0 {
-		status = metrics.StatusArchived
+	resources := make([]metrics.ResourceSnapshot, count)
+	for i := 0; i < count; i++ {
+		status := metrics.StatusHealthy
+		offset := step + uint64(i)
+		if offset%11 == 0 {
+			status = metrics.StatusDegraded
+		}
+		if offset%17 == 0 {
+			status = metrics.StatusArchived
+		}
+		name := fmt.Sprintf("demo-service-%d", i+1)
+		id := fmt.Sprintf("res_demo_%d", i+1)
+		resCPU := cpu + r.Float64()*10
+		resMem := memory + int64(r.Int64()%(1<<30))
+		resources[i] = metrics.ResourceSnapshot{ID: metrics.ResourceID(id), Name: name, Status: status, CPUHostPercent: &resCPU, MemoryBytes: &resMem, LastSeenAt: now, Category: "service", StableKey: name}
 	}
-	return metrics.Snapshot{Sequence: metrics.Sequence(step + 1), At: now, BootIdentity: "demo-boot-1", Host: metrics.HostObservation{At: now, CPUPercent: &cpu, MemoryUsedBytes: &memory}, Resources: []metrics.ResourceSnapshot{{ID: "res_demo_web", Name: "Demo web", Status: status, CPUHostPercent: &cpu, MemoryBytes: &memory, LastSeenAt: now}}, Collectors: map[string]metrics.CollectorHealth{"host": {Name: "host", State: metrics.CollectorHealthy, FreshAt: now}, "docker": {Name: "docker", State: metrics.CollectorHealthy, FreshAt: now}}}
+	return metrics.Snapshot{Sequence: metrics.Sequence(step + 1), At: now, BootIdentity: "demo-boot-1", Host: metrics.HostObservation{At: now, CPUPercent: &cpu, MemoryUsedBytes: &memory}, Resources: resources, Collectors: map[string]metrics.CollectorHealth{"host": {Name: "host", State: metrics.CollectorHealthy, FreshAt: now}, "docker": {Name: "docker", State: metrics.CollectorHealthy, FreshAt: now}}}
 }
 func (g *Generator) Events(step uint64) []metrics.Event {
 	now := g.clock.Now().UTC()

@@ -10,7 +10,7 @@ GO_SOURCE_FILES := $(shell find cmd internal -type f -name '*.go' -print)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev dev-demo dev-host test check build image image-multi format-check go-test web-test web-check go-vet
+.PHONY: help dev dev-demo dev-host test check build image image-multi format-check go-test web-test web-check go-vet benchmark benchmark-matrix
 
 help: ## Show the supported local development commands.
 
@@ -97,3 +97,11 @@ web-check: ## Run Svelte type checking and linting.
 go-vet: ## Run Go vet.
 
 	$(GO) vet ./...
+
+benchmark: ## Run a short deterministic benchmark with 30 synthetic containers.
+
+	python3 scripts/benchmark.py --containers 30 --duration 60 --output benchmark-report.json
+
+benchmark-matrix: ## Run the 10/30/50/100 container benchmark matrix.
+
+	BENCHMARK_DURATION=60 ./scripts/benchmark-matrix.sh

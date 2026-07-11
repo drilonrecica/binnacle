@@ -36,6 +36,7 @@ func (realClock) Now() time.Time { return time.Now() }
 func main() {
 	demoMode := flag.Bool("demo", false, "run with deterministic synthetic monitoring data")
 	demoSeed := flag.Uint64("demo-seed", 1, "seed for synthetic demo data")
+	demoContainers := flag.Int("demo-containers", 30, "number of synthetic containers to generate in demo mode")
 	flag.Parse()
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	config, effectiveSettings, err := settings.Load()
@@ -49,7 +50,9 @@ func main() {
 	engine := metrics.NewEngine(128)
 	application.Add(engine)
 	if *demoMode || config.Demo {
-		application.Add(&demo.Component{Generator: demo.New(*demoSeed, realClock{}), Engine: engine})
+		generator := demo.New(*demoSeed, realClock{})
+		generator.Containers = *demoContainers
+		application.Add(&demo.Component{Generator: generator, Engine: engine})
 	}
 	store := storage.New(config.Paths.DatabasePath, config.Paths.RuntimeDir)
 	application.Add(store)

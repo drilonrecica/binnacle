@@ -69,6 +69,10 @@ talos.db-shm
 *.p12
 *.pfx
 
+# Benchmark reports
+benchmark-report.json
+benchmark-reports/
+
 # Logs and local diagnostic artifacts
 *.log
 *.log.*
