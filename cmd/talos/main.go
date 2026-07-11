@@ -115,11 +115,11 @@ func main() {
 	if sessions != nil {
 		authorizer = sessions
 	}
-	apiServer.EnableLive(engine, authorizer)
+	apiServer.EnableLive(engine, authorizer, protection)
 	apiServer.EnableCurrent(engine, authorizer)
-	apiServer.EnableResources(engine, authorizer, store)
+	apiServer.EnableResources(engine, authorizer, store, protection)
 	apiServer.EnableMetrics(store, authorizer, protection)
-	apiServer.EnableEvents(store, authorizer)
+	apiServer.EnableEvents(store, authorizer, protection)
 	apiServer.EnableHistoryDeletion(store, authorizer, sessions)
 	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, Persistence: persistence, Collector: productionSampler}
 	apiServer.EnableMonitorHealth(monitor, authorizer)

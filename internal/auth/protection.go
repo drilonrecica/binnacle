@@ -143,6 +143,15 @@ func (p *Protection) AllowDiagnostics(r *http.Request, actor string) (bool, time
 func (p *Protection) AllowMetrics(r *http.Request) (bool, time.Duration) {
 	return p.allow("metrics", p.proxies.ClientPrefix(r), BucketPolicy{Capacity: 60, Refill: time.Minute})
 }
+func (p *Protection) AllowEvents(r *http.Request) (bool, time.Duration) {
+	return p.allow("events", p.proxies.ClientPrefix(r), BucketPolicy{Capacity: 60, Refill: time.Minute})
+}
+func (p *Protection) AllowResources(r *http.Request) (bool, time.Duration) {
+	return p.allow("resources", p.proxies.ClientPrefix(r), BucketPolicy{Capacity: 120, Refill: time.Minute})
+}
+func (p *Protection) AllowLive(r *http.Request) (bool, time.Duration) {
+	return p.allow("live", p.proxies.ClientPrefix(r), BucketPolicy{Capacity: 30, Refill: time.Minute})
+}
 
 func NewLimiter(max int) *Limiter {
 	if max < 1 {

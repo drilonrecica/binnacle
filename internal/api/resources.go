@@ -2,16 +2,24 @@
 package api
 
 import (
-	"github.com/drilonrecica/talos/internal/metrics"
-	"github.com/drilonrecica/talos/internal/storage"
+	"fmt"
 	"net/http"
 	"strings"
+
+	authpkg "github.com/drilonrecica/talos/internal/auth"
+	"github.com/drilonrecica/talos/internal/metrics"
+	"github.com/drilonrecica/talos/internal/storage"
 )
 
-func (s *Server) EnableResources(engine *metrics.Engine, auth Authorizer, store *storage.Manager) {
+func (s *Server) EnableResources(engine *metrics.Engine, auth Authorizer, store *storage.Manager, protection *authpkg.Protection) {
 	s.Handle("/api/v1/resources", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if auth == nil || !auth.Authorize(r) {
 			WriteError(w, 401, Error{Code: "unauthorized", Message: "Authentication is required."})
+			return
+		}
+		if ok, retry := protection.AllowResources(r); !ok {
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", maxRetry(retry)))
+			WriteError(w, 429, Error{Code: "rate_limited", Message: "Too many resource requests. Try again shortly.", Details: map[string]int{"retryAfterSeconds": maxRetry(retry)}})
 			return
 		}
 		snap := engine.Snapshot()

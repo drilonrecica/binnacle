@@ -4,17 +4,19 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/drilonrecica/talos/internal/metrics"
 	"net/http"
 	"strconv"
 	"time"
+
+	authpkg "github.com/drilonrecica/talos/internal/auth"
+	"github.com/drilonrecica/talos/internal/metrics"
 )
 
 type Authorizer interface{ Authorize(*http.Request) bool }
 type DemoAuthorizer bool
 
 func (a DemoAuthorizer) Authorize(*http.Request) bool { return bool(a) }
-func (s *Server) EnableLive(engine *metrics.Engine, auth Authorizer) {
+func (s *Server) EnableLive(engine *metrics.Engine, auth Authorizer, protection *authpkg.Protection) {
 	s.Handle("/api/v1/live", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only GET is supported."})
@@ -22,6 +24,11 @@ func (s *Server) EnableLive(engine *metrics.Engine, auth Authorizer) {
 		}
 		if auth == nil || !auth.Authorize(r) {
 			WriteError(w, 401, Error{Code: "unauthorized", Message: "Authentication is required."})
+			return
+		}
+		if ok, retry := protection.AllowLive(r); !ok {
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", maxRetry(retry)))
+			WriteError(w, 429, Error{Code: "rate_limited", Message: "Too many live connections. Try again shortly.", Details: map[string]int{"retryAfterSeconds": maxRetry(retry)}})
 			return
 		}
 		stream(w, r, engine)
