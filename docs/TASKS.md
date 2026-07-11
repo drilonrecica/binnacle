@@ -328,6 +328,7 @@ Rules for every task:
 
 ### T034 — Build the server page current-metric panels
 
+- **Status:** Complete
 - **Commit:** `feat(web): add server telemetry page`
 - **Description:** Implement server page panels for CPU composition/per-core detail, memory/swap, load, disk I/O, network, filesystems/inodes, uptime/boot state, and collector health.
 - **Implement:** Label iowait and steal clearly; distinguish unavailable from zero; use progressive disclosure for per-device/interface details and responsive layouts.

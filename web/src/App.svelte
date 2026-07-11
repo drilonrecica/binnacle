@@ -4,6 +4,7 @@
   import { applyPreferences, preferences, type Density, type Theme } from './lib/preferences';
   import { t } from './lib/i18n';
   import Overview from './lib/Overview.svelte';
+  import Server from './lib/Server.svelte';
 
   const live = new LiveStore();
   const routes = [
@@ -75,7 +76,7 @@
     </nav>
     <main id="content">
       <h1>{route[0].toUpperCase() + route.slice(1)}</h1>
-      {#if route === 'overview'}<Overview {live} />{:else if route === 'checks'}<p>
+      {#if route === 'overview'}<Overview {live} />{:else if route === 'server'}<Server {live} />{:else if route === 'checks'}<p>
           Checks are planned for a later release.
         </p>{:else}<p>
           {live.state === 'connected'
