@@ -27,6 +27,7 @@ Rules for every task:
 
 ### T001 — Establish repository policy and contributor documents
 
+- **Status:** Complete
 - **Commit:** `docs(repo): add alpha governance and contribution policies`
 - **Description:** Add the public repository documents required for an AGPL, founder-led project: contribution process with DCO sign-off and Conventional Commits, code of conduct, security reporting/support policy, governance/ADR process, project notice, and a README that identifies TALOS as a temporary codename.
 - **Implement:** Keep the existing AGPL-3.0 license; state the no-telemetry and permanently read-only product positions; document supported Linux/Docker scope and the public-source obligation for network-served modifications.
