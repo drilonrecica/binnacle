@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -34,6 +35,7 @@ type Session struct {
 type Sessions struct {
 	db      *sql.DB
 	now     func() time.Time
+	mu      sync.RWMutex
 	cfg     SessionConfig
 	proxies TrustedProxies
 }
@@ -43,6 +45,14 @@ func NewSessions(db *sql.DB, cfg SessionConfig) *Sessions {
 }
 func (s *Sessions) SetDB(db *sql.DB)                         { s.db = db }
 func (s *Sessions) SetTrustedProxies(proxies TrustedProxies) { s.proxies = proxies }
+func (s *Sessions) SetConfig(cfg SessionConfig) {
+	if cfg.valid() {
+		s.mu.Lock()
+		s.cfg = cfg
+		s.mu.Unlock()
+	}
+}
+func (s *Sessions) config() SessionConfig { s.mu.RLock(); defer s.mu.RUnlock(); return s.cfg }
 
 func (s *Sessions) Issue(ctx context.Context, userID string) (string, Session, error) {
 	token, _, session, err := s.issue(ctx, userID, "", "")
@@ -57,7 +67,11 @@ func (s *Sessions) IssueForRequest(ctx context.Context, userID string, r *http.R
 	return s.issue(ctx, userID, fingerprint(r.UserAgent()), fingerprint(proxies.ClientPrefix(r)))
 }
 func (s *Sessions) issue(ctx context.Context, userID, userAgentHash, ipPrefixHash string) (string, string, Session, error) {
-	if s == nil || s.db == nil || !s.cfg.valid() || userID == "" {
+	if s == nil || s.db == nil || userID == "" {
+		return "", "", Session{}, ErrSessionInvalid
+	}
+	cfg := s.config()
+	if !cfg.valid() {
 		return "", "", Session{}, ErrSessionInvalid
 	}
 	token, err := randomToken()
@@ -69,8 +83,8 @@ func (s *Sessions) issue(ctx context.Context, userID, userAgentHash, ipPrefixHas
 		return "", "", Session{}, err
 	}
 	now := s.now().UTC()
-	absolute := now.Add(s.cfg.AbsoluteLifetime)
-	session := Session{UserID: userID, CreatedAt: now, LastSeenAt: now, ExpiresAt: minTime(now.Add(s.cfg.IdleTimeout), absolute), AbsoluteExpires: absolute}
+	absolute := now.Add(cfg.AbsoluteLifetime)
+	session := Session{UserID: userID, CreatedAt: now, LastSeenAt: now, ExpiresAt: minTime(now.Add(cfg.IdleTimeout), absolute), AbsoluteExpires: absolute}
 	if _, err = s.db.ExecContext(ctx, "INSERT INTO sessions(id_hash,user_id,created_at,last_seen_at,expires_at,absolute_expires_at,revoked_at,csrf_hash,user_agent_hash,ip_prefix_hash) VALUES(?,?,?,?,?,?,NULL,?,?,?)", tokenHash(token), userID, now.UnixMilli(), now.UnixMilli(), session.ExpiresAt.UnixMilli(), absolute.UnixMilli(), CSRFHash(csrf), nullFingerprint(userAgentHash), nullFingerprint(ipPrefixHash)); err != nil {
 		return "", "", Session{}, err
 	}
@@ -104,7 +118,11 @@ func (s *Sessions) ValidCSRF(r *http.Request) bool {
 }
 
 func (s *Sessions) Authenticate(ctx context.Context, token string) (Session, error) {
-	if s == nil || s.db == nil || !s.cfg.valid() || token == "" {
+	if s == nil || s.db == nil || token == "" {
+		return Session{}, ErrSessionInvalid
+	}
+	cfg := s.config()
+	if !cfg.valid() {
 		return Session{}, ErrSessionInvalid
 	}
 	hash := tokenHash(token)
@@ -123,7 +141,7 @@ func (s *Sessions) Authenticate(ctx context.Context, token string) (Session, err
 		return Session{}, ErrSessionInvalid
 	}
 	session.LastSeenAt = now
-	session.ExpiresAt = minTime(now.Add(s.cfg.IdleTimeout), session.AbsoluteExpires)
+	session.ExpiresAt = minTime(now.Add(cfg.IdleTimeout), session.AbsoluteExpires)
 	if _, err = s.db.ExecContext(ctx, "UPDATE sessions SET last_seen_at=?,expires_at=? WHERE id_hash=? AND revoked_at IS NULL", now.UnixMilli(), session.ExpiresAt.UnixMilli(), hash); err != nil {
 		return Session{}, err
 	}

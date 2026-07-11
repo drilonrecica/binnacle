@@ -35,7 +35,7 @@ func main() {
 	demoSeed := flag.Uint64("demo-seed", 1, "seed for synthetic demo data")
 	flag.Parse()
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	config, _, err := settings.Load()
+	config, effectiveSettings, err := settings.Load()
 	if err != nil {
 		log.Error("configuration is invalid", "error", err)
 		os.Exit(1)
@@ -55,17 +55,25 @@ func main() {
 	var credentials *auth.Credentials
 	var sessions *auth.Sessions
 	var onboardingService *onboarding.Service
+	var settingsService *settings.Service
 	if !*demoMode && !config.Demo {
 		setup = auth.NewSetupService(nil)
 		credentials = auth.NewCredentials(nil)
 		sessions = auth.NewSessions(nil, auth.SessionConfig{IdleTimeout: config.Sessions.IdleTimeout, AbsoluteLifetime: config.Sessions.AbsoluteLifetime})
 		checker := diagnostics.OnboardingChecker{HostProc: config.Paths.HostProc, HostSys: config.Paths.HostSys, DataDir: config.Paths.DataDir}
 		onboardingService = onboarding.New(nil, checker)
+		settingsService = settings.NewService(settings.NewStore(nil), config, effectiveSettings, func(updated settings.Config) {
+			sessions.SetConfig(auth.SessionConfig{IdleTimeout: updated.Sessions.IdleTimeout, AbsoluteLifetime: updated.Sessions.AbsoluteLifetime})
+		})
 		application.Add(app.ComponentFuncs{StartFunc: func(ctx context.Context) error {
 			setup.SetDB(store.DB())
 			credentials.SetDB(store.DB())
 			sessions.SetDB(store.DB())
 			onboardingService.SetDB(store.DB())
+			settingsService.SetDB(store.DB())
+			if err := settingsService.Initialize(ctx); err != nil {
+				return err
+			}
 			if _, err := auth.BootstrapAdmin(ctx, credentials, setup); err != nil {
 				return err
 			}
@@ -101,6 +109,7 @@ func main() {
 		apiServer.EnableSetup(setup, protection, sessions)
 		apiServer.EnableAuth(credentials, sessions, protection)
 		apiServer.EnableOnboarding(onboardingService, sessions, sessions)
+		apiServer.EnableSettings(settingsService, sessions, sessions)
 	}
 	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, version, application, apiServer.Handler(), webembed.Handler()))
 	if err := application.Run(ctx); err != nil {

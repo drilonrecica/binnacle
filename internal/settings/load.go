@@ -95,6 +95,27 @@ func LoadWith(getenv func(string) string, exists func(string) bool, provider Ove
 	}
 	return c, effective(c, sources), nil
 }
+
+// ResolveOverrides validates persisted UI values against an already resolved
+// deployment configuration. It is also used by the runtime settings service.
+func ResolveOverrides(base Config, values map[string]string) (Config, error) {
+	resolved := base
+	if presetName, ok := values["retention.preset"]; ok && presetName != "advanced" {
+		preset, found := RetentionPreset(strings.ToLower(presetName))
+		if !found {
+			return Config{}, fmt.Errorf("unknown retention preset %s", presetName)
+		}
+		resolved.Retention = preset
+	}
+	if err := apply(&resolved, values); err != nil {
+		return Config{}, err
+	}
+	resolved.Normalize()
+	if err := resolved.Validate(); err != nil {
+		return Config{}, err
+	}
+	return resolved, nil
+}
 func readTOML(path string) (map[string]string, error) {
 	var raw map[string]any
 	meta, err := toml.DecodeFile(path, &raw)
@@ -139,6 +160,9 @@ var supported = func() map[string]bool {
 }()
 
 func apply(c *Config, values map[string]string) error {
+	if value, ok := values["retention.preset"]; ok {
+		c.Retention.Preset = strings.ToLower(value)
+	}
 	for key, value := range values {
 		var err error
 		d := func(dst *time.Duration) {
@@ -204,7 +228,7 @@ func apply(c *Config, values map[string]string) error {
 		case "persistence.queue_batch_limit":
 			i(&c.Persistence.QueueBatchLimit)
 		case "retention.preset":
-			c.Retention.Preset = strings.ToLower(value)
+			// Applied first so tier overrides are deterministic.
 		case "retention.raw":
 			d(&c.Retention.Raw)
 		case "retention.one_minute":
@@ -269,7 +293,22 @@ func effective(c Config, sources map[string]Source) map[string]Effective {
 	return result
 }
 func lookup(c Config, key string) string {
-	values := map[string]string{"paths.data_dir": c.Paths.DataDir, "paths.database_path": c.Paths.DatabasePath, "paths.runtime_dir": c.Paths.RuntimeDir, "paths.host_proc": c.Paths.HostProc, "paths.host_sys": c.Paths.HostSys, "http.listen_address": c.HTTP.ListenAddress, "docker.socket_path": c.Docker.SocketPath}
+	values := map[string]string{
+		"paths.data_dir": c.Paths.DataDir, "paths.database_path": c.Paths.DatabasePath, "paths.runtime_dir": c.Paths.RuntimeDir,
+		"paths.host_proc": c.Paths.HostProc, "paths.host_sys": c.Paths.HostSys, "http.listen_address": c.HTTP.ListenAddress,
+		"http.trusted_proxy_cidrs": strings.Join(c.HTTP.TrustedProxyCIDRs, ","), "docker.socket_path": c.Docker.SocketPath,
+		"collection.host_interval": c.Collection.HostInterval.String(), "collection.container_interval": c.Collection.ContainerInterval.String(),
+		"collection.minimum_interval": c.Collection.MinimumInterval.String(), "live.sse_interval": c.Live.SSEInterval.String(),
+		"persistence.raw_interval": c.Persistence.RawInterval.String(), "persistence.queue_batch_limit": strconv.Itoa(c.Persistence.QueueBatchLimit),
+		"retention.preset": c.Retention.Preset, "retention.raw": c.Retention.Raw.String(), "retention.one_minute": c.Retention.OneMinute.String(),
+		"retention.fifteen_minute": c.Retention.FifteenMinute.String(), "retention.one_hour": c.Retention.OneHour.String(),
+		"database.target_budget_bytes": strconv.FormatInt(c.Database.TargetBudgetBytes, 10), "database.warning_ratio": strconv.FormatFloat(c.Database.WarningRatio, 'f', -1, 64),
+		"database.critical_ratio": strconv.FormatFloat(c.Database.CriticalRatio, 'f', -1, 64), "database.emergency_pause_ratio": strconv.FormatFloat(c.Database.EmergencyPauseRatio, 'f', -1, 64),
+		"charts.max_points_per_series": strconv.Itoa(c.Charts.MaxPointsPerSeries), "docker.max_concurrency": strconv.Itoa(c.Docker.MaxConcurrency),
+		"checks.max_concurrency": strconv.Itoa(c.Checks.MaxConcurrency), "logs.max_response_bytes": strconv.FormatInt(c.Logs.MaxResponseBytes, 10),
+		"logs.max_lines": strconv.Itoa(c.Logs.MaxLines), "sessions.idle_timeout": c.Sessions.IdleTimeout.String(),
+		"sessions.absolute_lifetime": c.Sessions.AbsoluteLifetime.String(), "demo": strconv.FormatBool(c.Demo),
+	}
 	if v, ok := values[key]; ok {
 		return v
 	}

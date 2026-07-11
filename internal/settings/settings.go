@@ -137,8 +137,8 @@ func (c Config) Validate() error {
 	if !(0 < c.Database.WarningRatio && c.Database.WarningRatio < c.Database.CriticalRatio && c.Database.CriticalRatio < c.Database.EmergencyPauseRatio && c.Database.EmergencyPauseRatio <= 1) {
 		return fmt.Errorf("database ratios must be ordered between zero and one")
 	}
-	if c.Retention.Preset != "balanced" && c.Retention.Preset != "advanced" {
-		return fmt.Errorf("retention.preset must be balanced or advanced")
+	if c.Retention.Preset != "minimal" && c.Retention.Preset != "balanced" && c.Retention.Preset != "long-term" && c.Retention.Preset != "advanced" {
+		return fmt.Errorf("retention.preset must be minimal, balanced, long-term, or advanced")
 	}
 	if c.Retention.Preset == "advanced" && !(c.Retention.Raw > 0 && c.Retention.OneMinute > c.Retention.Raw && c.Retention.FifteenMinute > c.Retention.OneMinute && (c.Retention.OneHour == 0 || c.Retention.OneHour > c.Retention.FifteenMinute)) {
 		return fmt.Errorf("advanced retention tiers must be ordered")

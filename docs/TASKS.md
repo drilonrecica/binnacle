@@ -761,6 +761,7 @@ Rules for every task:
 
 ### T081 — Implement settings storage, precedence, and PATCH API
 
+- **Status:** Complete
 - **Commit:** `feat(settings): persist eligible admin overrides`
 - **Description:** Add settings service/repository and authenticated `GET/PATCH /api/v1/settings` for eligible values, effective source, validation, live/restart-required label, and audit attribution.
 - **Implement:** Route writes through storage ownership; reject deployment-critical fields; apply live settings atomically to collectors/workers where safe and show pending restart state otherwise.
