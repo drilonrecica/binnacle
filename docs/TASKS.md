@@ -292,6 +292,7 @@ Rules for every task:
 
 ### T030 — Collect filesystems and inode capacity
 
+- **Status:** Complete
 - **Commit:** `feat(host): collect filesystem and inode capacity`
 - **Description:** Discover host-visible mount points and collect total/used/available bytes and inode usage via statfs-equivalent calls.
 - **Implement:** Filter pseudo/overlay-internal filesystems from overview; always retain root and TALOS data-volume filesystems; expose source, mount, and filesystem type for advanced view.
