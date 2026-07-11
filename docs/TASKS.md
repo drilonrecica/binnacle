@@ -595,6 +595,7 @@ Rules for every task:
 
 ### T063 — Build the events page
 
+- **Status:** Complete
 - **Commit:** `feat(web): add searchable events timeline`
 - **Description:** Implement chronological event list with time, resource, type, severity, and source filters; concise summary; expandable technical details; and loading/empty/error states.
 - **Implement:** Preserve event text context through filtering and link resource events to resource detail; distinguish live arrival from persisted history without duplicates.
