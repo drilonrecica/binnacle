@@ -10,6 +10,5 @@ package app
 
 import (
 	_ "github.com/docker/docker/client"
-	_ "github.com/mattn/go-sqlite3"
 	_ "golang.org/x/crypto/argon2"
 )

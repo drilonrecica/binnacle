@@ -108,6 +108,7 @@ Rules for every task:
 
 ### T010 — Build the SQLite connection and migration framework
 
+- **Status:** Complete
 - **Commit:** `feat(storage): add SQLite bootstrap and migrations`
 - **Description:** Add a CGO SQLite connection manager, WAL-oriented pragmas, busy timeout, foreign keys, integrity preflight, migration ledger, embedded SQL migrations, schema-version reporting, and migration failure handling.
 - **Implement:** Use one controlled connection policy suitable for a single writer and concurrent readers. Before migration, check integrity and disk availability; do not crash-loop or recreate a failed/corrupt database.
