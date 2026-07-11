@@ -17,6 +17,9 @@
   import Login from './lib/Login.svelte';
   import SessionControls from './lib/SessionControls.svelte';
   import { currentSession, type SessionInfo } from './lib/auth';
+  import { onboardingState, setupAvailable } from './lib/onboarding';
+  import Setup from './lib/Setup.svelte';
+  import Onboarding from './lib/Onboarding.svelte';
 
   const live = new LiveStore();
   const routes = [
@@ -43,10 +46,19 @@
         session = value;
         allowed = value !== null;
         loading = false;
-        if (allowed) live.connect();
-        else if (route !== 'login' && route !== 'setup') {
-          history.pushState({}, '', '/login');
-          route = 'login';
+        if (allowed) {
+          void onboardingState().then((onboarding) => {
+            if (!onboarding.completedAt && route !== 'onboarding') {
+              history.replaceState({}, '', '/onboarding');
+              route = 'onboarding';
+            }
+          });
+          live.connect();
+        } else if (route !== 'login' && route !== 'setup') {
+          void setupAvailable().then((available) => {
+            history.replaceState({}, '', available ? '/setup' : '/login');
+            route = available ? 'setup' : 'login';
+          });
         }
       });
     return () => live.close();
@@ -77,6 +89,13 @@
     route = 'login';
     history.replaceState({}, '', '/login');
   }
+  function setupClaimed() {
+    authenticated('/onboarding');
+  }
+  function onboardingComplete() {
+    history.replaceState({}, '', '/overview');
+    route = 'overview';
+  }
 </script>
 
 <svelte:head><title>TALOS</title></svelte:head>
@@ -85,8 +104,7 @@
   <main aria-busy="true"><p>{t('shell.access')}</p></main>
 {:else if !allowed}
   <main id="content">
-    {#if route === 'setup'}<h1>Setup TALOS</h1>
-      <p>Setup is loading…</p>
+    {#if route === 'setup'}<Setup onclaimed={setupClaimed} />
     {:else}<Login onauthenticated={authenticated} />{/if}
   </main>
 {:else}
@@ -133,8 +151,11 @@
         >{/each}
     </nav>
     <main id="content">
-      <h1>{route[0].toUpperCase() + route.slice(1)}</h1>
-      {#if route === 'overview'}<Overview
+      {#if route !== 'onboarding'}<h1>
+          {route[0].toUpperCase() + route.slice(1)}
+        </h1>{/if}
+      {#if route === 'onboarding'}<Onboarding oncomplete={onboardingComplete} />
+      {:else if route === 'overview'}<Overview
           {live}
         />{:else if route === 'resources' && resourceID}<ResourceDetail
           {live}

@@ -2,10 +2,12 @@
   import type { LiveStore } from './live.svelte';
   import Badge from './ui/Badge.svelte';
   import { formatBytes, formatNumber } from './i18n';
+  import PostSetupChecklist from './PostSetupChecklist.svelte';
   let { live }: { live: LiveStore } = $props();
   let snapshot = $derived(live.snapshot);
 </script>
 
+<PostSetupChecklist />
 {#if !snapshot}<p role="status">Loading current telemetry…</p>
 {:else}<section class="overview">
     <div class="card">

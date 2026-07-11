@@ -752,6 +752,7 @@ Rules for every task:
 
 ### T080 — Build the one-time onboarding flow and checklist
 
+- **Status:** Complete
 - **Commit:** `feat(web): add secure first-run onboarding`
 - **Description:** Build setup-token verification, admin creation, exposure acknowledgement, diagnostics, sampling/retention confirmation, completion state, and dismissible post-setup checklist.
 - **Implement:** Keep flow short; do not require notifications/checks; make step completion resumable until admin creation and inaccessible afterward; explain required restart settings separately.

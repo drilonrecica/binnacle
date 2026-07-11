@@ -10,7 +10,7 @@ import (
 
 // EnableSetup intentionally exposes only the one-time claim flow. It is
 // unavailable as soon as an admin has been created.
-func (s *Server) EnableSetup(setup *auth.SetupService, protection *auth.Protection) {
+func (s *Server) EnableSetup(setup *auth.SetupService, protection *auth.Protection, sessions *auth.Sessions) {
 	allow := func(w http.ResponseWriter, r *http.Request) bool {
 		if protection == nil {
 			return true
@@ -65,9 +65,20 @@ func (s *Server) EnableSetup(setup *auth.SetupService, protection *auth.Protecti
 			WriteError(w, 400, Error{Code: "invalid_request", Message: "Setup credentials are invalid."})
 			return
 		}
-		if _, err := setup.Claim(r.Context(), body.Token, body.Username, body.Password); err != nil {
+		user, err := setup.Claim(r.Context(), body.Token, body.Username, body.Password)
+		if err != nil {
 			WriteError(w, 400, Error{Code: "setup_claim_failed", Message: "The setup request could not be completed."})
 			return
+		}
+		if sessions != nil {
+			token, csrf, session, issueErr := sessions.IssueForRequest(r.Context(), user.ID, r, protection.Proxies())
+			if issueErr != nil {
+				WriteError(w, 500, Error{Code: "session_error", Message: "The administrator was created; sign in to continue."})
+				return
+			}
+			secure := protection.Proxies().Secure(r)
+			auth.SetSessionCookie(w, token, secure, session.AbsoluteExpires)
+			auth.SetCSRFCookie(w, csrf, secure, session.AbsoluteExpires)
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))

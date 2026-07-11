@@ -55,7 +55,7 @@ export async function currentSession(): Promise<SessionInfo | null> {
   return (await response.json()) as SessionInfo;
 }
 
-function csrfToken(): string {
+export function csrfToken(): string {
   const prefix = 'talos_csrf=';
   return (
     document.cookie
@@ -66,16 +66,30 @@ function csrfToken(): string {
   );
 }
 
-export async function logout(all = false): Promise<void> {
-  const response = await fetch(
-    all ? '/api/v1/auth/logout-all' : '/api/v1/auth/logout',
-    {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'X-CSRF-Token': decodeURIComponent(csrfToken()) },
+export async function authenticatedMutation<T>(
+  path: string,
+  method: 'POST' | 'PATCH' | 'DELETE',
+  body?: unknown,
+): Promise<T | null> {
+  const response = await fetch(path, {
+    method,
+    credentials: 'same-origin',
+    headers: {
+      'X-CSRF-Token': decodeURIComponent(csrfToken()),
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
     },
-  );
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
   if (!response.ok) throw await errorFrom(response);
+  if (response.status === 204) return null;
+  return (await response.json()) as T;
+}
+
+export async function logout(all = false): Promise<void> {
+  await authenticatedMutation(
+    all ? '/api/v1/auth/logout-all' : '/api/v1/auth/logout',
+    'POST',
+  );
 }
 
 export function safeRedirect(value: string | null): string {

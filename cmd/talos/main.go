@@ -16,7 +16,9 @@ import (
 	"github.com/drilonrecica/talos/internal/app"
 	"github.com/drilonrecica/talos/internal/auth"
 	"github.com/drilonrecica/talos/internal/demo"
+	"github.com/drilonrecica/talos/internal/diagnostics"
 	"github.com/drilonrecica/talos/internal/metrics"
+	"github.com/drilonrecica/talos/internal/onboarding"
 	"github.com/drilonrecica/talos/internal/settings"
 	"github.com/drilonrecica/talos/internal/storage"
 	"github.com/drilonrecica/talos/internal/webembed"
@@ -52,14 +54,18 @@ func main() {
 	var setup *auth.SetupService
 	var credentials *auth.Credentials
 	var sessions *auth.Sessions
+	var onboardingService *onboarding.Service
 	if !*demoMode && !config.Demo {
 		setup = auth.NewSetupService(nil)
 		credentials = auth.NewCredentials(nil)
 		sessions = auth.NewSessions(nil, auth.SessionConfig{IdleTimeout: config.Sessions.IdleTimeout, AbsoluteLifetime: config.Sessions.AbsoluteLifetime})
+		checker := diagnostics.OnboardingChecker{HostProc: config.Paths.HostProc, HostSys: config.Paths.HostSys, DataDir: config.Paths.DataDir}
+		onboardingService = onboarding.New(nil, checker)
 		application.Add(app.ComponentFuncs{StartFunc: func(ctx context.Context) error {
 			setup.SetDB(store.DB())
 			credentials.SetDB(store.DB())
 			sessions.SetDB(store.DB())
+			onboardingService.SetDB(store.DB())
 			if _, err := auth.BootstrapAdmin(ctx, credentials, setup); err != nil {
 				return err
 			}
@@ -92,8 +98,9 @@ func main() {
 	apiServer.EnableEvents(store, authorizer)
 	apiServer.EnableHistoryDeletion(store, authorizer, sessions)
 	if setup != nil {
-		apiServer.EnableSetup(setup, protection)
+		apiServer.EnableSetup(setup, protection, sessions)
 		apiServer.EnableAuth(credentials, sessions, protection)
+		apiServer.EnableOnboarding(onboardingService, sessions, sessions)
 	}
 	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, version, application, apiServer.Handler(), webembed.Handler()))
 	if err := application.Run(ctx); err != nil {
