@@ -431,6 +431,7 @@ Rules for every task:
 
 ### T045 — Resolve Compose logical resource identities
 
+- **Status:** Complete
 - **Commit:** `feat(resources): resolve Compose resource identities`
 - **Description:** Implement standard Compose-label resolution using project, service, and container-number metadata with deterministic stable keys and names.
 - **Implement:** Support missing/partial labels without panicking; never concatenate unchecked labels into unsafe API identifiers; preserve enough source context for UI grouping.
