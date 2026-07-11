@@ -615,6 +615,7 @@ Rules for every task:
 
 ### T065 — Add fifteen-minute and hourly rollup tiers
 
+- **Status:** Complete
 - **Commit:** `feat(rollup): add long-range telemetry rollups`
 - **Description:** Extend rollups to typed 15-minute and one-hour host/resource tables sourced from completed lower tiers or raw data where required.
 - **Implement:** Preserve min/max/avg/sample-count semantics across tiers; do not prematurely delete upstream data; make schema/query fields consistent across resolutions.
