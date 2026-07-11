@@ -550,6 +550,7 @@ Rules for every task:
 
 ### T058 — Implement single-owner SQLite batch writer
 
+- **Status:** Complete
 - **Commit:** `feat(storage): write telemetry batches transactionally`
 - **Description:** Implement the one-writer goroutine/repository that writes each batch with prepared typed statements in bounded transactions.
 - **Implement:** Serialize settings/auth writes through controlled ownership; record write latency; never let collectors or HTTP handlers issue arbitrary concurrent writes; retain transaction order.
