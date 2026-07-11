@@ -191,6 +191,7 @@ Rules for every task:
 
 ### T019 — Build the typed frontend API and SSE client
 
+- **Status:** Complete
 - **Commit:** `feat(web): add typed API and live-stream client`
 - **Description:** Add a TypeScript API client, typed API models, an SSE client with reconnect/backoff, and runes-based current-state store.
 - **Implement:** Handle authentication failure, network loss, stale data, event de-duplication, and reconnect status visibly; never use a polling fallback that duplicates live work.
