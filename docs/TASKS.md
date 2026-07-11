@@ -476,6 +476,7 @@ Rules for every task:
 
 ### T050 — Detect replacements, deployments, and rollout overlap
 
+- **Status:** Complete
 - **Commit:** `feat(events): correlate deployments and replacements`
 - **Description:** Correlate image changes, old-stop/new-create patterns, Compose reconciliation, lifecycle timing, and optional future enrichment hooks into Confirmed/Likely/Container replacement annotations.
 - **Implement:** Model old/new active overlap, start/stop times, peak aggregate use, and correlation windows; do not enable alerts or grace periods in alpha.
