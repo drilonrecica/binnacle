@@ -38,6 +38,9 @@ func TestSingleAdminCredentialLifecycle(t *testing.T) {
 	if _, err = credentials.Authenticate(ctx, "missing", "wrong password value"); !errors.Is(err, auth.ErrInvalidCredentials) {
 		t.Fatalf("missing user err=%v", err)
 	}
+	if _, err = credentials.Authenticate(ctx, "@invalid", "wrong password value"); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Fatalf("invalid username err=%v", err)
+	}
 	if _, err = credentials.Authenticate(ctx, "admin", "wrong password value"); !errors.Is(err, auth.ErrInvalidCredentials) {
 		t.Fatalf("wrong password err=%v", err)
 	}

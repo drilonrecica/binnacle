@@ -92,7 +92,7 @@ func VerifyPassword(encoded, password string) bool {
 		params[pair[0]] = value
 	}
 	m, t, p := params["m"], params["t"], params["p"]
-	if m == 0 || t == 0 || p == 0 || p > 255 {
+	if m == 0 || m > 256*1024 || t == 0 || t > 10 || p == 0 || p > 16 {
 		return false
 	}
 	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
@@ -100,7 +100,7 @@ func VerifyPassword(encoded, password string) bool {
 		return false
 	}
 	expected, err := base64.RawStdEncoding.DecodeString(parts[5])
-	if err != nil || len(expected) == 0 {
+	if err != nil || len(expected) == 0 || len(expected) > 64 || len(salt) < 8 || len(salt) > 64 {
 		return false
 	}
 	actual := argon2.IDKey([]byte(password), salt, uint32(t), uint32(m), uint8(p), uint32(len(expected)))

@@ -74,6 +74,7 @@ func (c *Credentials) Authenticate(ctx context.Context, username, password strin
 	}
 	username, err := ValidateUsername(username)
 	if err != nil {
+		_ = VerifyPassword(dummyPasswordHash, password)
 		return User{}, ErrInvalidCredentials
 	}
 	var u User
@@ -101,7 +102,7 @@ func randomID() (string, error) {
 }
 
 // This valid hash is only used to equalize invalid-username and absent-user work.
-const dummyPasswordHash = "$argon2id$v=19$m=65536,t=3,p=1$MDEyMzQ1Njc4OWFiY2RlZg$Dncpc0A4KDsA4DCI5PJq5HR1uGPs2DG8hu6ZUHnLK14"
+const dummyPasswordHash = "$argon2id$v=19$m=65536,t=3,p=4$MDEyMzQ1Njc4OWFiY2RlZg$Dncpc0A4KDsA4DCI5PJq5HR1uGPs2DG8hu6ZUHnLK14"
 
 func isUnique(err error) bool {
 	return err != nil && (contains(err.Error(), "UNIQUE") || contains(err.Error(), "unique"))
