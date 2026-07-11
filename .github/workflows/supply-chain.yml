@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: golang/govulncheck-action@b73395a6ff0ffd4a95bfc2e37b1c1857829f6f5e
+      - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f
         with:
           go-version-input: '1.26.x'
       - uses: pnpm/action-setup@v4
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version: '1.26.x', check-latest: true }
       - run: go install github.com/google/go-licenses@v1.6.0
-      - run: go-licenses check ./... --allowed_licenses=MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0,ISC,MPL-2.0
+      - run: go-licenses check ./... --allowed_licenses=MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0,ISC,MPL-2.0,AGPL-3.0
 
   sbom:
     runs-on: ubuntu-24.04
@@ -40,6 +40,7 @@ jobs:
   scan:
     runs-on: ubuntu-24.04
     if: github.event_name == 'push'
+    permissions: { contents: read, security-events: write }
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - run: docker build -f packaging/docker/Dockerfile -t talos:scan .
@@ -49,6 +50,6 @@ jobs:
           format: sarif
           output: trivy.sarif
           severity: HIGH,CRITICAL
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy.sarif
