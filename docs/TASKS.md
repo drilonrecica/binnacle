@@ -227,6 +227,7 @@ Rules for every task:
 
 ### T023 — Add localization-ready message and formatting infrastructure
 
+- **Status:** Complete
 - **Commit:** `feat(web): add localization-ready formatting layer`
 - **Description:** Add English message resources, stable message keys, locale-aware number/date/duration/byte/rate formatters, and a translation-loading boundary.
 - **Implement:** Prohibit concatenated translated fragments and hard-coded user-facing English inside components; keep right-to-left support out of alpha while avoiding layout assumptions that prevent it.
