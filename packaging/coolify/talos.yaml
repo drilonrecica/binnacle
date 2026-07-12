@@ -11,7 +11,7 @@ services:
     restart: unless-stopped
     read_only: true
     privileged: false
-    user: talos
+    user: "talos:${DOCKER_GID:?DOCKER_GID is required; run export DOCKER_GID=$(getent group docker | cut -d: -f3)}"
     security_opt:
       - no-new-privileges:true
     environment:
