@@ -76,7 +76,17 @@ async function prepare(
   options: { theme?: 'dark' | 'light'; degraded?: boolean } = {},
 ) {
   const snapshot = structuredClone(healthySnapshot);
+  const events: Array<{
+    id: number;
+    type: string;
+    message: string;
+    resourceId?: string;
+  }> = [];
   if (options.degraded) {
+    snapshot.host.cpuPct = 81;
+    snapshot.host.memoryUsedBytes = 7_838_318_592;
+    snapshot.host.diskUsedBytes = 94_489_280_512;
+    snapshot.host.load1 = 3.86;
     snapshot.resources[1].status = 'degraded';
     snapshot.resources[1].cpuHostPct = 72.4;
     snapshot.collectors.docker = {
@@ -84,9 +94,23 @@ async function prepare(
       freshAt: '2026-07-11T12:00:00Z',
       reason: 'Docker API responses are delayed',
     } as (typeof snapshot.collectors)['docker'];
+    events.push(
+      {
+        id: 41,
+        type: 'container_oom',
+        message: 'worker.production was OOM killed',
+        resourceId: 'worker-production',
+      },
+      {
+        id: 42,
+        type: 'container_restart',
+        message: 'worker.production restarted',
+        resourceId: 'worker-production',
+      },
+    );
   }
   await page.addInitScript(
-    ({ value, theme }) => {
+    ({ value, theme, liveEvents }) => {
       localStorage.setItem('binnacle.theme', theme);
       class DemoEventSource extends EventTarget {
         onerror: ((event: Event) => void) | null = null;
@@ -96,13 +120,20 @@ async function prepare(
             this.dispatchEvent(
               new MessageEvent('snapshot', { data: JSON.stringify(value) }),
             );
+            for (const liveEvent of liveEvents) {
+              this.dispatchEvent(
+                new MessageEvent('event', {
+                  data: JSON.stringify(liveEvent),
+                }),
+              );
+            }
           });
         }
         close() {}
       }
       Object.defineProperty(window, 'EventSource', { value: DemoEventSource });
     },
-    { value: snapshot, theme: options.theme ?? 'dark' },
+    { value: snapshot, theme: options.theme ?? 'dark', liveEvents: events },
   );
   await page.route('**/api/v1/auth/session', (route) =>
     route.fulfill({ json: session }),
@@ -135,6 +166,9 @@ test('degraded watch console visual baseline', async ({ page }, testInfo) => {
   await page.goto('/watch');
   await expect(
     page.getByText('Docker API responses are delayed'),
+  ).toBeVisible();
+  await expect(
+    page.getByText('worker.production was OOM killed'),
   ).toBeVisible();
   await expect(page).toHaveScreenshot('watch-degraded.png', screenshotOptions);
 });
