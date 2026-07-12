@@ -482,6 +482,8 @@ Production must ship no Node.js runtime. The compiled frontend is embedded into 
 
 Use a custom Binnacle design system.
 
+The implemented signature presentation is the **Watch Console**: IBM Plex Sans Condensed and Mono, navy/teal instrumentation colors, square controls, ruled metric bands, aligned rosters and ledgers, explicit non-color-only state text, and a persistent bottom command deck. Operational screens favor dense instrumentation; settings remains a conventional indexed ledger. Authentication and commissioning use the same language in a full-height access gate. The standalone landing artifact is a dark field manual and embeds the tested dark Watch baseline rather than a separately maintained product mockup.
+
 Use lightweight headless accessibility primitives only for behavior-heavy components such as:
 
 - dialogs;

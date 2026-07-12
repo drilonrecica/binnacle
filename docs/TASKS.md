@@ -933,6 +933,10 @@ Rules for every task:
 
 ## Deferred roadmap — not alpha.1 tasks
 
+### Completed design pass — Watch Console propagation
+
+The Watch Console presentation now covers operational, analytical, administrative, authentication, setup, and commissioning surfaces. Settings uses stable section anchors; historical uPlot charts use metric bands without replacing live plot instances. The standalone landing page is a dark field manual using vendored IBM Plex 6.4.0 assets and the byte-identical tested Watch screenshot. `pnpm --dir web test:landing` checks landing accessibility, assets, responsive screenshots, and local links.
+
 These are intentionally **not** commit-ready work for this release. Do not implement them while completing the tasks above without an explicit amended product decision and new tasks.
 
 | Planned release | Deferred capability |

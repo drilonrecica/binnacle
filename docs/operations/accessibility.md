@@ -1,6 +1,6 @@
 # Accessibility
 
-Binnacle targets WCAG 2.2 Level AA. Automated checks run with `@axe-core/playwright` against the login, setup, onboarding, overview, server, resources, resource detail, events, settings, and monitor-health pages.
+Binnacle targets WCAG 2.2 Level AA. Automated checks run with `@axe-core/playwright` against the login, setup, onboarding, Watch, server, resources, resource detail, events, settings, monitor-health, diagnostics, and standalone landing pages.
 
 ## Automated coverage
 
@@ -8,6 +8,7 @@ Run the accessibility smoke suite:
 
 ```bash
 pnpm --dir web test:e2e a11y.spec.ts
+pnpm --dir web test:landing
 ```
 
 The tests scan each page with `wcag2a`, `wcag2aa`, `wcag21a`, and `wcag21aa` rules and fail on any violation.

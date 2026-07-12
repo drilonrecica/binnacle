@@ -36,7 +36,7 @@ Key direct dependencies:
 | Vite | `8.1.4` | Latest stable. |
 | ESLint | `10.7.0` | Latest stable. |
 | TypeScript | `5.9.3` | Latest stable compatible with `typescript-eslint@8`. TypeScript 7 exists but is not yet supported by the ESLint plugin ecosystem. |
-| IBM Plex | `6.4.0` | Sans Condensed and Mono WOFF2 files are vendored locally under the SIL Open Font License 1.1; no CDN request is made. |
+| IBM Plex | `6.4.0` | Sans Condensed and Mono WOFF2 files are vendored in both the application and self-contained landing artifact under the SIL Open Font License 1.1; no CDN request is made. |
 
 Installed dev dependencies (from `pnpm list --depth=0`):
 
