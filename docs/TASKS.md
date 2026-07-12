@@ -960,7 +960,7 @@ Rules for every task:
 
 ### T103 — Schedule checks and persist current results
 
-- **Status:** Planned
+- **Status:** Complete
 - **Commit:** `feat(checks): schedule bounded health checks`
 - **Description:** Add a bounded queue and worker pool, pause inactive-resource checks, persist current state, and support manual execution.
 
