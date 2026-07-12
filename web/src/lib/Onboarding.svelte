@@ -62,18 +62,29 @@
     <span class="step-number">01</span>
     <div>
       <fieldset>
-        <legend>Access exposure</legend>
-        <label
-          ><input type="radio" bind:group={exposure} value="private" /> Private access</label
-        >
-        <label
-          ><input type="radio" bind:group={exposure} value="public" /> Public HTTPS
-          URL</label
-        >
-        <p>
-          Public access should use HTTPS and an additional access control where
-          practical.
+        <legend>How is this installation reached?</legend>
+        <p class="field-note">
+          This records your deployment context. It does not change networking or
+          security settings.
         </p>
+        <label class="exposure-option">
+          <input type="radio" bind:group={exposure} value="private" />
+          <span
+            ><strong>Private or restricted access</strong><small>
+              Reachable only through localhost, a private network, VPN, or an
+              authenticated access gateway.</small
+            ></span
+          >
+        </label>
+        <label class="exposure-option">
+          <input type="radio" bind:group={exposure} value="public" />
+          <span
+            ><strong>Public HTTPS URL</strong><small>
+              Reachable from the internet through an HTTPS reverse proxy.
+              Consider an additional access-control layer.</small
+            ></span
+          >
+        </label>
       </fieldset>
     </div>
   </section>
