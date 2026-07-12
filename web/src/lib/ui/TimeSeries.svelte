@@ -22,19 +22,39 @@
   let plot: uPlot | undefined;
   let selected = $state(0);
   let cursorText = $state('');
+  let tooltipLeft = $state(0);
+  let tooltipTop = $state(0);
+  function color(name: string, fallback: string): string {
+    return (
+      getComputedStyle(document.documentElement)
+        .getPropertyValue(name)
+        .trim() || fallback
+    );
+  }
   function options(): uPlot.Options {
+    const line = color('--chart-1', '#2ed0d0');
+    const text = color('--muted', '#82949e');
+    const grid = color('--border', '#243744');
     return {
       width: root.clientWidth || 1,
       height: variant === 'sparkline' ? 48 : 180,
+      legend: { show: false },
       series: [
         {},
         {
           label,
-          stroke: 'var(--chart-1)',
+          stroke: line,
+          points: { fill: line, stroke: line },
           fill: variant === 'area' ? 'rgb(120 220 232 / .2)' : undefined,
         },
       ],
-      axes: variant === 'sparkline' ? [] : [{}, {}],
+      axes:
+        variant === 'sparkline'
+          ? []
+          : [
+              { stroke: text, grid: { stroke: grid }, ticks: { stroke: grid } },
+              { stroke: text, grid: { stroke: grid }, ticks: { stroke: grid } },
+            ],
       plugins: [
         {
           hooks: {
@@ -78,6 +98,8 @@
                 const at = u.data[0][index];
                 const value = u.data[1][index];
                 cursorText = `${new Date(at * 1000).toLocaleString()}: ${value ?? 'gap'}`;
+                tooltipLeft = u.cursor.left ?? 0;
+                tooltipTop = u.cursor.top ?? 0;
               },
             ],
           },
@@ -112,12 +134,16 @@
   }
 </script>
 
-<div class="chart-canvas" bind:this={root} aria-hidden="true"></div>
-{#if cursorText}<span class="chart-tooltip" role="status">{cursorText}</span
-  >{/if}
+<div class="time-series">
+  <div class="chart-canvas" bind:this={root} aria-hidden="true"></div>
+  {#if cursorText}<span
+      class="chart-tooltip"
+      style={`left:${tooltipLeft}px;top:${tooltipTop}px`}>{cursorText}</span
+    >{/if}
+</div>
 <button
   type="button"
-  class="chart-inspector"
+  class="chart-inspector sr-only"
   aria-label={`${label} chart inspection`}
   onkeydown={inspect}
   ><span
