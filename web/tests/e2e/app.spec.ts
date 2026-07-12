@@ -147,7 +147,9 @@ test('creates a health check from the Alerts console', async ({ page }) => {
     return route.fulfill({ json: [] });
   });
   await page.goto('/alerts');
-  await expect(page.getByRole('heading', { name: 'Alerts', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Alerts', exact: true }),
+  ).toBeVisible();
   await page.getByRole('tab', { name: 'checks' }).click();
   await page.getByLabel('Resource ID').fill('res_demo_1');
   await page.getByLabel('Name').fill('Public health');
