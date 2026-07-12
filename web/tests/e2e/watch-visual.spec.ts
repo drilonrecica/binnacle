@@ -1,5 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 
+const screenshotOptions = {
+  animations: 'disabled' as const,
+  caret: 'hide' as const,
+  // Bound cross-host font anti-aliasing drift without masking layout changes.
+  maxDiffPixelRatio: 0.002,
+};
+
 const session = {
   user: { id: 'admin', username: 'admin' },
   expiresAt: '2026-07-11T13:00:00Z',
@@ -111,10 +118,7 @@ test('dark watch console visual baseline', async ({ page }) => {
   await prepare(page);
   await page.goto('/watch');
   await expect(page.getByRole('heading', { name: 'Watch' })).toBeVisible();
-  await expect(page).toHaveScreenshot('watch-dark.png', {
-    animations: 'disabled',
-    caret: 'hide',
-  });
+  await expect(page).toHaveScreenshot('watch-dark.png', screenshotOptions);
 });
 
 test('light watch console visual baseline', async ({ page }, testInfo) => {
@@ -122,10 +126,7 @@ test('light watch console visual baseline', async ({ page }, testInfo) => {
   await prepare(page, { theme: 'light' });
   await page.goto('/watch');
   await expect(page.getByRole('heading', { name: 'Watch' })).toBeVisible();
-  await expect(page).toHaveScreenshot('watch-light.png', {
-    animations: 'disabled',
-    caret: 'hide',
-  });
+  await expect(page).toHaveScreenshot('watch-light.png', screenshotOptions);
 });
 
 test('degraded watch console visual baseline', async ({ page }, testInfo) => {
@@ -135,8 +136,5 @@ test('degraded watch console visual baseline', async ({ page }, testInfo) => {
   await expect(
     page.getByText('Docker API responses are delayed'),
   ).toBeVisible();
-  await expect(page).toHaveScreenshot('watch-degraded.png', {
-    animations: 'disabled',
-    caret: 'hide',
-  });
+  await expect(page).toHaveScreenshot('watch-degraded.png', screenshotOptions);
 });

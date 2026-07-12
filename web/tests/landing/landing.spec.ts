@@ -43,5 +43,7 @@ test('field manual visual baseline', async ({ page }, testInfo) => {
   await expect(page).toHaveScreenshot(`landing-${testInfo.project.name}.png`, {
     fullPage: true,
     animations: 'disabled',
+    // Bound cross-host font anti-aliasing drift without masking layout changes.
+    maxDiffPixelRatio: 0.002,
   });
 });
