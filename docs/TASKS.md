@@ -947,7 +947,7 @@ Rules for every task:
 
 ### T101 — Define checks and alerts persistence model
 
-- **Status:** Planned
+- **Status:** Complete
 - **Commit:** `feat(alerts): add checks and alerts data model`
 - **Description:** Record the architecture decision; add forward-only migrations, domain types, repositories, and the idempotent built-in default-rule catalog.
 - **Test / verify:** Exercise fresh and upgraded databases, constraints, default seeding, and repository behavior.
