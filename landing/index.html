@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="TALOS is an AGPL-3.0-only, self-hosted monitoring dashboard for Linux servers running Docker workloads."
+    />
+    <title>TALOS — Lightweight Docker server monitoring</title>
+    <link rel="stylesheet" href="assets/style.css" />
+    <link rel="icon" href="assets/talos.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="TALOS home">
+        <img src="assets/talos.svg" alt="" width="40" height="40" />
+        <span>TALOS</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="#features">Features</a>
+        <a href="#quickstart">Quick start</a>
+        <a href="https://github.com/drilonrecica/talos">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-content">
+          <h1>Lightweight, Coolify-aware monitoring for Docker servers.</h1>
+          <p>
+            TALOS is a self-hosted, read-only monitoring dashboard for Linux
+            servers running Docker workloads. Host metrics, logical service
+            grouping, local SQLite history, and live updates — without a
+            separate observability stack.
+          </p>
+          <div class="hero-actions">
+            <a
+              class="button button-primary"
+              href="https://github.com/drilonrecica/talos"
+              >View on GitHub</a
+            >
+            <a
+              class="button"
+              href="https://github.com/drilonrecica/talos/blob/master/docs/SPEC.md"
+              >Read the spec</a
+            >
+          </div>
+        </div>
+        <div class="hero-graphic" aria-hidden="true">
+          <div class="metric-card">
+            <span class="metric-label">CPU</span>
+            <span class="metric-value">24%</span>
+            <span class="metric-spark spark-cpu"></span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Memory</span>
+            <span class="metric-value">3.2 GB</span>
+            <span class="metric-spark spark-memory"></span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Services</span>
+            <span class="metric-value">12</span>
+            <span class="status-healthy">healthy</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="features">
+        <h2>Why TALOS?</h2>
+        <div class="feature-grid">
+          <article>
+            <h3>Local-first</h3>
+            <p>
+              Core monitoring works offline. Data is stored locally in SQLite
+              and no telemetry leaves your server by default.
+            </p>
+          </article>
+          <article>
+            <h3>Low overhead</h3>
+            <p>
+              A single Go binary, embedded frontend assets, and bounded
+              collection keep resource use small on small servers.
+            </p>
+          </article>
+          <article>
+            <h3>Coolify-aware</h3>
+            <p>
+              Automatically groups Coolify and Compose services, while staying
+              fully compatible with plain Docker containers.
+            </p>
+          </article>
+          <article>
+            <h3>Read-only by design</h3>
+            <p>
+              TALOS never restarts, stops, deletes, or execs into containers.
+              It only observes.
+            </p>
+          </article>
+          <article>
+            <h3>Live updates</h3>
+            <p>
+              Server-sent events push fresh host and resource snapshots to the
+              web dashboard as they are collected.
+            </p>
+          </article>
+          <article>
+            <h3>Local history</h3>
+            <p>
+              Retained metric history and event logs are kept in SQLite with
+              configurable retention and database budget limits.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="quickstart" class="quickstart">
+        <h2>Quick start</h2>
+        <p>
+          The supported path is Docker Compose. Set a setup token and the host
+          Docker group ID, then start the service:
+        </p>
+        <pre><code>export TALOS_SETUP_TOKEN=$(openssl rand -hex 32)
+export DOCKER_GID=$(getent group docker | cut -d: -f3)
+docker compose -f https://raw.githubusercontent.com/drilonrecica/talos/master/packaging/docker/docker-compose.yml up</code></pre>
+        <p>
+          Then open <code>http://localhost:8080</code>, complete setup, and sign
+          in.
+        </p>
+        <a
+          class="button button-primary"
+          href="https://github.com/drilonrecica/talos/blob/master/docs/SPEC.md#82-deployment"
+          >Deployment guide</a
+        >
+      </section>
+
+      <section class="docs">
+        <h2>Documentation</h2>
+        <ul class="doc-list">
+          <li>
+            <a
+              href="https://github.com/drilonrecica/talos/blob/master/docs/SPEC.md"
+              >Product &amp; technical specification</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://github.com/drilonrecica/talos/blob/master/docs/TASKS.md"
+              >Implementation backlog</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://github.com/drilonrecica/talos/blob/master/CONTRIBUTING.md"
+              >Contributing guide</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://github.com/drilonrecica/talos/blob/master/SECURITY.md"
+              >Security policy</a
+            >
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        TALOS is a temporary codename. Licensed under
+        <a href="https://github.com/drilonrecica/talos/blob/master/LICENSE"
+          >AGPL-3.0-only</a
+        >.
+      </p>
+    </footer>
+  </body>
+</html>
