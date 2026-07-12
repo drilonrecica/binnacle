@@ -966,7 +966,7 @@ Rules for every task:
 
 ### T104 — Evaluate metric and filesystem alert rules
 
-- **Status:** Planned
+- **Status:** Complete
 - **Commit:** `feat(alerts): evaluate metric alert state`
 - **Description:** Persist healthy, pending, firing, and recovering phases with deterministic deduplication and restart-safe durations.
 
