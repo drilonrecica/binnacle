@@ -11,12 +11,14 @@
     variant = 'line',
     gaps = [],
     markers = [],
+    formatValue = (value: number) => String(value),
   }: {
     points: Point[];
     label: string;
     variant?: 'line' | 'area' | 'sparkline';
     gaps?: Gap[];
     markers?: Marker[];
+    formatValue?: (value: number) => string;
   } = $props();
   let root: HTMLDivElement;
   let plot: uPlot | undefined;
@@ -53,7 +55,13 @@
           ? []
           : [
               { stroke: text, grid: { stroke: grid }, ticks: { stroke: grid } },
-              { stroke: text, grid: { stroke: grid }, ticks: { stroke: grid } },
+              {
+                stroke: text,
+                grid: { stroke: grid },
+                ticks: { stroke: grid },
+                size: 72,
+                values: (_u, values) => values.map(formatValue),
+              },
             ],
       plugins: [
         {
@@ -97,7 +105,7 @@
                 }
                 const at = u.data[0][index];
                 const value = u.data[1][index];
-                cursorText = `${new Date(at * 1000).toLocaleString()}: ${value ?? 'gap'}`;
+                cursorText = `${new Date(at * 1000).toLocaleString()}: ${value == null ? 'gap' : formatValue(value)}`;
                 tooltipLeft = u.cursor.left ?? 0;
                 tooltipTop = u.cursor.top ?? 0;
               },

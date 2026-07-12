@@ -71,6 +71,12 @@ type MetricsResponse struct {
 	Gaps       []Gap      `json:"gaps"`
 }
 
+func (m *Manager) HasMetricHistory(ctx context.Context) (bool, error) {
+	var exists bool
+	err := m.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM host_samples_10s LIMIT 1)").Scan(&exists)
+	return exists, err
+}
+
 func (q MetricQuery) Validate() error {
 	if q.Scope != "host" && q.Scope != "resource" {
 		return fmt.Errorf("invalid scope")

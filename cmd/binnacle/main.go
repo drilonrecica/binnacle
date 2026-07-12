@@ -84,6 +84,12 @@ func main() {
 	if *demoMode || config.Demo {
 		generator := demo.New(*demoSeed, realClock{})
 		generator.Containers = *demoContainers
+		application.Add(app.ComponentFuncs{StartFunc: func(ctx context.Context) error {
+			if err := demo.SeedHistory(ctx, store, generator, time.Now()); err != nil {
+				return fmt.Errorf("seed demo history: %w", err)
+			}
+			return nil
+		}})
 		application.Add(&demo.Component{Generator: generator, Engine: engine})
 		log.Warn("demo mode enabled", "seed", *demoSeed, "containers", *demoContainers)
 	} else {

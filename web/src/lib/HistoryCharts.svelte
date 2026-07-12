@@ -213,6 +213,7 @@
             points={chartPoints(series, data.gaps)}
             gaps={data.gaps}
             {markers}
+            formatValue={(value) => display(series.metric, value)}
           />
         </div>
         <dl class="metric-stats">
