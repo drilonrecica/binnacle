@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/drilonrecica/binnacle/internal/storage"
 )
@@ -42,5 +43,30 @@ func TestSettingsPatchPrecedenceValidationAuditAndConflict(t *testing.T) {
 	var auditActor string
 	if err = manager.DB().QueryRowContext(ctx, "SELECT actor FROM settings_audit WHERE revision=1").Scan(&auditActor); err != nil || auditActor != "usr_admin" {
 		t.Fatalf("actor=%q err=%v", auditActor, err)
+	}
+}
+
+func TestSetRetentionPresetUsesAuditedLiveApplyPath(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	manager := storage.New(filepath.Join(dir, "binnacle.db"), filepath.Join(dir, "run"))
+	if err := manager.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	var applied Config
+	service := NewService(NewStore(manager.DB()), Defaults(), nil, func(config Config) { applied = config })
+	if err := service.Initialize(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.SetRetentionPreset(ctx, "long-term", "usr_onboarding"); err != nil {
+		t.Fatal(err)
+	}
+	if service.CurrentRetentionPreset() != "long-term" || applied.Retention.Raw != 7*24*time.Hour {
+		t.Fatalf("current=%q applied=%+v", service.CurrentRetentionPreset(), applied.Retention)
+	}
+	var actor string
+	if err := manager.DB().QueryRowContext(ctx, "SELECT actor FROM settings_audit WHERE setting_key='retention.preset'").Scan(&actor); err != nil || actor != "usr_onboarding" {
+		t.Fatalf("actor=%q err=%v", actor, err)
 	}
 }

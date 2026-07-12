@@ -55,9 +55,8 @@ export async function onboardingState(): Promise<OnboardingState> {
   return (await response.json()) as OnboardingState;
 }
 
-export function saveOnboarding(exposureMode: string, retentionPreset: string) {
+export function saveOnboarding(retentionPreset: string) {
   return authenticatedMutation<OnboardingState>('/api/v1/onboarding', 'PATCH', {
-    exposureMode,
     retentionPreset,
   });
 }

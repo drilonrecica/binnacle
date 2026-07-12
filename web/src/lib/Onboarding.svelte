@@ -9,7 +9,6 @@
   import Badge from './ui/Badge.svelte';
   let { oncomplete }: { oncomplete: () => void } = $props();
   let onboarding = $state<OnboardingState>({ checklistDismissed: false });
-  let exposure = $state('private');
   let retention = $state('balanced');
   let outbound = $state(false);
   let busy = $state(false);
@@ -18,7 +17,6 @@
   void onboardingState()
     .then((value) => {
       onboarding = value;
-      exposure = value.exposureMode ?? 'private';
       retention = value.retentionPreset ?? 'balanced';
     })
     .catch((reason) => (error = String(reason)));
@@ -27,7 +25,7 @@
     busy = true;
     error = '';
     try {
-      onboarding = (await saveOnboarding(exposure, retention)) ?? onboarding;
+      onboarding = (await saveOnboarding(retention)) ?? onboarding;
       onboarding = (await runDiagnostics(outbound)) ?? onboarding;
     } catch (reason) {
       error = reason instanceof Error ? reason.message : 'Diagnostics failed.';
@@ -47,57 +45,79 @@
       busy = false;
     }
   }
+
+  const retentionPresets = [
+    {
+      value: 'minimal',
+      name: 'Minimal',
+      summary: 'Lowest disk use',
+      detail: 'Raw 12h · 1-minute 7d · 15-minute 90d · hourly 1y',
+    },
+    {
+      value: 'balanced',
+      name: 'Balanced',
+      summary: 'Recommended for most installations',
+      detail: 'Raw 48h · 1-minute 30d · 15-minute 1y',
+    },
+    {
+      value: 'long-term',
+      name: 'Long-term',
+      summary: 'More history and disk use',
+      detail: 'Raw 7d · 1-minute 90d · 15-minute 2y',
+    },
+  ];
 </script>
 
 <section class="onboarding" aria-labelledby="onboarding-title">
   <header class="commission-header">
-    <span>COMMISSIONING / SEQUENCE</span>
-    <h1 id="onboarding-title">Finish installation</h1>
-    <p>
-      Your metrics stay on this server. Binnacle sends no product telemetry.
-    </p>
+    <div class="commission-identity" aria-hidden="true">
+      <img class="brand-logo-dark" src="/brand/binnacle-mark-dark.png" alt="" />
+      <img class="brand-logo-light" src="/brand/binnacle-mark.png" alt="" />
+    </div>
+    <div>
+      <span>BINNACLE / COMMISSIONING</span>
+      <h1 id="onboarding-title">Bring this server onto watch</h1>
+      <p>Choose how much history to keep, then verify the installation.</p>
+    </div>
+    <ul class="commission-assurances" aria-label="Installation assurances">
+      <li>Self-hosted</li>
+      <li>Local metrics</li>
+      <li>No product telemetry</li>
+    </ul>
   </header>
   {#if error}<p role="alert">{error}</p>{/if}
   <section class="commission-step">
     <span class="step-number">01</span>
     <div>
-      <fieldset>
-        <legend>How is this installation reached?</legend>
-        <p class="field-note">
-          This records your deployment context. It does not change networking or
-          security settings.
-        </p>
-        <label class="exposure-option">
-          <input type="radio" bind:group={exposure} value="private" />
-          <span
-            ><strong>Private or restricted access</strong><small>
-              Reachable only through localhost, a private network, VPN, or an
-              authenticated access gateway.</small
-            ></span
-          >
-        </label>
-        <label class="exposure-option">
-          <input type="radio" bind:group={exposure} value="public" />
-          <span
-            ><strong>Public HTTPS URL</strong><small>
-              Reachable from the internet through an HTTPS reverse proxy.
-              Consider an additional access-control layer.</small
-            ></span
-          >
-        </label>
-      </fieldset>
+      <h2>Secure access</h2>
+      <p class="security-notice">
+        <strong>Binnacle does not configure network exposure.</strong>
+        Keep private installations behind a restricted network or VPN. If this service
+        is internet-accessible, use an HTTPS reverse proxy and consider an additional
+        access-control layer.
+      </p>
     </div>
   </section>
   <section class="commission-step">
     <span class="step-number">02</span>
     <div>
-      <h2>Retention</h2>
-      <label for="retention">Retention preset</label>
-      <select id="retention" bind:value={retention}>
-        <option value="minimal">Minimal</option>
-        <option value="balanced">Balanced</option>
-        <option value="long-term">Long-term</option>
-      </select>
+      <fieldset class="retention-options">
+        <legend>Retention</legend>
+        <p class="field-note">
+          Choose how long historical metrics remain available. You can change
+          this later in Settings.
+        </p>
+        {#each retentionPresets as preset (preset.value)}
+          <label class="retention-option">
+            <input type="radio" bind:group={retention} value={preset.value} />
+            <span
+              ><strong>{preset.name}</strong><small>{preset.summary}</small
+              ></span
+            >
+            <code>{preset.detail}</code>
+          </label>
+        {/each}
+      </fieldset>
     </div>
   </section>
   <section class="commission-step">

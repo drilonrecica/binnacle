@@ -33,14 +33,20 @@ func (s *Server) EnableOnboarding(service *onboarding.Service, authorizer Author
 			WriteJSON(w, 200, state)
 		case http.MethodPatch:
 			var body struct {
-				ExposureMode    string `json:"exposureMode"`
+				ExposureMode    string `json:"exposureMode,omitempty"` // Accepted for older clients; intentionally ignored.
 				RetentionPreset string `json:"retentionPreset"`
 			}
 			if DecodeJSON(r, &body) != nil {
 				WriteError(w, 400, Error{Code: "invalid_request", Message: "Onboarding choices are invalid."})
 				return
 			}
-			state, err := service.Update(r.Context(), body.ExposureMode, body.RetentionPreset)
+			actor := "admin"
+			if provider, ok := authorizer.(ActorProvider); ok {
+				if value, found := provider.Actor(r); found {
+					actor = value
+				}
+			}
+			state, err := service.Update(r.Context(), body.RetentionPreset, actor)
 			if err != nil {
 				WriteError(w, 400, Error{Code: "invalid_request", Message: "Onboarding choices are invalid."})
 				return

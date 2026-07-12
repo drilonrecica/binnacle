@@ -77,7 +77,9 @@ func main() {
 	onboardingService := onboarding.New(nil, checker)
 	settingsService := settings.NewService(settings.NewStore(nil), config, effectiveSettings, func(updated settings.Config) {
 		sessions.SetConfig(auth.SessionConfig{IdleTimeout: updated.Sessions.IdleTimeout, AbsoluteLifetime: updated.Sessions.AbsoluteLifetime})
+		store.SetRetention(storage.RetentionCutoffs{Raw: updated.Retention.Raw, OneMinute: updated.Retention.OneMinute, FifteenMinute: updated.Retention.FifteenMinute, OneHour: updated.Retention.OneHour})
 	})
+	onboardingService.SetRetentionSettings(settingsService)
 
 	var dockerEngine dockerapi.Client
 	var productionSampler *production.Sampler

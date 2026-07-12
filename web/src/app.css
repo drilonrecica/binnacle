@@ -1593,10 +1593,50 @@ meter[data-unavailable='true'] {
   gap: 0;
 }
 .commission-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-6);
   margin-bottom: var(--space-3);
   padding: var(--space-6);
   border: 1px solid var(--border-strong);
   background: var(--surface);
+}
+.commission-header h1 {
+  margin: var(--space-2) 0;
+}
+.commission-header p {
+  margin: 0;
+  color: var(--muted);
+}
+.commission-identity {
+  display: grid;
+  width: 4.5rem;
+  height: 5.5rem;
+  place-items: center;
+  border-right: 1px solid var(--border);
+}
+.commission-identity img {
+  width: 2.6rem;
+  height: 3.2rem;
+  object-fit: contain;
+}
+.commission-assurances {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  color: var(--brand-text);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  list-style: none;
+  text-transform: uppercase;
+}
+.commission-assurances li::before {
+  content: '●';
+  margin-right: var(--space-2);
+  color: var(--ok-text);
 }
 .commission-header span,
 .step-number {
@@ -1638,31 +1678,50 @@ meter[data-unavailable='true'] {
   margin: 0 0 var(--space-1);
   color: var(--muted);
 }
-.exposure-option {
+.retention-option {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(8rem, 0.65fr) minmax(14rem, 1fr);
   align-items: start;
   gap: var(--space-3);
   padding: var(--space-3);
   border: 1px solid var(--border);
   cursor: pointer;
 }
-.exposure-option:has(input:checked) {
+.retention-option:has(input:checked) {
   border-color: var(--brand);
   background: var(--surface-active);
+  box-shadow: inset 3px 0 var(--brand);
 }
-.exposure-option input,
+.retention-option input,
 .commission-step input[type='checkbox'] {
   min-height: auto;
   margin-top: 0.25rem;
 }
-.exposure-option span,
-.exposure-option small {
+.retention-option span,
+.retention-option small {
   display: block;
 }
-.exposure-option small {
+.retention-option small,
+.retention-option code {
   margin-top: var(--space-1);
   color: var(--muted);
+}
+.retention-option code {
+  align-self: center;
+  font-size: 0.7rem;
+  text-align: right;
+}
+.security-notice {
+  margin: 0;
+  padding: var(--space-4);
+  border-left: 3px solid var(--brand);
+  background: var(--bg);
+  color: var(--muted);
+}
+.security-notice strong {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--text);
 }
 .commission-step h2 {
   margin: 0;
@@ -1695,6 +1754,13 @@ meter[data-unavailable='true'] {
   }
   .settings-ledger {
     border-top: 0;
+  }
+  .commission-header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .commission-assurances {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 @media (max-width: 600px) {
@@ -1735,5 +1801,24 @@ meter[data-unavailable='true'] {
   .step-number,
   .commission-step > div {
     padding: var(--space-4);
+  }
+  .commission-header {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: var(--space-4);
+  }
+  .commission-assurances {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .commission-identity {
+    width: 3.5rem;
+    height: 4.5rem;
+  }
+  .retention-option {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .retention-option code {
+    grid-column: 2;
+    text-align: left;
   }
 }

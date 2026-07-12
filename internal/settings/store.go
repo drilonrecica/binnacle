@@ -81,6 +81,30 @@ func NewService(store *Store, base Config, effective map[string]Effective, apply
 }
 func (s *Service) SetDB(db *sql.DB) { s.store.SetDB(db) }
 func (s *Service) Current() Config  { s.mu.RLock(); defer s.mu.RUnlock(); return s.current }
+func (s *Service) CurrentRetentionPreset() string {
+	return s.Current().Retention.Preset
+}
+
+// SetRetentionPreset applies an internal preset change through the same
+// validation, audit, persistence, and live-apply path as the settings API.
+func (s *Service) SetRetentionPreset(ctx context.Context, preset, actor string) error {
+	if s.CurrentRetentionPreset() == preset {
+		return nil
+	}
+	if _, ok := RetentionPreset(preset); !ok {
+		return errors.New("retention preset is invalid")
+	}
+	for range 3 {
+		snapshot, err := s.Snapshot(ctx)
+		if err != nil {
+			return err
+		}
+		if _, err = s.Patch(ctx, snapshot.Revision, map[string]string{"retention.preset": preset}, actor); !errors.Is(err, ErrRevisionConflict) {
+			return err
+		}
+	}
+	return ErrRevisionConflict
+}
 func (s *Service) Initialize(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

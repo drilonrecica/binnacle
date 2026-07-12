@@ -20,9 +20,15 @@ type State struct {
 }
 
 type Service struct {
-	db      *sql.DB
-	checker diagnostics.OnboardingChecker
-	now     func() time.Time
+	db        *sql.DB
+	checker   diagnostics.OnboardingChecker
+	retention RetentionSettings
+	now       func() time.Time
+}
+
+type RetentionSettings interface {
+	CurrentRetentionPreset() string
+	SetRetentionPreset(context.Context, string, string) error
 }
 
 func New(db *sql.DB, checker diagnostics.OnboardingChecker) *Service {
@@ -33,7 +39,8 @@ func (s *Service) SetDB(db *sql.DB) {
 	s.db = db
 	s.checker.DB = db
 }
-func (s *Service) SetDocker(client diagnostics.DockerDiagnostics) { s.checker.Docker = client }
+func (s *Service) SetRetentionSettings(settings RetentionSettings) { s.retention = settings }
+func (s *Service) SetDocker(client diagnostics.DockerDiagnostics)  { s.checker.Docker = client }
 
 func (s *Service) State(ctx context.Context) (State, error) {
 	if s == nil || s.db == nil {
@@ -44,12 +51,18 @@ func (s *Service) State(ctx context.Context) (State, error) {
 	var completed, dismissed sql.NullInt64
 	err := s.db.QueryRowContext(ctx, "SELECT exposure_mode,retention_preset,diagnostics_json,completed_at,checklist_dismissed_at FROM onboarding_state WHERE id=1").Scan(&exposure, &retention, &raw, &completed, &dismissed)
 	if errors.Is(err, sql.ErrNoRows) {
+		if s.retention != nil {
+			state.RetentionPreset = s.retention.CurrentRetentionPreset()
+		}
 		return state, nil
 	}
 	if err != nil {
 		return State{}, err
 	}
 	state.ExposureMode, state.RetentionPreset = exposure.String, retention.String
+	if s.retention != nil {
+		state.RetentionPreset = s.retention.CurrentRetentionPreset()
+	}
 	state.ChecklistDismissed = dismissed.Valid
 	if raw.Valid && raw.String != "" {
 		if err = json.Unmarshal([]byte(raw.String), &state.Diagnostics); err != nil {
@@ -63,15 +76,18 @@ func (s *Service) State(ctx context.Context) (State, error) {
 	return state, nil
 }
 
-func (s *Service) Update(ctx context.Context, exposure, retention string) (State, error) {
-	if exposure != "public" && exposure != "private" {
-		return State{}, errors.New("exposure mode must be public or private")
-	}
+func (s *Service) Update(ctx context.Context, retention, actor string) (State, error) {
 	if retention != "minimal" && retention != "balanced" && retention != "long-term" {
 		return State{}, errors.New("retention preset is invalid")
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO onboarding_state(id,exposure_mode,retention_preset,updated_at) VALUES(1,?,?,?)
-		ON CONFLICT(id) DO UPDATE SET exposure_mode=excluded.exposure_mode,retention_preset=excluded.retention_preset,updated_at=excluded.updated_at`, exposure, retention, s.now().UnixMilli())
+	if s.retention == nil {
+		return State{}, errors.New("retention settings are unavailable")
+	}
+	if err := s.retention.SetRetentionPreset(ctx, retention, actor); err != nil {
+		return State{}, err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO onboarding_state(id,retention_preset,updated_at) VALUES(1,?,?)
+		ON CONFLICT(id) DO UPDATE SET retention_preset=excluded.retention_preset,updated_at=excluded.updated_at`, retention, s.now().UnixMilli())
 	if err != nil {
 		return State{}, err
 	}
@@ -97,7 +113,7 @@ func (s *Service) Complete(ctx context.Context) (State, error) {
 	if err != nil {
 		return State{}, err
 	}
-	if state.ExposureMode == "" || state.RetentionPreset == "" || len(state.Diagnostics) == 0 {
+	if state.RetentionPreset == "" || len(state.Diagnostics) == 0 {
 		return State{}, errors.New("onboarding choices and diagnostics are required")
 	}
 	_, err = s.db.ExecContext(ctx, "UPDATE onboarding_state SET completed_at=COALESCE(completed_at,?),updated_at=? WHERE id=1", s.now().UnixMilli(), s.now().UnixMilli())
