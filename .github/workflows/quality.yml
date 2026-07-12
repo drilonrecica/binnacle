@@ -9,6 +9,9 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version: '1.26.x', check-latest: true }
       - uses: pnpm/action-setup@v6
+        with:
+          version: 11.12.0
+          standalone: true
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm --dir web install --frozen-lockfile
@@ -21,6 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: pnpm/action-setup@v6
+        with:
+          version: 11.12.0
+          standalone: true
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm --dir web install --frozen-lockfile
@@ -31,5 +37,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - run: docker build -f packaging/docker/Dockerfile -t talos:ci .
       - run: docker run --rm --entrypoint /usr/local/bin/talos talos:ci --help || test $$? -eq 1
-      - run: TALOS_SETUP_TOKEN=dummy docker compose -f packaging/docker/docker-compose.yml config
+      - run: |
+          export DOCKER_GID=$(getent group docker | cut -d: -f3)
+          TALOS_SETUP_TOKEN=dummy docker compose -f packaging/docker/docker-compose.yml config
       - run: scripts/validate-coolify-template.sh
