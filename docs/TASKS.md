@@ -990,7 +990,7 @@ Rules for every task:
 
 ### T108 — Apply effective resource health overlays
 
-- **Status:** Planned
+- **Status:** Complete
 - **Commit:** `feat(resources): apply alert health overlay`
 - **Description:** Preserve runtime signal status and decorate current REST/SSE resource status from check and alert state.
 

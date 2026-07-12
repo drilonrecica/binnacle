@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,7 +12,11 @@ import (
 	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
-func (s *Server) EnableResources(engine *metrics.Engine, auth Authorizer, store *storage.Manager, protection *authpkg.Protection) {
+type SnapshotDecorator interface {
+	Decorate(context.Context, metrics.Snapshot) metrics.Snapshot
+}
+
+func (s *Server) EnableResources(engine *metrics.Engine, auth Authorizer, store *storage.Manager, protection *authpkg.Protection, decorators ...SnapshotDecorator) {
 	s.Handle("/api/v1/resources", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if auth == nil || !auth.Authorize(r) {
 			WriteError(w, 401, Error{Code: "unauthorized", Message: "Authentication is required."})
@@ -23,6 +28,9 @@ func (s *Server) EnableResources(engine *metrics.Engine, auth Authorizer, store 
 			return
 		}
 		snap := engine.Snapshot()
+		for _, decorator := range decorators {
+			snap = decorator.Decorate(r.Context(), snap)
+		}
 		if r.URL.Path == "/api/v1/resources" && r.URL.Query().Get("state") == "archived" {
 			values, err := store.ArchivedResources(r.Context())
 			if err != nil {

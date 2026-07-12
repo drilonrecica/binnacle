@@ -130,6 +130,7 @@ type ResourceSnapshot struct {
 	ID             ResourceID          `json:"id"`
 	Name           string              `json:"name"`
 	Status         ResourceStatus      `json:"status"`
+	SignalStatus   ResourceStatus      `json:"signalStatus"`
 	CPUHostPercent *float64            `json:"cpuHostPct"`
 	MemoryBytes    *int64              `json:"memoryBytes"`
 	RXBPS          *float64            `json:"rxBps"`

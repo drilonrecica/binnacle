@@ -16,7 +16,7 @@ type Authorizer interface{ Authorize(*http.Request) bool }
 type DemoAuthorizer bool
 
 func (a DemoAuthorizer) Authorize(*http.Request) bool { return bool(a) }
-func (s *Server) EnableLive(engine *metrics.Engine, auth Authorizer, protection *authpkg.Protection) {
+func (s *Server) EnableLive(engine *metrics.Engine, auth Authorizer, protection *authpkg.Protection, decorators ...SnapshotDecorator) {
 	s.Handle("/api/v1/live", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only GET is supported."})
@@ -31,7 +31,7 @@ func (s *Server) EnableLive(engine *metrics.Engine, auth Authorizer, protection 
 			WriteError(w, 429, Error{Code: "rate_limited", Message: "Too many live connections. Try again shortly.", Details: map[string]int{"retryAfterSeconds": maxRetry(retry)}})
 			return
 		}
-		stream(w, r, engine)
+		stream(w, r, engine, decorators...)
 	}))
 	s.Handle("/api/v1/session", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if auth == nil || !auth.Authorize(r) {
@@ -41,7 +41,7 @@ func (s *Server) EnableLive(engine *metrics.Engine, auth Authorizer, protection 
 		w.WriteHeader(http.StatusNoContent)
 	}))
 }
-func stream(w http.ResponseWriter, r *http.Request, e *metrics.Engine) {
+func stream(w http.ResponseWriter, r *http.Request, e *metrics.Engine, decorators ...SnapshotDecorator) {
 	f, ok := w.(http.Flusher)
 	if !ok {
 		WriteError(w, 500, Error{Code: "stream_unsupported", Message: "Streaming is unavailable."})
@@ -72,7 +72,11 @@ func stream(w http.ResponseWriter, r *http.Request, e *metrics.Engine) {
 				return
 			}
 			if message.Snapshot != nil {
-				writeFrame(w, "snapshot", message.Snapshot.Sequence, message.Snapshot)
+				snapshot := *message.Snapshot
+				for _, decorator := range decorators {
+					snapshot = decorator.Decorate(r.Context(), snapshot)
+				}
+				writeFrame(w, "snapshot", snapshot.Sequence, snapshot)
 			} else if message.Event != nil {
 				writeFrame(w, "event", message.Event.ID, message.Event)
 			}
