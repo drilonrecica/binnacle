@@ -3,186 +3,39 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="Binnacle is an AGPL-3.0-only, self-hosted monitoring dashboard for Linux servers running Docker workloads."
-    />
-    <title>Binnacle — Lightweight Docker server monitoring</title>
+    <meta name="description" content="Binnacle is an AGPL-3.0-only, self-hosted monitoring dashboard for Linux servers running Docker workloads." />
+    <title>Binnacle — Docker server watch console</title>
     <link rel="stylesheet" href="assets/style.css" />
-    <link
-      rel="icon"
-      href="assets/favicon-32.png"
-      type="image/png"
-      sizes="32x32"
-    />
+    <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
   </head>
   <body>
+    <a class="skip" href="#content">Skip to content</a>
     <header class="site-header">
-      <a class="brand" href="/" aria-label="Binnacle home">
-        <span class="brand-mark">
-          <img src="assets/brand/binnacle-mark.png" alt="" />
-        </span>
-        <span>Binnacle</span>
-      </a>
-      <nav aria-label="Primary">
-        <a href="#features">Features</a>
-        <a href="#quickstart">Quick start</a>
-        <a href="https://github.com/drilonrecica/binnacle">GitHub</a>
-      </nav>
+      <a class="brand" href="/" aria-label="Binnacle home"><img src="assets/brand/binnacle-mark-dark.png" alt="" /><span>Binnacle</span></a>
+      <nav aria-label="Field manual"><a href="#principles">Principles</a><a href="#quickstart">Deploy</a><a href="#reference">Reference</a></nav>
     </header>
-
-    <main>
-      <section class="hero">
-        <div class="hero-content">
-          <div class="hero-brand" aria-hidden="true">
-            <img src="assets/brand/binnacle-wordmark.png" alt="" />
-          </div>
-          <h1>Lightweight, Coolify-aware monitoring for Docker servers.</h1>
-          <p>
-            Binnacle is a self-hosted, read-only monitoring dashboard for Linux
-            servers running Docker workloads. Host metrics, logical service
-            grouping, local SQLite history, and live updates — without a
-            separate observability stack.
-          </p>
-          <div class="hero-actions">
-            <a
-              class="button button-primary"
-              href="https://github.com/drilonrecica/binnacle"
-              >View on GitHub</a
-            >
-            <a
-              class="button"
-              href="https://github.com/drilonrecica/binnacle/blob/master/docs/SPEC.md"
-              >Read the spec</a
-            >
-          </div>
-        </div>
-        <div class="hero-graphic" aria-hidden="true">
-          <div class="metric-card">
-            <span class="metric-label">CPU</span>
-            <span class="metric-value">24%</span>
-            <span class="metric-spark spark-cpu"></span>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">Memory</span>
-            <span class="metric-value">3.2 GB</span>
-            <span class="metric-spark spark-memory"></span>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">Services</span>
-            <span class="metric-value">12</span>
-            <span class="status-healthy">healthy</span>
-          </div>
-        </div>
+    <main id="content">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="classification"><span>SELF-HOSTED</span><span>READ-ONLY</span><span>LOCAL-FIRST</span></div>
+        <div class="hero-copy"><p class="eyebrow">FIELD MANUAL / DOCKER SERVER MONITOR</p><h1 id="hero-title">Know what your server is doing.</h1><p>Binnacle is a lightweight, Coolify-aware watch console for Linux servers running Docker workloads. It groups logical services, keeps history in local SQLite, and streams current state without a separate observability stack.</p><div class="actions"><a class="button primary" href="https://github.com/drilonrecica/binnacle">GitHub / source</a><a class="button" href="https://github.com/drilonrecica/binnacle/blob/master/docs/SPEC.md">Deployment / spec</a></div></div>
+        <figure class="console-frame"><div><span>WATCH CONSOLE</span><span>DETERMINISTIC DARK BASELINE</span></div><img src="assets/watch-console.png" alt="Dark Binnacle Watch console showing host CPU, memory, disk, services, attention state, and recent events." /></figure>
       </section>
 
-      <section id="features" class="features">
-        <h2>Why Binnacle?</h2>
-        <div class="feature-grid">
-          <article>
-            <h3>Local-first</h3>
-            <p>
-              Core monitoring works offline. Data is stored locally in SQLite
-              and no telemetry leaves your server by default.
-            </p>
-          </article>
-          <article>
-            <h3>Low overhead</h3>
-            <p>
-              A single Go binary, embedded frontend assets, and bounded
-              collection keep resource use small on small servers.
-            </p>
-          </article>
-          <article>
-            <h3>Coolify-aware</h3>
-            <p>
-              Automatically groups Coolify and Compose services, while staying
-              fully compatible with plain Docker containers.
-            </p>
-          </article>
-          <article>
-            <h3>Read-only by design</h3>
-            <p>
-              Binnacle never restarts, stops, deletes, or execs into containers.
-              It only observes.
-            </p>
-          </article>
-          <article>
-            <h3>Live updates</h3>
-            <p>
-              Server-sent events push fresh host and resource snapshots to the
-              web dashboard as they are collected.
-            </p>
-          </article>
-          <article>
-            <h3>Local history</h3>
-            <p>
-              Retained metric history and event logs are kept in SQLite with
-              configurable retention and database budget limits.
-            </p>
-          </article>
-        </div>
-      </section>
+      <section id="principles" class="manual-section" aria-labelledby="principles-title"><header><span>01</span><div><p>OPERATING PRINCIPLES</p><h2 id="principles-title">Designed to observe, not operate.</h2></div></header><ol class="ledger">
+        <li><span>01.1</span><h3>Local-first storage</h3><p>Core monitoring works offline. Metrics and events remain in the server’s SQLite database.</p></li>
+        <li><span>01.2</span><h3>Low overhead</h3><p>One Go binary, embedded frontend assets, and bounded collection suit small servers.</p></li>
+        <li><span>01.3</span><h3>Coolify awareness</h3><p>Coolify and Compose workloads are grouped into logical resources while plain Docker remains supported.</p></li>
+        <li><span>01.4</span><h3>Read-only operation</h3><p>Binnacle does not stop, restart, delete, or exec into containers. It only observes.</p></li>
+        <li><span>01.5</span><h3>Live updates</h3><p>Server-sent events carry fresh host and resource snapshots as collection completes.</p></li>
+        <li><span>01.6</span><h3>Local history</h3><p>Configurable retention and a database budget bound locally retained metrics and event logs.</p></li>
+      </ol></section>
 
-      <section id="quickstart" class="quickstart">
-        <h2>Quick start</h2>
-        <p>
-          The supported path is Docker Compose. Set a setup token and the host
-          Docker group ID, then start the service:
-        </p>
-        <pre><code>export BINNACLE_SETUP_TOKEN=$(openssl rand -hex 32)
-export DOCKER_GID=$(getent group docker | cut -d: -f3)
-docker compose -f https://raw.githubusercontent.com/drilonrecica/binnacle/master/packaging/docker/docker-compose.yml up</code></pre>
-        <p>
-          Then open <code>http://localhost:8080</code>, complete setup, and sign
-          in.
-        </p>
-        <a
-          class="button button-primary"
-          href="https://github.com/drilonrecica/binnacle/blob/master/docs/SPEC.md#82-deployment"
-          >Deployment guide</a
-        >
-      </section>
+      <section id="quickstart" class="manual-section" aria-labelledby="quickstart-title"><header><span>02</span><div><p>DEPLOYMENT SEQUENCE</p><h2 id="quickstart-title">Quick start with Docker Compose.</h2></div></header><ol class="sequence"><li><span>01</span><div><h3>Prepare installation secrets</h3><pre tabindex="0"><code>export BINNACLE_SETUP_TOKEN=$(openssl rand -hex 32)
+export DOCKER_GID=$(getent group docker | cut -d: -f3)</code></pre></div></li><li><span>02</span><div><h3>Start the supported Compose deployment</h3><pre tabindex="0"><code>docker compose -f https://raw.githubusercontent.com/drilonrecica/binnacle/master/packaging/docker/docker-compose.yml up</code></pre></div></li><li><span>03</span><div><h3>Commission the server</h3><p>Open <code>http://localhost:8080</code>, enter the one-time setup token, create the local administrator, and complete diagnostics.</p><a class="button" href="https://github.com/drilonrecica/binnacle/blob/master/docs/SPEC.md#82-deployment">Open deployment guide</a></div></li></ol></section>
 
-      <section class="docs">
-        <h2>Documentation</h2>
-        <ul class="doc-list">
-          <li>
-            <a
-              href="https://github.com/drilonrecica/binnacle/blob/master/docs/SPEC.md"
-              >Product &amp; technical specification</a
-            >
-          </li>
-          <li>
-            <a
-              href="https://github.com/drilonrecica/binnacle/blob/master/docs/TASKS.md"
-              >Implementation backlog</a
-            >
-          </li>
-          <li>
-            <a
-              href="https://github.com/drilonrecica/binnacle/blob/master/CONTRIBUTING.md"
-              >Contributing guide</a
-            >
-          </li>
-          <li>
-            <a
-              href="https://github.com/drilonrecica/binnacle/blob/master/SECURITY.md"
-              >Security policy</a
-            >
-          </li>
-        </ul>
-      </section>
+      <section id="reference" class="manual-section" aria-labelledby="reference-title"><header><span>03</span><div><p>FIELD REFERENCE</p><h2 id="reference-title">Documentation index.</h2></div></header><nav class="reference" aria-label="Documentation"><a href="https://github.com/drilonrecica/binnacle/blob/master/docs/SPEC.md"><span>REF / 01</span>Product and technical specification</a><a href="https://github.com/drilonrecica/binnacle/blob/master/docs/TASKS.md"><span>REF / 02</span>Implementation ledger</a><a href="https://github.com/drilonrecica/binnacle/blob/master/CONTRIBUTING.md"><span>REF / 03</span>Contributing guide</a><a href="https://github.com/drilonrecica/binnacle/blob/master/SECURITY.md"><span>REF / 04</span>Security policy</a></nav></section>
     </main>
-
-    <footer class="site-footer">
-      <p>
-        Binnacle is licensed under
-        <a href="https://github.com/drilonrecica/binnacle/blob/master/LICENSE"
-          >AGPL-3.0-only</a
-        >.
-      </p>
-    </footer>
+    <footer><span>BINNACLE / AGPL-3.0-ONLY</span><a href="https://github.com/drilonrecica/binnacle">SOURCE REPOSITORY</a></footer>
   </body>
 </html>
