@@ -19,10 +19,14 @@ import sys
 import tempfile
 import threading
 import time
+import http.cookiejar
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+
+COOKIE_JAR = http.cookiejar.CookieJar()
+URL_OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(COOKIE_JAR))
 
 
 def find_port() -> int:
@@ -32,8 +36,24 @@ def find_port() -> int:
 
 
 def fetch_json(url: str, timeout: float = 5.0) -> Any:
-    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310
+    with URL_OPENER.open(url, timeout=timeout) as resp:  # noqa: S310
         return json.loads(resp.read().decode("utf-8"))
+
+
+def post_json(url: str, body: dict[str, Any], timeout: float = 5.0) -> None:
+    data = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(  # noqa: S310
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with URL_OPENER.open(req, timeout=timeout) as resp:  # noqa: S310
+        resp.read()
+
+
+def authenticate(base_url: str, token: str) -> None:
+    post_json(f"{base_url}/api/v1/setup/claim", {"token": token, "username": "benchmark", "password": "benchmark-password-32chars-long"})
 
 
 def read_proc_stat(pid: int) -> dict[str, int] | None:
@@ -129,7 +149,7 @@ class SSEMeasurer:
         start = time.time()
         total = 0
         try:
-            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+            with URL_OPENER.open(req, timeout=10) as resp:  # noqa: S310
                 while time.time() - start < self.duration:
                     chunk = resp.read(4096)
                     if not chunk:
@@ -147,7 +167,7 @@ def wait_for_server(base_url: str, timeout: float = 30.0) -> None:
     last: Exception | None = None
     while time.time() < deadline:
         try:
-            fetch_json(f"{base_url}/api/v1/monitor-health", timeout=2.0)
+            URL_OPENER.open(f"{base_url}/healthz", timeout=2.0)  # noqa: S310
             return
         except Exception as e:
             last = e
@@ -229,6 +249,7 @@ def main() -> int:
     env["TALOS_DATA_DIR"] = str(data_dir)
     env["TALOS_RUNTIME_DIR"] = str(data_dir / "run")
     env["TALOS_DATABASE_PATH"] = str(data_dir / "talos.db")
+    env["TALOS_SETUP_TOKEN"] = "talos-benchmark-token-32chars-long"
 
     cmd = [
         str(binary),
@@ -242,6 +263,7 @@ def main() -> int:
     process = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
         wait_for_server(base_url, timeout=30.0)
+        authenticate(base_url, env["TALOS_SETUP_TOKEN"])
         if args.warmup:
             time.sleep(args.warmup)
 

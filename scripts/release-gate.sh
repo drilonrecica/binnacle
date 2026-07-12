@@ -108,14 +108,14 @@ fi
 if [[ -n "$DOCKER_CMD" ]]; then
   demo_port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
   container_name="talos-release-gate-$demo_port"
-  if "$DOCKER_CMD" run -d --name "$container_name" -p "127.0.0.1:$demo_port:8080" "ghcr.io/drilonrecica/talos:local" --demo --demo-seed 1 >> "$RELEASE_RECORD_DIR/build.log" 2>&1; then
+  if "$DOCKER_CMD" run -d --name "$container_name" -e TALOS_SETUP_TOKEN=talos-release-gate-token-32chars -p "127.0.0.1:$demo_port:8080" "ghcr.io/drilonrecica/talos:local" --demo --demo-seed 1 >> "$RELEASE_RECORD_DIR/build.log" 2>&1; then
     for _ in {1..30}; do
-      if curl -sf "http://127.0.0.1:$demo_port/api/v1/session" >/dev/null 2>&1; then
+      if curl -sf "http://127.0.0.1:$demo_port/healthz" >/dev/null 2>&1; then
         break
       fi
       sleep 1
     done
-    if curl -sf "http://127.0.0.1:$demo_port/api/v1/session" >/dev/null 2>&1; then
+    if curl -sf "http://127.0.0.1:$demo_port/healthz" >/dev/null 2>&1; then
       pass "demo container smoke" "container responded on port $demo_port"
     else
       fail "demo container smoke" "container did not respond on port $demo_port"
@@ -141,15 +141,16 @@ if command -v pnpm >/dev/null 2>&1 && [[ -d "$ROOT_DIR/web/tests/e2e" ]]; then
   e2e_data="$(mktemp -d)"
   export TALOS_DATA_DIR="$e2e_data"
   export TALOS_RUNTIME_DIR="$e2e_data/runtime"
+  export TALOS_SETUP_TOKEN=talos-e2e-smoke-token-32chars-long
   "$ROOT_DIR/bin/talos" --demo --demo-seed 1 >> "$RELEASE_RECORD_DIR/build.log" 2>&1 &
   e2e_pid=$!
   for _ in {1..30}; do
-    if curl -sf "http://127.0.0.1:8080/api/v1/session" >/dev/null 2>&1; then
+    if curl -sf "http://127.0.0.1:8080/healthz" >/dev/null 2>&1; then
       break
     fi
     sleep 1
   done
-  if curl -sf "http://127.0.0.1:8080/api/v1/session" >/dev/null 2>&1; then
+  if curl -sf "http://127.0.0.1:8080/healthz" >/dev/null 2>&1; then
     run_optional "e2e accessibility" pnpm --dir web test:e2e a11y.spec.ts
     run_optional "e2e visual regression" pnpm --dir web test:e2e:visual
   else
