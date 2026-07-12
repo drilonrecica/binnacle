@@ -40,7 +40,7 @@ A second pass closed the high-severity schema and persistence gaps (host metrics
 | 17 | High | Host disk usage used `statfs` on the container root; real host filesystems were not persisted. | SPEC §17.8, TASKS T030 | Implemented `collectFilesystems` by parsing `/proc/self/mountinfo`, filtering pseudo-filesystems, and stat-ing each mount. Added `FilesystemObservation` and persisted to `filesystem_samples_1m` via `Engine.PublishFilesystems`. |
 | 18 | Medium | `metrics.Event` lacked `Severity`, `Details`, `CorrelationKey`, and `ContainerInstanceID`. | SPEC §23.10, §55.4 | Extended `metrics.Event` and `HistoricalEvent`; updated `WriteBatch`, `WriteEvent`, Docker normalizer, demo generator, and retention events to populate the new fields. |
 | 19 | Medium | Frontend `Events.svelte` only rendered live SSE events. | SPEC §28.6, TASKS T062/T063 | Replaced the live-only view with an event-history page that queries `GET /api/v1/events` for the last 1h/6h/24h/7d and lists severity, type, summary, source, and metadata. Added `web/src/lib/events.ts` and unit tests. |
-| 20 | Medium | Go toolchain was pinned to an unreleased `1.26.4` local build. | SPEC §9.1, §44 | Pinned the project to Go `1.24.4` (latest public stable) in `go.mod` and CI workflows. |
+| 20 | Medium | Go toolchain was pinned to an unreleased `1.26.4` local build. | SPEC §9.1, §44 | Pinned the project to Go `1.25.0` (current public stable) in `go.mod`, CI workflows, and the Dockerfile. |
 | 21 | Low | Migrations lived under `internal/storage/migrations`, deviating from the repository layout. | SPEC §11 | Moved migrations to root `migrations/` and exposed them through `migrations/embed.go` so the storage package can embed them. |
 
 ## Remaining gaps

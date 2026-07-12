@@ -11,7 +11,7 @@ RUN corepack enable && pnpm --dir web install --frozen-lockfile
 COPY web/ web/
 RUN pnpm --dir web build
 
-FROM golang:1.24-bookworm AS build
+FROM golang:1.25-bookworm AS build
 WORKDIR /src
 RUN apt-get update \
  && apt-get install -y --no-install-recommends gcc libc6-dev libsqlite3-dev \
