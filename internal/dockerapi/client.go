@@ -193,3 +193,55 @@ func (l *Limited) with(ctx context.Context, fn func() error) error {
 		return ctx.Err()
 	}
 }
+func (l *Limited) List(ctx context.Context) ([]Container, error) {
+	var out []Container
+	err := l.with(ctx, func() error {
+		var err error
+		out, err = l.Client.List(ctx)
+		return err
+	})
+	return out, err
+}
+func (l *Limited) Inspect(ctx context.Context, id string) (Inspect, error) {
+	var out Inspect
+	err := l.with(ctx, func() error {
+		var err error
+		out, err = l.Client.Inspect(ctx, id)
+		return err
+	})
+	return out, err
+}
+func (l *Limited) Stats(ctx context.Context, id string) (Stats, error) {
+	var out Stats
+	err := l.with(ctx, func() error {
+		var err error
+		out, err = l.Client.Stats(ctx, id)
+		return err
+	})
+	return out, err
+}
+func (l *Limited) Events(ctx context.Context) <-chan Event { return l.Client.Events(ctx) }
+func (l *Limited) Version(ctx context.Context) (Version, error) {
+	var out Version
+	err := l.with(ctx, func() error {
+		var err error
+		out, err = l.Client.Version(ctx)
+		return err
+	})
+	return out, err
+}
+func (l *Limited) Diagnostics(ctx context.Context) (Diagnostics, error) {
+	var out Diagnostics
+	err := l.with(ctx, func() error {
+		var err error
+		out, err = l.Client.Diagnostics(ctx)
+		return err
+	})
+	return out, err
+}
+func (l *Limited) Close() error {
+	if closer, ok := l.Client.(interface{ Close() error }); ok {
+		return closer.Close()
+	}
+	return nil
+}

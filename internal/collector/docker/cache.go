@@ -43,6 +43,11 @@ func (c *Cache) Get(id string) (Metadata, bool) {
 	v, ok := c.values[id]
 	return v, ok
 }
+func (c *Cache) Set(v Metadata) {
+	c.mu.Lock()
+	c.values[v.ID] = Metadata{ID: v.ID, Name: v.Name, Image: v.Image, Created: v.Created, State: v.State, Health: v.Health, Labels: copyLabels(v.Labels), Networks: append([]string(nil), v.Networks...), Mounts: append([]dockerapi.Mount(nil), v.Mounts...)}
+	c.mu.Unlock()
+}
 func (c *Cache) Remove(id string) { c.mu.Lock(); delete(c.values, id); c.mu.Unlock() }
 func copyLabels(v map[string]string) map[string]string {
 	o := map[string]string{}
