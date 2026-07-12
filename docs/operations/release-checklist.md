@@ -1,7 +1,7 @@
-# Alpha.1 release checklist
+# v0.2 release checklist
 
 This checklist covers the objective gates required before publishing
-`v0.1.0-alpha.1`.
+`v0.2.0`.
 
 ## Automated gate
 
@@ -11,7 +11,7 @@ Run the full release gate:
 ./scripts/release-gate.sh
 ```
 
-It produces `release-record/v0.1.0-alpha.1-<short-sha>.md` with a pass/fail
+It produces `release-record/v0.2.0-<short-sha>.md` with a pass/fail
 table and captured benchmark output.
 
 ## Required gates
@@ -24,6 +24,7 @@ table and captured benchmark output.
 | Container image build | Installation artifacts exist | Image build fails |
 | Demo container smoke | Core API responds from the published image | `/api/v1/session` fails |
 | Benchmark | Performance regressions detected | RSS, CPU, write latency, or SSE exceed documented goals on reference hardware |
+| Checks and alerts | Security and lifecycle semantics remain correct | SSRF, transition, API, overlay, or demo tests fail |
 
 ## Optional gates
 
@@ -50,7 +51,7 @@ table and captured benchmark output.
 Attach the following to the release record:
 
 1. `release-record/build.log`
-2. `release-record/v0.1.0-alpha.1-<short-sha>.md`
+2. `release-record/v0.2.0-<short-sha>.md`
 3. `benchmark-report.json`
 4. Container image digest (`docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/drilonrecica/binnacle:local`)
 5. E2E and visual regression reports when run

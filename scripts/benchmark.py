@@ -227,6 +227,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Binnacle reproducible benchmark harness")
     parser.add_argument("--binary", default="bin/binnacle", help="path to binnacle binary")
     parser.add_argument("--containers", type=int, default=30, help="number of synthetic containers")
+    parser.add_argument("--checks", type=int, default=10, help="number of synthetic health checks")
     parser.add_argument("--duration", type=int, default=60, help="benchmark duration in seconds")
     parser.add_argument("--warmup", type=int, default=5, help="warmup seconds before sampling")
     parser.add_argument("--sse-duration", type=int, default=10, help="seconds to measure SSE bandwidth")
@@ -258,6 +259,8 @@ def main() -> int:
         "1",
         "--demo-containers",
         str(args.containers),
+        "--demo-checks",
+        str(args.checks),
     ]
 
     process = subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -280,6 +283,7 @@ def main() -> int:
         report = {
             "scenario": {
                 "containers": args.containers,
+                "checks": args.checks,
                 "duration_seconds": args.duration,
                 "warmup_seconds": args.warmup,
                 "seed": 1,

@@ -123,6 +123,39 @@ test('renders the Binnacle application shell', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Watch' })).toBeVisible();
 });
 
+test('creates a health check from the Alerts console', async ({ page }) => {
+  await mockAuthSession(page);
+  await mockOnboarding(page);
+  await page.route('**/api/v1/live', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
+  );
+  await page.route('**/api/v1/alerts?*', (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route('**/api/v1/alert-rules', (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route('**/api/v1/silences', (route) =>
+    route.fulfill({ json: [] }),
+  );
+  let created = false;
+  await page.route('**/api/v1/checks', async (route) => {
+    if (route.request().method() === 'POST') {
+      created = true;
+      return route.fulfill({ status: 201, json: { id: 'check' } });
+    }
+    return route.fulfill({ json: [] });
+  });
+  await page.goto('/alerts');
+  await expect(page.getByRole('heading', { name: 'Alerts', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'checks' }).click();
+  await page.getByLabel('Resource ID').fill('res_demo_1');
+  await page.getByLabel('Name').fill('Public health');
+  await page.getByLabel('HTTP/HTTPS URL').fill('https://example.com/health');
+  await page.getByRole('button', { name: 'Create check' }).click();
+  await expect.poll(() => created).toBe(true);
+});
+
 test('removed and unknown routes fall back to Watch', async ({ page }) => {
   await mockAuthSession(page);
   await mockOnboarding(page);

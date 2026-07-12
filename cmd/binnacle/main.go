@@ -43,6 +43,7 @@ func main() {
 	demoMode := flag.Bool("demo", false, "run with deterministic synthetic monitoring data")
 	demoSeed := flag.Uint64("demo-seed", 1, "seed for synthetic demo data")
 	demoContainers := flag.Int("demo-containers", 30, "number of synthetic containers to generate in demo mode")
+	demoChecks := flag.Int("demo-checks", 10, "number of synthetic checks to generate in demo mode")
 	healthcheck := flag.Bool("healthcheck", false, "perform a one-shot local health check and exit")
 	flag.Parse()
 	if *healthcheck {
@@ -86,7 +87,12 @@ func main() {
 	checkRepository := checks.NewRepository(nil)
 	alertRepository := alerts.NewRepository(nil)
 	allowPrivate, _ := strconv.ParseBool(os.Getenv("BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS"))
-	checkRunner := &checks.Runner{AllowPrivate: allowPrivate}
+	var checkRunner interface {
+		Run(context.Context, checks.Check) checks.Result
+	} = &checks.Runner{AllowPrivate: allowPrivate}
+	if *demoMode || config.Demo {
+		checkRunner = demo.CheckRunner{}
+	}
 	checkScheduler := checks.NewScheduler(checkRepository, checkRunner, config.Checks.MaxConcurrency)
 	alertEvaluator := alerts.NewEvaluator(alertRepository, engine)
 
@@ -128,6 +134,11 @@ func main() {
 		alertRepository.SetDB(store.DB())
 		if err := alertRepository.SeedDefaults(ctx); err != nil {
 			return err
+		}
+		if *demoMode || config.Demo {
+			if err := demo.SeedChecksAlerts(ctx, store.DB(), *demoChecks, *demoContainers, time.Now().UTC()); err != nil {
+				return err
+			}
 		}
 		if err := settingsService.Initialize(ctx); err != nil {
 			return err

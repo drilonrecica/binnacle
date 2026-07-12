@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: AGPL-3.0-only
-# Release gate automation for Binnacle v0.1.0-alpha.1.
+# Release gate automation for Binnacle v0.2.0.
 # Produces a Markdown release record in RELEASE_RECORD_DIR.
 set -euo pipefail
 
@@ -8,7 +8,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 RELEASE_RECORD_DIR="${RELEASE_RECORD_DIR:-release-record}"
 mkdir -p "$RELEASE_RECORD_DIR"
 
-VERSION="${VERSION:-v0.1.0-alpha.1}"
+VERSION="${VERSION:-v0.2.0}"
 COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 SHORT_COMMIT="$(git -C "$ROOT_DIR" rev-parse --short HEAD)"
 DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -86,6 +86,9 @@ record ""
 
 # 1. Local CI-quality check.
 run_check "make check" make check
+
+# Checks and alerts security/lifecycle qualification.
+run_check "checks and alerts tests" go test -race ./internal/checks ./internal/alerts ./internal/api ./internal/demo
 
 # 2. License and security policy presence.
 if [[ -s "$ROOT_DIR/LICENSE" && -s "$ROOT_DIR/SECURITY.md" ]]; then
