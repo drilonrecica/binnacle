@@ -16,23 +16,23 @@ help: ## Show the supported local development commands.
 
 	@awk 'BEGIN { FS = ":.*##"; printf "TALOS development commands:\n" } /^[a-zA-Z0-9_-]+:.*##/ { printf "  %-16s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
-dev: ## Start the demo development environment (requires T015).
+dev: build ## Start the demo development environment (backend + Vite dev server).
 
-	@printf '%s\n' 'make dev is unavailable: complete T015 (deterministic demo collector) first.' >&2
-	@printf '%s\n' 'Those tasks will use a fresh temporary TALOS_DATA_DIR for each development run.' >&2
-	@exit 1
+	@echo "Starting TALOS demo backend and Vite dev server..."
+	@export TALOS_SETUP_TOKEN=$$(openssl rand -hex 32); \
+	TALOS_LISTEN_ADDRESS=127.0.0.1:8080 TALOS_DATA_DIR=$$(mktemp -d) $(TALOS_BIN) --demo &
+	@TALOS_PID=$$!; trap 'kill $$TALOS_PID 2>/dev/null || true' EXIT; $(PNPM) --dir web dev
 
-dev-demo: ## Run the deterministic demo environment (requires T015).
+dev-demo: build ## Run the deterministic demo environment with a fresh temporary database.
 
-	@printf '%s\n' 'make dev-demo is unavailable: complete T015 (deterministic demo collector) first.' >&2
-	@printf '%s\n' 'The future command will use a fresh temporary TALOS_DATA_DIR and no Docker socket.' >&2
-	@exit 1
+	@export TALOS_SETUP_TOKEN=$$(openssl rand -hex 32); \
+	TALOS_LISTEN_ADDRESS=127.0.0.1:8080 TALOS_DATA_DIR=$$(mktemp -d) $(TALOS_BIN) --demo
 
-dev-host: ## Run against local host/Docker interfaces (requires collectors).
+dev-host: build ## Run against local host/Docker interfaces (requires appropriate permissions).
 
-	@printf '%s\n' 'make dev-host is unavailable: complete T031 and T043 before using real host or Docker interfaces.' >&2
-	@printf '%s\n' 'The future command will require explicit host paths, Docker permissions, and a temporary TALOS_DATA_DIR.' >&2
-	@exit 1
+	@echo "Run with host/Docker access. Ensure the current user can read /proc, /sys, and the Docker socket."
+	@export TALOS_SETUP_TOKEN=$$(openssl rand -hex 32); \
+	TALOS_LISTEN_ADDRESS=127.0.0.1:8080 TALOS_DATA_DIR=$$(mktemp -d) $(TALOS_BIN)
 
 test: go-test web-test ## Run Go and frontend unit tests.
 

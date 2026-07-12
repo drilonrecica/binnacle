@@ -11,7 +11,7 @@ RUN corepack enable && pnpm --dir web install --frozen-lockfile
 COPY web/ web/
 RUN pnpm --dir web build
 
-FROM golang:1.26-bookworm AS build
+FROM golang:1.24-bookworm AS build
 WORKDIR /src
 RUN apt-get update \
  && apt-get install -y --no-install-recommends gcc libc6-dev libsqlite3-dev \
@@ -36,6 +36,6 @@ VOLUME /var/lib/talos
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD /bin/sh -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf "GET /api/v1/session HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n" >&3 && head -1 <&3 | grep -q "HTTP/1.1"'
+  CMD ["/usr/local/bin/talos", "--healthcheck"]
 
 ENTRYPOINT ["/usr/local/bin/talos"]

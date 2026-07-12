@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     read_only: true
     privileged: false
-    user: talos
+    user: "talos:${DOCKER_GID:?DOCKER_GID is required; run export DOCKER_GID=$(getent group docker | cut -d: -f3)}"
     security_opt:
       - no-new-privileges:true
     ports:
@@ -33,7 +33,7 @@ services:
         reservations:
           memory: 64M
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /api/v1/session HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q HTTP/1.1"]
+      test: ["CMD", "/usr/local/bin/talos", "--healthcheck"]
       interval: 30s
       timeout: 5s
       start_period: 5s
