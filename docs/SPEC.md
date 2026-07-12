@@ -2407,15 +2407,14 @@ Token values are shown once. Store only secure hashes.
 ### 28.1 Primary navigation
 
 ```text
-Overview
+Watch
 Resources
 Server
 Events
-Checks
 Settings
 ```
 
-`Checks` may be hidden or marked unavailable until health checks are implemented post-alpha.
+Health checks do not appear in primary navigation until they are implemented post-alpha.
 
 ### 28.2 Resources navigation
 
@@ -2430,7 +2429,7 @@ Archived
 
 Containers are not top-level navigation because they are implementation details. Container detail is accessible from resource detail.
 
-### 28.3 Overview goal
+### 28.3 Watch goal
 
 The first screen must answer within five seconds:
 
@@ -4938,7 +4937,7 @@ The following work packages are deliberately small enough to be assigned to sepa
 - reduced motion;
 - comfortable/compact density variables.
 
-### A25. Overview page
+### A25. Watch page
 
 - server summary;
 - resource health list;

@@ -111,10 +111,29 @@ async function mockSettings(page: Page) {
 }
 
 test('renders the Binnacle application shell', async ({ page }) => {
-  await page.goto('/');
+  await mockAuthSession(page);
+  await mockOnboarding(page);
+  await page.route('**/api/v1/live', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
+  );
+  await page.goto('/watch');
 
-  await expect(page).toHaveTitle('Binnacle');
-  await expect(page.getByRole('heading', { name: 'Binnacle' })).toBeVisible();
+  await expect(page).toHaveTitle('Binnacle — Watch');
+  await expect(page.getByRole('link', { name: 'Binnacle' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Watch' })).toBeVisible();
+});
+
+test('removed and unknown routes fall back to Watch', async ({ page }) => {
+  await mockAuthSession(page);
+  await mockOnboarding(page);
+  await page.route('**/api/v1/live', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
+  );
+  await page.goto('/overview');
+  await expect(page).toHaveURL(/\/watch$/);
+  await expect(page.getByRole('link', { name: 'Checks' })).toHaveCount(0);
+  await page.goto('/not-a-real-view');
+  await expect(page).toHaveURL(/\/watch$/);
 });
 
 test('switches every historical range without hiding gaps', async ({
@@ -171,7 +190,7 @@ test('switches every historical range without hiding gaps', async ({
     });
   });
   await page.goto('/');
-  await page.getByRole('link', { name: 'server', exact: true }).click();
+  await page.getByRole('link', { name: 'Server', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Historical telemetry' }),
   ).toBeVisible();
@@ -240,7 +259,7 @@ test('requires typed confirmation for history deletion', async ({ page }) => {
     }),
   );
   await page.goto('/');
-  await page.getByRole('link', { name: 'settings', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByLabel('Scope').selectOption('all');
   await page.getByRole('button', { name: 'Preview deletion' }).click();
   const remove = page.getByRole('button', { name: 'Delete history' });

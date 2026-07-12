@@ -7,7 +7,7 @@ export const primitiveMessages = {
   'shell.live': 'Live monitoring',
   unavailable: 'Unavailable',
   stale: 'Stale',
-  'overview.empty': 'No current observations are available.',
+  'watch.empty': 'No current observations are available.',
 } as const;
 export type MessageKey = keyof typeof primitiveMessages;
 export function t(key: MessageKey): string {

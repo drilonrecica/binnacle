@@ -21,7 +21,7 @@ export function preferences(storage: Storage = localStorage): {
     theme:
       theme === 'dark' || theme === 'light' || theme === 'system'
         ? theme
-        : 'system',
+        : 'dark',
     density:
       density === 'compact' || density === 'comfortable'
         ? density

@@ -27,3 +27,19 @@ export function staleResource(
     thresholdSeconds * 1000
   );
 }
+
+export function meterValue(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return Math.min(100, Math.max(0, value));
+}
+
+export function formatUptime(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return '—';
+  const whole = Math.floor(seconds);
+  const days = Math.floor(whole / 86_400);
+  const hours = Math.floor((whole % 86_400) / 3_600);
+  const minutes = Math.floor((whole % 3_600) / 60);
+  if (days) return `${days}d ${hours}h`;
+  if (hours) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}

@@ -247,11 +247,11 @@ test('onboarding page has no detectable a11y violations', async ({ page }) => {
   await scan(page);
 });
 
-test('overview page has no detectable a11y violations', async ({ page }) => {
+test('watch page has no detectable a11y violations', async ({ page }) => {
   await mockAuthSession(page, 'authenticated');
   await mockOnboarding(page, true);
   await mockLive(page);
-  await page.goto('/overview');
+  await page.goto('/watch');
   await scan(page);
 });
 

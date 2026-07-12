@@ -93,15 +93,29 @@ export async function logout(all = false): Promise<void> {
 }
 
 export function safeRedirect(value: string | null): string {
-  if (!value) return '/overview';
+  if (!value) return '/watch';
   try {
     const target = new URL(value, location.origin);
     if (target.origin !== location.origin || !target.pathname.startsWith('/'))
-      return '/overview';
-    if (target.pathname.startsWith('//') || target.pathname === '/login')
-      return '/overview';
+      return '/watch';
+    const allowed = [
+      '/watch',
+      '/resources',
+      '/server',
+      '/events',
+      '/settings',
+      '/onboarding',
+    ];
+    if (
+      target.pathname.startsWith('//') ||
+      !allowed.some(
+        (path) =>
+          target.pathname === path || target.pathname.startsWith(`${path}/`),
+      )
+    )
+      return '/watch';
     return `${target.pathname}${target.search}${target.hash}`;
   } catch {
-    return '/overview';
+    return '/watch';
   }
 }

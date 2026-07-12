@@ -8,7 +8,7 @@
 </script>
 
 {#if !s}<p role="status">Loading server telemetry…</p>{:else}<section
-    class="overview"
+    class="telemetry-grid"
   >
     <div class="card">
       <h2>CPU</h2>

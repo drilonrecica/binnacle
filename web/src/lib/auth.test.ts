@@ -7,9 +7,11 @@ describe('safeRedirect', () => {
     expect(safeRedirect('/resources/res_1?range=1h')).toBe(
       '/resources/res_1?range=1h',
     );
-    expect(safeRedirect('https://evil.test/steal')).toBe('/overview');
-    expect(safeRedirect('//evil.test/steal')).toBe('/overview');
-    expect(safeRedirect('/login')).toBe('/overview');
+    expect(safeRedirect('https://evil.test/steal')).toBe('/watch');
+    expect(safeRedirect('//evil.test/steal')).toBe('/watch');
+    expect(safeRedirect('/login')).toBe('/watch');
+    expect(safeRedirect('/overview')).toBe('/watch');
+    expect(safeRedirect('/not-a-route')).toBe('/watch');
     vi.unstubAllGlobals();
   });
 });

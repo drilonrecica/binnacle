@@ -196,19 +196,23 @@ async function viewportWidth(page: Page) {
   return page.viewportSize()?.width ?? 0;
 }
 
-test('overview renders health summary and navigation', async ({ page }) => {
+test('watch renders host instruments and the resource roster', async ({
+  page,
+}) => {
   await mockBrowserSession(page);
   await mockLive(page);
-  await page.goto('/overview');
-  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+  await page.goto('/watch');
+  await expect(page.getByRole('heading', { name: 'Watch' })).toBeVisible();
   await expect(page.getByRole('navigation')).toBeVisible();
-  const brandMark = page.locator('.app-brand img');
+  const brandMark = page.locator('.app-brand img:visible');
   await expect(brandMark).toBeVisible();
   expect(
     await brandMark.evaluate((image) => image.naturalWidth),
   ).toBeGreaterThan(0);
-  await expect(page.getByText('Server', { exact: true })).toBeVisible();
-  const box = await page.locator('.health-strip').boundingBox();
+  await expect(
+    page.getByRole('link', { name: 'Server', exact: true }),
+  ).toBeVisible();
+  const box = await page.locator('.host-band').boundingBox();
   expect(box?.width).toBeLessThanOrEqual(await viewportWidth(page));
 });
 
@@ -239,17 +243,24 @@ test('server renders telemetry and historical charts', async ({ page }) => {
   ).toBeVisible();
 });
 
-test('resource detail opens from overview', async ({ page }) => {
+test('resource inspector opens from watch and links to the full record', async ({
+  page,
+}) => {
   await mockBrowserSession(page);
   await mockLive(page);
   await mockHistoryApis(page);
-  await page.goto('/overview');
-  const link = page.locator('.resources-card a').first();
+  await page.goto('/watch');
+  const link = page.locator('.resource-roster tbody a').first();
   await expect(link).toBeVisible();
   const name = (await link.textContent()) ?? 'Resource';
   await link.click();
+  await expect(page).toHaveURL(/\/watch\?inspect=res1/);
   await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
-  await expect(page.locator('section.card')).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Open full record' }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/watch$/);
 });
 
 test('events page renders', async ({ page }) => {
@@ -274,25 +285,19 @@ test('settings page renders all sections', async ({ page }) => {
   ).toBeVisible();
 });
 
-test('theme matches the configured color scheme', async ({
-  page,
-}, testInfo) => {
+test('first-time users receive the dark signature theme', async ({ page }) => {
   await mockBrowserSession(page);
   await mockLive(page);
-  await page.goto('/overview');
+  await page.goto('/watch');
   const theme = await expectedTheme(page);
-  if (testInfo.project.name.includes('dark')) {
-    expect(theme).toBe('dark');
-  } else {
-    expect(theme).toBe('light');
-  }
+  expect(theme).toBe('dark');
 });
 
 test('mobile layout keeps content inside the viewport', async ({ page }) => {
   await mockBrowserSession(page);
   await mockLive(page);
-  await page.goto('/overview');
-  const heading = page.getByRole('heading', { name: 'Overview' });
+  await page.goto('/watch');
+  const heading = page.getByRole('heading', { name: 'Watch' });
   const box = await heading.boundingBox();
   expect(box?.width).toBeLessThanOrEqual(await viewportWidth(page));
 });

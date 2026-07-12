@@ -203,7 +203,7 @@ Rules for every task:
 - **Status:** Complete
 - **Commit:** `feat(web): add authenticated application shell`
 - **Description:** Build the primary navigation, responsive shell, page routing, loading/error boundaries, login/setup route guards, and unavailable-state handling.
-- **Implement:** Use semantic landmarks and skip navigation; include Overview, Resources, Server, Events, Checks placeholder, and Settings; do not expose protected content before auth state resolves.
+- **Implement:** Use semantic landmarks and skip navigation; include Watch, Resources, Server, Events, and Settings; keep unavailable post-alpha checks out of primary navigation and do not expose protected content before auth state resolves.
 - **Test / verify:** Playwright-test unauthenticated redirects, active navigation, keyboard skip link, deep-link refresh, and narrow viewport shell behavior.
 - **Done when:** The application has a stable, accessible navigation frame ready for real pages.
 
@@ -788,11 +788,11 @@ Rules for every task:
 
 ## Phase 8 — Product UI completion and self-observation
 
-### T084 — Complete production overview behavior
+### T084 — Complete production Watch behavior
 
 - **Status:** Complete
 - **Commit:** `feat(web): complete live operational overview`
-- **Description:** Replace demo-only assumptions with production Overview composition: server health/CPU/RAM/disk, active resource groups, infrastructure, collector/persistence warnings, and recent events.
+- **Description:** Replace demo-only assumptions with production Watch composition: server health/CPU/RAM/disk, active resource groups, infrastructure, collector/persistence warnings, and recent events.
 - **Implement:** Prioritize unhealthy/stale resources and critical storage state; show no alert/incident UI beyond alpha scope; maintain usable mobile first viewport.
 - **Test / verify:** Playwright-test healthy, Docker-down, storage-degraded, empty-host, archived-only, dark/light, compact, and mobile scenarios.
 - **Done when:** The first screen fulfills the alpha operational questions under both normal and partial-failure conditions.

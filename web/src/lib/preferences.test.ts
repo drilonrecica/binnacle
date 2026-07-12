@@ -10,6 +10,14 @@ describe('theme resolution', () => {
 });
 
 describe('preference storage', () => {
+  it('defaults first-time users to the signature dark theme', () => {
+    const storage = { getItem: () => null } as unknown as Storage;
+    expect(preferences(storage)).toEqual({
+      theme: 'dark',
+      density: 'comfortable',
+    });
+  });
+
   it('reads Binnacle-scoped keys', () => {
     const values = new Map([
       ['binnacle.theme', 'dark'],
