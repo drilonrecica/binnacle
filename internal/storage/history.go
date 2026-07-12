@@ -10,12 +10,24 @@ import (
 type Metric string
 
 const (
-	MetricCPU        Metric = "cpu"
-	MetricMemory     Metric = "memory"
-	MetricNetworkRX  Metric = "network_rx"
-	MetricNetworkTX  Metric = "network_tx"
-	MetricBlockRead  Metric = "block_read"
-	MetricBlockWrite Metric = "block_write"
+	MetricCPU            Metric = "cpu"
+	MetricCPUUser        Metric = "cpu_user"
+	MetricCPUSystem      Metric = "cpu_system"
+	MetricCPUIOWait      Metric = "cpu_iowait"
+	MetricCPUSteal       Metric = "cpu_steal"
+	MetricMemory         Metric = "memory"
+	MetricSwap           Metric = "swap"
+	MetricLoad1          Metric = "load_1"
+	MetricLoad5          Metric = "load_5"
+	MetricLoad15         Metric = "load_15"
+	MetricNetworkRX      Metric = "network_rx"
+	MetricNetworkTX      Metric = "network_tx"
+	MetricNetworkPackets Metric = "network_packets"
+	MetricDiskRead       Metric = "disk_read"
+	MetricDiskWrite      Metric = "disk_write"
+	MetricDiskIOPS       Metric = "disk_iops"
+	MetricBlockRead      Metric = "block_read"
+	MetricBlockWrite     Metric = "block_write"
 )
 
 type Resolution string
@@ -84,11 +96,23 @@ func (q MetricQuery) Validate() error {
 	}
 	return nil
 }
+
+var hostMetrics = map[Metric]bool{
+	MetricCPU: true, MetricCPUUser: true, MetricCPUSystem: true, MetricCPUIOWait: true, MetricCPUSteal: true,
+	MetricMemory: true, MetricSwap: true,
+	MetricLoad1: true, MetricLoad5: true, MetricLoad15: true,
+	MetricNetworkRX: true, MetricNetworkTX: true,
+	MetricDiskRead: true, MetricDiskWrite: true, MetricDiskIOPS: true,
+}
+var resourceMetrics = map[Metric]bool{
+	MetricCPU: true, MetricMemory: true, MetricNetworkRX: true, MetricNetworkTX: true, MetricBlockRead: true, MetricBlockWrite: true,
+}
+
 func metricAllowed(scope string, metric Metric) bool {
 	if scope == "host" {
-		return metric == MetricCPU || metric == MetricMemory || metric == MetricNetworkRX || metric == MetricNetworkTX
+		return hostMetrics[metric]
 	}
-	return metric == MetricCPU || metric == MetricMemory || metric == MetricNetworkRX || metric == MetricNetworkTX || metric == MetricBlockRead || metric == MetricBlockWrite
+	return resourceMetrics[metric]
 }
 func selectResolution(d time.Duration) Resolution {
 	switch {
@@ -103,11 +127,15 @@ func selectResolution(d time.Duration) Resolution {
 	}
 }
 func metricUnit(metric Metric) string {
-	if metric == MetricCPU {
+	switch metric {
+	case MetricCPU, MetricCPUUser, MetricCPUSystem, MetricCPUIOWait, MetricCPUSteal:
 		return "percent"
-	}
-	if metric == MetricMemory {
+	case MetricMemory, MetricSwap:
 		return "bytes"
+	case MetricLoad1, MetricLoad5, MetricLoad15:
+		return "load"
+	case MetricDiskIOPS:
+		return "ops_per_second"
 	}
 	return "bytes_per_second"
 }
@@ -216,9 +244,19 @@ func (m *Manager) metricPoints(ctx context.Context, q MetricQuery, metric Metric
 	return out, rows.Err()
 }
 func metricSource(scope string, metric Metric, res Resolution) (string, string, string, string, string, error) {
-	raw := map[Metric]string{MetricCPU: "cpu_busy_pct", MetricMemory: "memory_used_bytes", MetricNetworkRX: "network_rx_bps", MetricNetworkTX: "network_tx_bps", MetricBlockRead: "block_read_bps", MetricBlockWrite: "block_write_bps"}
-	prefix := map[Metric]string{MetricCPU: "cpu", MetricMemory: "memory", MetricNetworkRX: "network_rx", MetricNetworkTX: "network_tx", MetricBlockRead: "block_read", MetricBlockWrite: "block_write"}[metric]
-	if raw[metric] == "" || prefix == "" {
+	raw := map[Metric]string{
+		MetricCPU: "cpu_busy_pct", MetricCPUUser: "cpu_user_pct", MetricCPUSystem: "cpu_system_pct", MetricCPUIOWait: "cpu_iowait_pct", MetricCPUSteal: "cpu_steal_pct",
+		MetricMemory: "memory_used_bytes", MetricSwap: "swap_used_bytes",
+		MetricLoad1: "load_1", MetricLoad5: "load_5", MetricLoad15: "load_15",
+		MetricNetworkRX: "network_rx_bps", MetricNetworkTX: "network_tx_bps",
+		MetricDiskRead: "disk_read_bps", MetricDiskWrite: "disk_write_bps",
+		MetricBlockRead: "block_read_bps", MetricBlockWrite: "block_write_bps",
+	}
+	prefix := map[Metric]string{
+		MetricCPU: "cpu", MetricMemory: "memory", MetricNetworkRX: "network_rx", MetricNetworkTX: "network_tx",
+		MetricBlockRead: "block_read", MetricBlockWrite: "block_write",
+	}[metric]
+	if raw[metric] == "" {
 		return "", "", "", "", "", fmt.Errorf("unsupported metric")
 	}
 	if res == ResolutionRaw {
@@ -228,6 +266,9 @@ func metricSource(scope string, metric Metric, res Resolution) (string, string, 
 		}
 		column := raw[metric]
 		return column, column, column, "", table, nil
+	}
+	if prefix == "" {
+		return "", "", "", "", "", fmt.Errorf("unsupported metric for rollup resolution")
 	}
 	count := prefix + "_count"
 	if metric == MetricCPU {

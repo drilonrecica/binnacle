@@ -68,17 +68,39 @@ func (s CollectorState) Valid() bool {
 }
 
 type HostObservation struct {
-	At               time.Time `json:"at"`
-	CPUPercent       *float64  `json:"cpuPct"`
-	MemoryUsedBytes  *int64    `json:"memoryUsedBytes"`
-	MemoryPercent    *float64  `json:"memoryPct"`
-	Load1            *float64  `json:"load1"`
-	NetworkRXBPS     *float64  `json:"networkRxBps"`
-	NetworkTXBPS     *float64  `json:"networkTxBps"`
-	MemoryTotalBytes *int64    `json:"memoryTotalBytes"`
-	DiskUsedBytes    *int64    `json:"diskUsedBytes"`
-	DiskTotalBytes   *int64    `json:"diskTotalBytes"`
-	UptimeSeconds    *float64  `json:"uptimeSeconds"`
+	At                   time.Time `json:"at"`
+	CPUPercent           *float64  `json:"cpuPct"`
+	CPUUserPercent       *float64  `json:"cpuUserPct"`
+	CPUSystemPercent     *float64  `json:"cpuSystemPct"`
+	CPUIOWaitPercent     *float64  `json:"cpuIOWaitPct"`
+	CPUStealPercent      *float64  `json:"cpuStealPct"`
+	MemoryUsedBytes      *int64    `json:"memoryUsedBytes"`
+	MemoryTotalBytes     *int64    `json:"memoryTotalBytes"`
+	MemoryAvailableBytes *int64    `json:"memoryAvailableBytes"`
+	MemoryPercent        *float64  `json:"memoryPct"`
+	MemoryCachedBytes    *int64    `json:"memoryCachedBytes"`
+	MemoryBuffersBytes   *int64    `json:"memoryBuffersBytes"`
+	SwapUsedBytes        *int64    `json:"swapUsedBytes"`
+	SwapTotalBytes       *int64    `json:"swapTotalBytes"`
+	SwapPercent          *float64  `json:"swapPct"`
+	Load1                *float64  `json:"load1"`
+	Load5                *float64  `json:"load5"`
+	Load15               *float64  `json:"load15"`
+	NetworkRXBPS         *float64  `json:"networkRxBps"`
+	NetworkTXBPS         *float64  `json:"networkTxBps"`
+	NetworkRXPacketsPS   *float64  `json:"networkRxPacketsPs"`
+	NetworkTXPacketsPS   *float64  `json:"networkTxPacketsPs"`
+	NetworkRXErrorsDelta *int64    `json:"networkRxErrorsDelta"`
+	NetworkTXErrorsDelta *int64    `json:"networkTxErrorsDelta"`
+	NetworkRXDropsDelta  *int64    `json:"networkRxDropsDelta"`
+	NetworkTXDropsDelta  *int64    `json:"networkTxDropsDelta"`
+	DiskReadBPS          *float64  `json:"diskReadBps"`
+	DiskWriteBPS         *float64  `json:"diskWriteBps"`
+	DiskReadIOPS         *float64  `json:"diskReadIops"`
+	DiskWriteIOPS        *float64  `json:"diskWriteIops"`
+	DiskUsedBytes        *int64    `json:"diskUsedBytes"`
+	DiskTotalBytes       *int64    `json:"diskTotalBytes"`
+	UptimeSeconds        *float64  `json:"uptimeSeconds"`
 }
 type ContainerObservation struct {
 	ID             ContainerID    `json:"id"`
@@ -93,9 +115,16 @@ type ContainerObservation struct {
 	Status         ResourceStatus `json:"status"`
 }
 type ResourceComponent struct {
-	ID     ContainerID    `json:"id"`
-	Name   string         `json:"name"`
-	Status ResourceStatus `json:"status"`
+	ID             ContainerID    `json:"id"`
+	Name           string         `json:"name"`
+	Status         ResourceStatus `json:"status"`
+	CPUHostPercent *float64       `json:"cpuHostPct,omitempty"`
+	MemoryBytes    *int64         `json:"memoryBytes,omitempty"`
+	RXBPS          *float64       `json:"rxBps,omitempty"`
+	TXBPS          *float64       `json:"txBps,omitempty"`
+	BlockReadBPS   *float64       `json:"blockReadBps,omitempty"`
+	BlockWriteBPS  *float64       `json:"blockWriteBps,omitempty"`
+	PIDs           *uint64        `json:"pids,omitempty"`
 }
 type ResourceSnapshot struct {
 	ID             ResourceID          `json:"id"`
@@ -123,11 +152,15 @@ type CollectorHealth struct {
 	FreshAt time.Time      `json:"freshAt"`
 }
 type Event struct {
-	ID         Sequence   `json:"id"`
-	At         time.Time  `json:"at"`
-	Type       string     `json:"type"`
-	ResourceID ResourceID `json:"resourceId,omitempty"`
-	Message    string     `json:"message"`
+	ID                Sequence    `json:"id"`
+	At                time.Time   `json:"at"`
+	Type              string      `json:"type"`
+	ResourceID        ResourceID  `json:"resourceId,omitempty"`
+	ContainerInstance ContainerID `json:"containerInstanceId,omitempty"`
+	Severity          string      `json:"severity,omitempty"`
+	Message           string      `json:"message"`
+	Details           string      `json:"details,omitempty"`
+	CorrelationKey    string      `json:"correlationKey,omitempty"`
 }
 type Snapshot struct {
 	Sequence     Sequence                   `json:"seq"`
@@ -137,10 +170,26 @@ type Snapshot struct {
 	Resources    []ResourceSnapshot         `json:"resources"`
 	Collectors   map[string]CollectorHealth `json:"collectors"`
 }
-type PersistenceBatch struct {
-	Snapshot Snapshot
-	Events   []Event
+type FilesystemObservation struct {
+	At                time.Time `json:"at"`
+	MountKey          string    `json:"mountKey"`
+	MountPoint        string    `json:"mountPoint"`
+	FSType            string    `json:"fsType"`
+	TotalBytes        *int64    `json:"totalBytes"`
+	UsedBytes         *int64    `json:"usedBytes"`
+	AvailableBytes    *int64    `json:"availableBytes"`
+	UsedPercent       *float64  `json:"usedPct"`
+	InodesTotal       *int64    `json:"inodesTotal"`
+	InodesUsed        *int64    `json:"inodesUsed"`
+	InodesUsedPercent *float64  `json:"inodesUsedPct"`
 }
+
+type PersistenceBatch struct {
+	Snapshot    Snapshot
+	Events      []Event
+	Filesystems []FilesystemObservation
+}
+
 type TimeRange struct{ From, To time.Time }
 
 func (r TimeRange) Validate() error {

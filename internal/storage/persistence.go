@@ -20,6 +20,7 @@ type Persistence struct {
 	Dropped        atomic.Uint64
 	QueueDepth     atomic.Int64
 	LastWriteNanos atomic.Int64
+	Paused         atomic.Bool
 	cancel         context.CancelFunc
 	wg             sync.WaitGroup
 }
@@ -43,18 +44,23 @@ func (p *Persistence) Start(parent context.Context) error {
 		if batch.Snapshot.Sequence == 0 {
 			return
 		}
+		if p.Store != nil && p.Store.EmergencyPause() {
+			p.Paused.Store(true)
+			p.Dropped.Add(1)
+			return
+		}
+		p.Paused.Store(false)
 		select {
 		case queue <- batch:
 			p.QueueDepth.Store(int64(len(queue)))
 		default:
+			// Drop the oldest batch to make room for the newest one.
 			select {
 			case <-queue:
 				p.Dropped.Add(1)
-				p.QueueDepth.Store(int64(len(queue)))
 			default:
-				{
-				}
 			}
+			p.QueueDepth.Store(int64(len(queue)))
 			select {
 			case queue <- batch:
 				p.QueueDepth.Store(int64(len(queue)))

@@ -21,5 +21,5 @@ func NormalizeDocker(e dockerapi.Event, oomKilled bool) (metrics.Event, bool) {
 		kind = "container_oom"
 	}
 	at, _ := time.Parse(time.RFC3339, e.Time)
-	return metrics.Event{At: at.UTC(), Type: kind, Message: kind + " for container", ResourceID: ""}, true
+	return metrics.Event{At: at.UTC(), Type: kind, Message: kind + " for container", ContainerInstance: metrics.ContainerID(e.ID), Details: `{"action":"` + e.Action + `"}`, CorrelationKey: e.ID}, true
 }

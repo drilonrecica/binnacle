@@ -12,6 +12,7 @@ type Engine struct {
 	mu          sync.RWMutex
 	snapshot    Snapshot
 	events      []Event
+	filesystems []FilesystemObservation
 	maxEvents   int
 	subscribers map[uint64]chan Snapshot
 	live        map[uint64]chan LiveMessage
@@ -22,7 +23,7 @@ type Engine struct {
 func (e *Engine) PersistenceBatch() PersistenceBatch {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return PersistenceBatch{Snapshot: clone(e.snapshot), Events: append([]Event(nil), e.events...)}
+	return PersistenceBatch{Snapshot: clone(e.snapshot), Events: append([]Event(nil), e.events...), Filesystems: append([]FilesystemObservation(nil), e.filesystems...)}
 }
 
 func NewEngine(maxEvents int) *Engine {
@@ -111,6 +112,11 @@ func (e *Engine) Subscribe() *Subscription {
 			close(c)
 		}
 	}}
+}
+func (e *Engine) PublishFilesystems(obs []FilesystemObservation) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.filesystems = append([]FilesystemObservation(nil), obs...)
 }
 func (e *Engine) Snapshot() Snapshot { e.mu.RLock(); defer e.mu.RUnlock(); return clone(e.snapshot) }
 func (e *Engine) SSEClients() int    { e.mu.RLock(); defer e.mu.RUnlock(); return len(e.live) }

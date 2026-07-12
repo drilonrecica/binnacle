@@ -51,11 +51,11 @@ func (g *Generator) Events(step uint64) []metrics.Event {
 	now := g.clock.Now().UTC()
 	switch {
 	case step%17 == 0:
-		return []metrics.Event{{ID: metrics.Sequence(step + 1), At: now, Type: "resource_archived", ResourceID: "res_demo_web", Message: "Demo resource archived"}}
+		return []metrics.Event{{ID: metrics.Sequence(step + 1), At: now, Type: "resource_archived", ResourceID: "res_demo_web", Severity: "info", Message: "Demo resource archived", Details: `{"reason":"scheduled"}`}}
 	case step%11 == 0:
-		return []metrics.Event{{ID: metrics.Sequence(step + 1), At: now, Type: "collector_degraded", Message: "Demo collector degraded"}}
+		return []metrics.Event{{ID: metrics.Sequence(step + 1), At: now, Type: "collector_degraded", Severity: "warning", Message: "Demo collector degraded", Details: `{"collector":"docker"}`}}
 	case step%7 == 0:
-		return []metrics.Event{{ID: metrics.Sequence(step + 1), At: now, Type: "oom", ResourceID: "res_demo_web", Message: "Demo out-of-memory restart"}}
+		return []metrics.Event{{ID: metrics.Sequence(step + 1), At: now, Type: "oom", ResourceID: "res_demo_web", Severity: "critical", Message: "Demo out-of-memory restart", Details: `{"container":"demo-container-1"}`}}
 	}
 	return nil
 }

@@ -5,7 +5,6 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"embed"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,15 +13,14 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/drilonrecica/talos/migrations"
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/sys/unix"
 )
 
 const MinimumFreeSpace = 64 << 20
-
-//go:embed migrations/*.sql
-var migrationFiles embed.FS
 
 // Manager owns TALOS's SQLite connection and acts as an app lifecycle component.
 type Manager struct {
@@ -31,6 +29,22 @@ type Manager struct {
 	mu               sync.Mutex
 	workerCancel     context.CancelFunc
 	workerWG         sync.WaitGroup
+	prevCollectors   map[string]string
+	retention        RetentionCutoffs
+	budget           DatabaseBudget
+	emergencyPause   bool
+}
+
+// RetentionCutoffs configures how long each resolution tier is kept.
+type RetentionCutoffs struct {
+	Raw, OneMinute, FifteenMinute, OneHour time.Duration
+}
+
+// DatabaseBudget exposes the current budget state to callers.
+type DatabaseBudget struct {
+	UsedBytes   int64
+	TargetBytes int64
+	State       BudgetState
 }
 
 func New(path, runtimeDir string) *Manager { return &Manager{Path: path, RuntimeDir: runtimeDir} }
@@ -47,9 +61,10 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.mu.Lock()
 	m.workerCancel = cancel
 	m.mu.Unlock()
-	m.workerWG.Add(2)
+	m.workerWG.Add(3)
 	go func() { defer m.workerWG.Done(); m.runDeletionWorker(workerCtx) }()
 	go func() { defer m.workerWG.Done(); m.runRollups(workerCtx) }()
+	go func() { defer m.workerWG.Done(); m.runRetentionAndBudget(workerCtx) }()
 	return nil
 }
 func (m *Manager) Stop(context.Context) error {
@@ -134,7 +149,7 @@ func (m *Manager) migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"); err != nil {
 		return err
 	}
-	entries, err := fs.Glob(migrationFiles, "migrations/*.sql")
+	entries, err := fs.Glob(migrations.FS(), "*.sql")
 	if err != nil {
 		return err
 	}
@@ -153,7 +168,7 @@ func (m *Manager) migrate(ctx context.Context, db *sql.DB) error {
 		if present > 0 {
 			continue
 		}
-		sqlBytes, err := migrationFiles.ReadFile(entry)
+		sqlBytes, err := migrations.FS().ReadFile(entry)
 		if err != nil {
 			return err
 		}
