@@ -6,7 +6,7 @@ Monitoring credentials are high-risk.
 
 ## Decision
 
-Binnacle observes; it does not mutate workloads. See [SPEC §6](../docs/SPEC.md#6-product-principles).
+Binnacle observes; it does not mutate workloads. See the [read-only guarantee](../docs/PRODUCT.md#security-privacy-and-read-only-guarantees).
 
 ## Consequences
 

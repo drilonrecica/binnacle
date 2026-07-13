@@ -6,7 +6,7 @@ Local history needs bounded storage and useful long-term resolution.
 
 ## Decision
 
-Use raw data plus rollup tiers. See [SPEC §24](../docs/SPEC.md#24-retention-rollups-and-storage-budget).
+Use raw data plus rollup tiers. See [Product architecture](../docs/PRODUCT.md#architecture-and-persistence-constraints).
 
 ## Consequences
 

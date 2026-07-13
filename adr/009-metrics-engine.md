@@ -6,7 +6,7 @@ Live reads must not contend with historical persistence.
 
 ## Decision
 
-Keep current state in the Metrics Engine. See [SPEC §10.2](../docs/SPEC.md#102-metrics-engine-as-single-source-of-truth).
+Keep current state in the Metrics Engine. See [Product architecture](../docs/PRODUCT.md#architecture-and-persistence-constraints).
 
 ## Consequences
 

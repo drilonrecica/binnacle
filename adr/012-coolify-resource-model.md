@@ -6,7 +6,7 @@ Coolify metadata improves grouping but Docker remains the runtime basis.
 
 ## Decision
 
-Model Coolify when present while retaining Docker compatibility. See [SPEC §16](../docs/SPEC.md#16-resource-model-and-identity).
+Model Coolify when present while retaining Docker compatibility. See [Product purpose](../docs/PRODUCT.md#purpose-and-audience).
 
 ## Consequences
 

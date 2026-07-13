@@ -6,7 +6,7 @@ Deployment must stay simple and self-contained.
 
 ## Decision
 
-Ship one Go process with embedded frontend assets. See [SPEC §10](../docs/SPEC.md#101-one-binary-internally-modular).
+Ship one Go process with embedded frontend assets. See [Product architecture](../docs/PRODUCT.md#architecture-and-persistence-constraints).
 
 ## Consequences
 

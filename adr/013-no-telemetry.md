@@ -6,7 +6,7 @@ Operators expect local monitoring to stay private.
 
 ## Decision
 
-Do not send telemetry by default. See [SPEC §2](../docs/SPEC.md#2-open-source-and-product-position).
+Do not send telemetry by default. See the [privacy guarantee](../docs/PRODUCT.md#security-privacy-and-read-only-guarantees).
 
 ## Consequences
 

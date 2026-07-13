@@ -4,55 +4,85 @@
 
 > Lightweight, Coolify-aware monitoring for Docker servers.
 
-Binnacle is an AGPL-3.0-only, self-hosted monitoring dashboard for Linux servers
-running Docker workloads. It is designed for developers and small teams that
-want host and logical-service visibility, local metric history, and a small
-operational footprint without running a separate observability stack.
+Binnacle is a self-hosted dashboard for developers and small teams operating
+Docker workloads on a Linux server. It combines live host and workload metrics,
+local history, Coolify/Compose-aware grouping, HTTP checks, deterministic
+alerts, timed silences, and effective resource health without requiring a
+separate observability stack.
 
-## Alpha status
+## Status
 
-The repository is implementing `v0.1.0-alpha.1`. The alpha scope is limited
-to single-server Linux/Docker monitoring, including Coolify/Compose-aware
-resource grouping, local SQLite history, live updates, and one local admin.
-Notifications, health checks, logs, multi-server operation, and Docker
-workload controls are not part of this release.
+The v0.2 feature set is implemented, but v0.2 has not been released or tagged.
+Builds from this repository are development builds. See the [roadmap](ROADMAP.md)
+and [release checklist](docs/operations/release-checklist.md) for current scope
+and qualification status.
 
-Binnacle is permanently read-only with respect to monitored hosts and Docker
-workloads. It does not restart, stop, delete, exec into, or redeploy
-containers. The Docker socket remains privileged even when mounted read-only;
-see the security documentation before deployment.
+## Guarantees and scope
 
-## Product guarantees
+- **Read-only permanently:** Binnacle observes hosts and Docker workloads. It
+  does not restart, stop, delete, exec into, or redeploy containers.
+- **Local-first:** metrics, checks, alerts, configuration, and history remain on
+  the monitored server. Core operation needs no SaaS service and sends no
+  telemetry by default.
+- **Small deployment:** one Go process, one SQLite database, and an embedded web
+  interface; queues, collection, and persistence are bounded.
+- **Docker-compatible, Coolify-aware:** ordinary Docker and Compose work without
+  Coolify; available metadata improves logical resource grouping.
+- **Single-server:** one Binnacle instance monitors one Linux Docker server.
 
-- **Local-first:** core monitoring works offline and sends no telemetry by
-  default.
-- **Low overhead:** Go, SQLite, embedded frontend assets, and bounded
-  collection/persistence work are the intended production architecture.
-- **Coolify-first, Docker-compatible:** Coolify metadata improves grouping,
-  but ordinary Docker and Compose deployments remain supported.
-- **Single server first:** federation and agents are explicitly deferred.
+Supported targets are Ubuntu 22.04/24.04 and Debian 12/13 on amd64 or arm64,
+with Docker Engine 24 or newer. Coolify is the primary deployment path and
+Docker Compose is the portable alternative. Kubernetes, Podman, non-Linux
+hosts, and workload control are unsupported.
 
-## Supported alpha target
+## Quick start
 
-The supported deployment path is a Coolify-managed Docker service, with
-Docker Compose as the portable alternative. Alpha targets Ubuntu 22.04/24.04
-and Debian 12/13 on amd64 or arm64 with Docker Engine 24 or newer. Kubernetes,
-Podman, non-Linux hosts, and Docker workload management are out of scope.
+No public v0.2 image exists yet. To evaluate the current development build with
+synthetic data:
 
-## Project documentation
+```bash
+git clone https://github.com/drilonrecica/binnacle.git
+cd binnacle
+make dev-demo
+```
 
-- [Product and technical specification](docs/SPEC.md)
-- [Implementation backlog](docs/TASKS.md)
-- [Contributing guide](CONTRIBUTING.md)
+Open `http://127.0.0.1:8080` and complete setup. This uses a fresh temporary
+database on each run. For Coolify, Compose, hardened deployments, and
+configuration details, follow the
+[installation guide](docs/operations/install.md).
+
+> **Docker socket warning:** a Docker socket is privileged even when its
+> filesystem mount is read-only. Binnacle contains no mutation paths, but a
+> compromised process with socket access may control Docker. Prefer a
+> constrained read-only socket proxy where practical; see [Security](SECURITY.md).
+
+## Development
+
+The supported local entry points are:
+
+```bash
+make dev-demo       # application with deterministic synthetic data
+make dev-host       # application against the local host and Docker engine
+make check          # formatting, static checks, and test suite
+make build          # production binary and embedded frontend
+make test           # Go and frontend unit tests
+```
+
+Frontend end-to-end suites require Playwright and are documented by
+`make help`. Release qualification uses `./scripts/release-gate.sh`.
+
+## Documentation
+
+- [Product boundaries and guarantees](docs/PRODUCT.md)
+- [Roadmap](ROADMAP.md)
+- [Checks and alerts](docs/CHECKS_AND_ALERTS.md)
+- [Installation](docs/operations/install.md), [upgrades](docs/operations/upgrade.md), and [recovery](docs/operations/recovery.md)
 - [Security policy](SECURITY.md)
-- [Governance and ADR process](GOVERNANCE.md)
-- [Project notice](NOTICE)
+- [Contributing guide](CONTRIBUTING.md) and [governance](GOVERNANCE.md)
+- [Architecture decision records](adr/)
 
 ## License
 
-Binnacle is licensed under [AGPL-3.0-only](LICENSE). If you modify Binnacle and
-make the modified version available for users to interact with over a network,
-the AGPL requires you to offer those users the corresponding source code.
-
-The software license does not grant rights to the Binnacle name or logo.
-Naming and trademark policy will be documented before a stable release.
+Binnacle is licensed under [AGPL-3.0-only](LICENSE). Network users of a modified
+version must be offered its corresponding source as required by the license.
+The license does not grant rights to the Binnacle name or logo.

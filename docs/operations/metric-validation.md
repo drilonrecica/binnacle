@@ -12,7 +12,7 @@ Docker interfaces, and how to verify them.
 | Load | `/proc/loadavg` first field | 1-minute load average. |
 | Uptime | `/proc/uptime` first field | Seconds since boot. |
 | Network RX/TX | `/proc/net/dev` counters | Rates are deltas over elapsed time; counters never decrease. |
-| Disk used/total | `statfs` on `/proc/1/root` | Matches `df` block counts where the same mount is visible. |
+| Filesystem used/total and inodes | `/proc/self/mountinfo` plus `statfs` for each retained mount | Matches `df` for mounts visible in Binnacle's host mount namespace. Pseudo and duplicate filesystems are filtered. |
 
 ## Docker metrics
 
@@ -32,9 +32,10 @@ Docker interfaces, and how to verify them.
 - **CPU host percent:** Binnacle reports percent of one host core. A container
   using two full cores on a four-core host reports `200%` in `docker stats` but
   `50%` host percent here.
-- **Disk:** Binnacle measures the root filesystem visible at `/proc/1/root`. This
-  matches the host root on typical single-disk deployments but differs from
-  per-container overlay sizes.
+- **Filesystems:** Binnacle reads mount inventory from the configured host
+  `/proc` tree, then calls `statfs` on each visible mount point. Container
+  overlay and pseudo-filesystems are filtered; bind-mount visibility still
+  depends on the deployment mounts.
 
 ## Running the reference suite
 

@@ -6,7 +6,7 @@ Slow consumers must not exhaust memory or block collection.
 
 ## Decision
 
-Bound queues and explicitly degrade under pressure. See [SPEC §10.3](../docs/SPEC.md#103-concurrency-model).
+Bound queues and explicitly degrade under pressure. See [Product architecture](../docs/PRODUCT.md#architecture-and-persistence-constraints).
 
 ## Consequences
 

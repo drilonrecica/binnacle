@@ -6,7 +6,7 @@ Binnacle needs a small, single-process Linux service.
 
 ## Decision
 
-Use Go for the backend. See [SPEC §10](../docs/SPEC.md#10-high-level-architecture).
+Use Go for the backend. See [Product architecture](../docs/PRODUCT.md#architecture-and-persistence-constraints).
 
 ## Consequences
 

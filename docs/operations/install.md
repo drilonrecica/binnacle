@@ -1,6 +1,11 @@
 # Installation
 
-Binnacle is distributed as a container image. The supported paths are Coolify (one-click service), Docker Compose, or GHCR.
+Binnacle is distributed as a container image. The supported paths are Coolify
+(one-click service), Docker Compose, or GHCR.
+
+> **Development status:** v0.2 is implemented but no v0.2 tag or image has been
+> published. The `stable` examples below apply to published releases; qualify a
+> source-built `local` image before using unreleased code in production.
 
 ## Requirements
 
@@ -30,14 +35,29 @@ The Coolify template mounts the host `/proc`, `/sys`, `/etc/os-release`, and the
 
 ## Install with Docker Compose
 
+For a published release:
+
 ```bash
 git clone https://github.com/drilonrecica/binnacle.git
 cd binnacle
 export BINNACLE_SETUP_TOKEN="$(openssl rand -hex 32)"
+export DOCKER_GID="$(getent group docker | cut -d: -f3)"
 docker compose -f packaging/docker/docker-compose.yml up -d
 ```
 
 Then open `http://127.0.0.1:8080` and complete onboarding.
+
+To evaluate the unreleased source tree, build the local image and explicitly
+override the Compose image:
+
+```bash
+make image
+export BINNACLE_IMAGE=ghcr.io/drilonrecica/binnacle:local
+docker compose -f packaging/docker/docker-compose.yml up -d
+```
+
+This uses the same mounts, limits, and persistent volume as the published
+release path. Do not treat an unqualified development image as a release.
 
 ## Bootstrap credentials
 
@@ -66,4 +86,6 @@ Key variables you may need to set at deployment time:
 - `BINNACLE_DOCKER_SOCKET` — defaults to `/var/run/docker.sock`.
 - `BINNACLE_MASTER_KEY` — 32-byte hex key for encrypting UI-entered secrets.
 
-See `docs/SPEC.md` for the full configuration model.
+Additional settings are available in the authenticated Settings interface. See
+the [product boundaries](../PRODUCT.md) for the supported runtime and security
+model.

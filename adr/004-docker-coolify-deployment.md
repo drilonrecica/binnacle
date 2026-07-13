@@ -6,11 +6,11 @@ The initial operational target is a Linux Docker host.
 
 ## Decision
 
-Support Docker and Coolify first. See [SPEC §4](../docs/SPEC.md#4-target-users-and-environments).
+Support Docker and Coolify first. See the [supported boundary](../docs/PRODUCT.md#supported-boundary).
 
 ## Consequences
 
-Other orchestrators are outside alpha scope.
+Other orchestrators are outside the supported scope.
 
 ## Alternatives
 

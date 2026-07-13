@@ -35,12 +35,14 @@ NNN-short-title.md
 ```
 
 An ADR contains context, the decision, consequences, considered alternatives,
-and links to the relevant specification section. An ADR supersedes an earlier
-ADR only when it says so explicitly. The product specification remains the
-source of truth unless the maintainer records an amendment.
+and links to the relevant product boundary or earlier decision. An ADR
+supersedes an earlier ADR only when it says so explicitly. `docs/PRODUCT.md`
+defines durable product boundaries, `ROADMAP.md` communicates non-binding
+direction, and accepted ADRs record implementation decisions.
 
 ## Releases
 
-Releases follow semantic prerelease versions until 1.0. Exact version tags are
-immutable. `stable` must not reference alpha or beta releases; `beta` may
-reference beta or release-candidate builds; `edge` is development-only.
+Releases follow semantic versions. Exact version tags are immutable. `stable`
+must not reference prereleases; `beta` may reference beta or release-candidate
+builds; `edge` is development-only. Implemented work is not released until a
+tag is published.

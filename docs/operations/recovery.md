@@ -8,7 +8,10 @@ When the database or WAL grows past configured thresholds, Binnacle enters a deg
 - **Critical** — additional expired cleanup runs.
 - **Emergency** — raw 10-second persistence pauses; rollups, settings, and events are preserved.
 
-The live Metrics Engine and SSE continue to work during storage pressure. Free disk space or reduce retention, then restart Binnacle. Persistence resumes automatically once the budget is below emergency level.
+The live Metrics Engine and SSE continue to work during storage pressure. Free
+disk space or reduce retention. Binnacle reevaluates the database budget every
+minute and automatically resumes raw persistence after usage falls below the
+emergency threshold; no restart is required.
 
 ## Corruption
 
@@ -29,14 +32,19 @@ If startup migration fails with an integrity error:
 
 4. If the database is corrupt, restore from your most recent backup or start with a fresh database. Binnacle does not automatically repair or delete a corrupt database.
 
-## Consistent SQLite copy
+## Consistent database backup
 
-To back up or inspect the database while Binnacle is running, use SQLite's online backup rather than copying open files:
+The production image does not include the SQLite CLI. Stop Binnacle before
+copying the database so the process closes SQLite and checkpoints its WAL:
 
 ```bash
-docker exec binnacle sqlite3 /var/lib/binnacle/binnacle.db ".backup /var/lib/binnacle/binnacle-backup.db"
-docker cp binnacle:/var/lib/binnacle/binnacle-backup.db ./binnacle-backup.db
+docker compose -f packaging/docker/docker-compose.yml stop binnacle
+docker cp binnacle:/var/lib/binnacle/binnacle.db ./binnacle-backup.db
+docker compose -f packaging/docker/docker-compose.yml start binnacle
 ```
+
+Do not copy an open `binnacle.db` without its WAL. For an online backup, use a
+trusted host-side SQLite tool and its backup API against the persistent volume.
 
 ## Reset monitoring history
 

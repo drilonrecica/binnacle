@@ -84,7 +84,7 @@
           </p>
           <p class="hero-summary">
             Binnacle shows host pressure, container usage, Coolify and Compose
-            services, restarts, OOMs, events, and local history in one
+            services, checks, alerts, effective health, events, and local history in one
             lightweight, read-only dashboard — without Prometheus, Grafana, or
             external telemetry.
           </p>
@@ -92,15 +92,15 @@
             <a
               class="button primary"
               href="https://github.com/drilonrecica/binnacle/blob/master/docs/operations/install.md"
-              >View alpha install guide</a
+              >View development install guide</a
             >
             <a class="button" href="https://github.com/drilonrecica/binnacle"
               >View source</a
             >
           </div>
           <p class="release-note">
-            <strong>Pre-release:</strong> v0.1.0-alpha.1 is under development.
-            No public release has been published yet.
+            <strong>Pre-release:</strong> v0.2 is implemented and undergoing
+            release qualification. No v0.2 tag has been published yet.
           </p>
         </div>
 
@@ -331,16 +331,16 @@
           <div>
             <strong>IN DEVELOPMENT</strong>
             <p>
-              Binnacle is being prepared for v0.1.0-alpha.1. The first alpha
-              focuses on single-server Docker and Coolify monitoring, local
-              history, live updates, and read-only operation.
+              The v0.2 feature set is implemented. Release qualification is in
+              progress and no v0.2 tag has been published.
             </p>
           </div>
           <div>
-            <strong>NOT IN ALPHA</strong>
+            <strong>NEXT</strong>
             <p>
-              Notifications, HTTP/TLS health checks, container logs,
-              multi-server monitoring, and workload controls.
+              Notifications and incident grouping. Container logs,
+              multi-server monitoring, and workload controls remain later or
+              excluded scope.
             </p>
           </div>
         </div>
@@ -355,7 +355,7 @@
           <span>05</span>
           <div>
             <p>DEPLOYMENT SEQUENCE</p>
-            <h2 id="quickstart-title">Prepare the alpha install.</h2>
+            <h2 id="quickstart-title">Run the development build.</h2>
           </div>
         </header>
         <div class="requirements">
@@ -401,9 +401,9 @@ export DOCKER_GID="$(getent group docker | cut -d: -f3)"</code></pre>
             <div>
               <h3>Follow the release-aware guide</h3>
               <p>
-                No public alpha image has been released yet. The guide records
-                the supported paths and will carry the exact published image
-                tag when alpha.1 is available.
+                No public v0.2 image has been released yet. The guide records
+                supported source-build paths and will carry the exact image tag
+                after release.
               </p>
               <a
                 class="button primary"
@@ -448,16 +448,16 @@ export DOCKER_GID="$(getent group docker | cut -d: -f3)"</code></pre>
             ><span>REF / 02</span>Source repository</a
           >
           <a
-            href="https://github.com/drilonrecica/binnacle/blob/master/docs/SPEC.md"
-            ><span>REF / 03</span>Product and technical specification</a
+            href="https://github.com/drilonrecica/binnacle/blob/master/docs/PRODUCT.md"
+            ><span>REF / 03</span>Product boundaries</a
           >
           <a
             href="https://github.com/drilonrecica/binnacle/blob/master/SECURITY.md"
             ><span>REF / 04</span>Security policy</a
           >
           <a
-            href="https://github.com/drilonrecica/binnacle/blob/master/CONTRIBUTING.md"
-            ><span>REF / 05</span>Contributing guide</a
+            href="https://github.com/drilonrecica/binnacle/blob/master/ROADMAP.md"
+            ><span>REF / 05</span>Roadmap</a
           >
           <a
             href="https://github.com/drilonrecica/binnacle/blob/master/LICENSE"

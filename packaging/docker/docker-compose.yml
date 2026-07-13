@@ -5,7 +5,7 @@
 
 services:
   binnacle:
-    image: ghcr.io/drilonrecica/binnacle:stable
+    image: ${BINNACLE_IMAGE:-ghcr.io/drilonrecica/binnacle:stable}
     container_name: binnacle
     restart: unless-stopped
     read_only: true

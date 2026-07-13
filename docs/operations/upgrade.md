@@ -6,10 +6,10 @@ Binnacle does not self-update. Upgrades are performed by replacing the container
 
 Container tags follow semantic versioning:
 
-- `stable` — release builds only (no alpha/beta).
+- `stable` — release builds only (no prereleases).
 - `beta` — beta and release-candidate builds.
-- `edge` — development builds (including alpha).
-- Exact version tags such as `v0.1.0-alpha.1` are immutable.
+- `edge` — development builds.
+- Exact version tags such as `v0.2.0` are immutable.
 
 Pick a channel in your Compose file or Coolify service settings:
 
@@ -19,9 +19,11 @@ image: ghcr.io/drilonrecica/binnacle:stable
 
 ## Upgrade process
 
-1. Back up the SQLite database:
+1. Stop Binnacle and copy the closed SQLite database. This ensures the WAL is
+   checkpointed before the backup:
 
    ```bash
+   docker compose -f packaging/docker/docker-compose.yml stop binnacle
    docker cp binnacle:/var/lib/binnacle/binnacle.db ./binnacle-backup.db
    ```
 

@@ -6,7 +6,7 @@ Deployments replace container IDs while logical services persist.
 
 ## Decision
 
-Separate stable logical resource IDs from container instance IDs. See [SPEC §16](../docs/SPEC.md#16-resource-model-and-identity).
+Separate stable logical resource IDs from container instance IDs. See [Product architecture](../docs/PRODUCT.md#architecture-and-persistence-constraints).
 
 ## Consequences
 

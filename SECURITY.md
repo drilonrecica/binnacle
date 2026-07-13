@@ -16,8 +16,8 @@ for a coordinated fix before public disclosure.
 
 ## Supported versions
 
-Before the first stable release, only the latest published alpha or beta is
-supported on a best-effort basis. Unsupported development commits may receive
+Before the first stable release, only the latest published prerelease is
+supported on a best-effort basis. Unreleased development commits may receive
 a fix, but no compatibility promise is made.
 
 ## Security boundaries
@@ -28,12 +28,12 @@ is highly privileged even if its filesystem mount is read-only; operators
 should prefer a constrained read-only socket proxy when their deployment model
 allows it.
 
-Binnacle sends no telemetry by default. Secrets entered through future settings
-surfaces must be encrypted at rest using an operator-supplied master key and
-must never be returned through an API.
+Binnacle sends no telemetry by default. Secrets stored through supported
+configuration surfaces are encrypted at rest using an operator-supplied master
+key and are never returned through an API.
 
 ## Dependency policy
 
 Dependencies must be maintained, license-compatible with AGPL-3.0-only, and
-kept to the minimum needed for the product. CI will add vulnerability, SBOM,
-and license checks during alpha implementation.
+kept to the minimum needed for the product. CI runs vulnerability, SBOM, and
+license checks as release gates.

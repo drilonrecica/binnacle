@@ -8,21 +8,69 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - run: |
           python3 - <<'PY'
-          import os, re, sys
-          missing = 0
-          for top in ('docs', 'adr'):
-              for root, _, files in os.walk(top):
-                  for name in files:
-                      if not name.endswith('.md'): continue
-                      path = os.path.join(root, name)
-                      with open(path) as f:
-                          for match in re.finditer(r'\]\(([^)]+\.md[^)]*)\)', f.read()):
-                              target = match.group(1).split('#')[0]
-                              if target.startswith(('http://', 'https://', 'mailto:')):
-                                  continue
-                              full = os.path.normpath(os.path.join(os.path.dirname(path), target))
-                              if not os.path.exists(full):
-                                  print(f'{path}: broken link to {target}', file=sys.stderr)
-                                  missing += 1
-          sys.exit(1 if missing else 0)
+          import os, re, sys, urllib.parse
+
+          errors = 0
+          markdown = sorted(
+              [name for name in os.listdir('.') if name.endswith('.md')]
+              + [
+                  os.path.join(root, name)
+                  for top in ('docs', 'adr')
+                  for root, _, files in os.walk(top)
+                  for name in files
+                  if name.endswith('.md')
+              ]
+          )
+
+          def anchors(path):
+              result = set()
+              counts = {}
+              with open(path, encoding='utf-8') as source:
+                  for line in source:
+                      match = re.match(r'^#{1,6}\s+(.+?)\s*#*$', line)
+                      if not match:
+                          continue
+                      slug = match.group(1).strip().lower()
+                      slug = re.sub(r'<[^>]+>', '', slug)
+                      slug = re.sub(r'[^\w\- ]', '', slug, flags=re.UNICODE)
+                      slug = re.sub(r'\s+', '-', slug)
+                      count = counts.get(slug, 0)
+                      counts[slug] = count + 1
+                      result.add(slug if count == 0 else f'{slug}-{count}')
+              return result
+
+          anchor_cache = {}
+          for path in markdown:
+              with open(path, encoding='utf-8') as source:
+                  content = source.read()
+              for match in re.finditer(r'\]\(([^)]+)\)', content):
+                  raw = match.group(1).strip().split()[0].strip('<>')
+                  parsed = urllib.parse.urlsplit(raw)
+                  if parsed.scheme in ('http', 'https', 'mailto'):
+                      continue
+                  target = urllib.parse.unquote(parsed.path)
+                  full = path if not target else os.path.normpath(
+                      os.path.join(os.path.dirname(path), target)
+                  )
+                  if not os.path.exists(full):
+                      print(f'{path}: broken link to {raw}', file=sys.stderr)
+                      errors += 1
+                      continue
+                  if parsed.fragment and os.path.isfile(full) and full.endswith('.md'):
+                      available = anchor_cache.setdefault(full, anchors(full))
+                      if urllib.parse.unquote(parsed.fragment).lower() not in available:
+                          print(f'{path}: broken anchor in {raw}', file=sys.stderr)
+                          errors += 1
+
+          with open('landing/index.html', encoding='utf-8') as source:
+              landing = source.read()
+          prefix = 'https://github.com/drilonrecica/binnacle/blob/master/'
+          for target in re.findall(r'href="([^"]+)"', landing):
+              if target.startswith(prefix):
+                  local = urllib.parse.unquote(target[len(prefix):].split('#')[0])
+                  if not os.path.exists(local):
+                      print(f'landing/index.html: broken repository link to {local}', file=sys.stderr)
+                      errors += 1
+
+          sys.exit(1 if errors else 0)
           PY

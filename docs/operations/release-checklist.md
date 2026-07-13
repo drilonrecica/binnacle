@@ -22,7 +22,7 @@ table and captured benchmark output.
 | License and security policy | Legal and responsible disclosure baseline | `LICENSE` or `SECURITY.md` missing |
 | Binary build | Production artifact compiles | Build error |
 | Container image build | Installation artifacts exist | Image build fails |
-| Demo container smoke | Core API responds from the published image | `/api/v1/session` fails |
+| Demo container smoke | Unauthenticated liveness responds from the locally built candidate image | `/healthz` fails |
 | Benchmark | Performance regressions detected | RSS, CPU, write latency, or SSE exceed documented goals on reference hardware |
 | Checks and alerts | Security and lifecycle semantics remain correct | SSRF, transition, API, overlay, or demo tests fail |
 
@@ -35,7 +35,7 @@ table and captured benchmark output.
 | Supply-chain scan | `make vuln` (requires network and `govulncheck`) |
 | Real-host validation | Run `binnacle` against Docker and compare metrics to `docker stats` / `/proc` |
 | Coolify fresh install | Deploy `packaging/coolify/binnacle.yaml` to a Coolify instance |
-| Compose fresh install | `docker compose -f packaging/docker/docker-compose.yml up` |
+| Compose fresh install | Set `BINNACLE_IMAGE=ghcr.io/drilonrecica/binnacle:local`, then run `docker compose -f packaging/docker/docker-compose.yml up` |
 | Upgrade test | Install previous build, persist data, upgrade to candidate |
 | Retention / persistence failure | Fill queue, verify drops are bounded and data recovers |
 

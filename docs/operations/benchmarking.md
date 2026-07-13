@@ -1,6 +1,6 @@
 # Benchmarking Binnacle
 
-This document describes how to run the reproducible alpha benchmark harness and
+This document describes how to run the reproducible benchmark harness and
 interpret the results.
 
 ## Quick start
@@ -35,7 +35,7 @@ Docker API rate and collection duration are meaningful only when running
 against a real Docker engine; the demo harness provides a repeatable baseline
 for regression detection and leaves real-host validation to release hardware.
 
-## Alpha goals
+## Performance goals
 
 These targets are guidance, not guarantees, and must be validated on the
 release machine with the exact binary version:

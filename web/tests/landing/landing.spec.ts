@@ -32,7 +32,7 @@ test('field manual assets, links, and accessibility are valid', async ({
     page.getByRole('heading', { name: 'Pre-release status.' }),
   ).toBeVisible();
   await expect(
-    page.getByRole('link', { name: 'View alpha install guide' }),
+    page.getByRole('link', { name: 'View development install guide' }),
   ).toHaveAttribute(
     'href',
     'https://github.com/drilonrecica/binnacle/blob/master/docs/operations/install.md',
@@ -44,7 +44,7 @@ test('field manual assets, links, and accessibility are valid', async ({
     page.getByText('No external telemetry', { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText('No public release has been published yet.'),
+    page.getByText('No v0.2 tag has been published yet.'),
   ).toBeVisible();
   await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
   await expect(page.locator('script')).toHaveCount(0);
@@ -87,7 +87,7 @@ test('small mobile keeps navigation and install action usable', async ({
     page.getByRole('link', { name: 'Install', exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole('link', { name: 'View alpha install guide' }),
+    page.getByRole('link', { name: 'View development install guide' }),
   ).toBeVisible();
   expect(
     await page.evaluate(

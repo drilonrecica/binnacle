@@ -6,7 +6,7 @@ The embedded UI needs a compact, typed browser build.
 
 ## Decision
 
-Use Svelte 5 runes and TypeScript. See [SPEC §8](../docs/SPEC.md#8-visual-and-interaction-direction).
+Use Svelte 5 runes and TypeScript. See [ADR 008](008-single-binary.md).
 
 ## Consequences
 

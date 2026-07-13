@@ -6,7 +6,7 @@ The dashboard needs efficient one-way live updates.
 
 ## Decision
 
-Use authenticated SSE. See [SPEC §18](../docs/SPEC.md#18-live-update-transport).
+Use authenticated SSE. See [Product architecture](../docs/PRODUCT.md#architecture-and-persistence-constraints).
 
 ## Consequences
 
@@ -14,4 +14,4 @@ Fan-out is bounded and clients reconnect.
 
 ## Alternatives
 
-Polling and WebSockets are not the alpha transport.
+Polling and WebSockets are not the live transport.

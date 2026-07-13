@@ -1,15 +1,17 @@
 # Contributing to Binnacle
 
 Binnacle is a founder-led AGPL-3.0-only project. Contributions are welcome when
-they fit the product specification and keep the monitor lightweight, local
+they fit the product boundaries and keep the monitor lightweight, local
 first, and permanently read-only with respect to monitored workloads.
 
 ## Before starting
 
-Read [docs/SPEC.md](docs/SPEC.md) and the active
-[implementation backlog](docs/TASKS.md). The specification is authoritative.
-Do not add an external database, telemetry, generic Docker control features,
-or post-alpha scope without a recorded product decision.
+Read the [product boundaries](docs/PRODUCT.md), [roadmap](ROADMAP.md), and
+relevant [architecture decisions](adr/). Product boundaries and accepted ADRs
+are authoritative; the roadmap is directional. Do not add an external database,
+telemetry, generic Docker control features, or roadmap scope without a recorded
+product decision. Implementation work belongs in issues, milestones, or
+release-specific plans rather than a permanent repository backlog.
 
 For a non-trivial architectural change, open an issue or proposal before
 writing a large patch. See [GOVERNANCE.md](GOVERNANCE.md) for the ADR process.

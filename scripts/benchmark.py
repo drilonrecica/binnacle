@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Reproducible alpha benchmark harness for Binnacle.
+"""Reproducible benchmark harness for Binnacle.
 
 Runs the binnacle binary in deterministic demo mode for a configurable number of
 synthetic containers, samples process and application metrics, and emits a JSON
