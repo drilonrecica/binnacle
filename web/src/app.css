@@ -1205,6 +1205,7 @@ meter[data-unavailable='true'] {
 .control-rail,
 .history-status-rail {
   display: flex;
+  flex-wrap: wrap;
   min-height: 2.75rem;
   align-items: center;
   gap: var(--space-2);
@@ -1232,8 +1233,15 @@ meter[data-unavailable='true'] {
 }
 .control-rail label {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: var(--space-2);
+}
+.control-rail input,
+.control-rail select {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .table-scroll {

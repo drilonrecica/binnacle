@@ -98,11 +98,17 @@ else
 fi
 
 # 3. Build binary.
-run_check "build binary" make build
+run_check "build binary" make build VERSION="$VERSION"
+run_check "binary version" bash -c 'test "$(./bin/binnacle --version)" = "$1"' _ "$VERSION"
+
+# Packaging templates must be valid before an image can be published.
+run_check "Compose validation" scripts/validate-compose.sh
+run_check "Coolify validation" scripts/validate-coolify-template.sh
 
 # 4. Build container image.
 if [[ -n "$DOCKER_CMD" ]]; then
-  run_check "build container image" make image DOCKER="$DOCKER_CMD"
+  run_check "build container image" make image DOCKER="$DOCKER_CMD" VERSION="$VERSION"
+  run_check "container version" "$DOCKER_CMD" run --rm --entrypoint /usr/local/bin/binnacle ghcr.io/drilonrecica/binnacle:local --version
 else
   skip "build container image" "no container runtime available"
 fi
@@ -139,7 +145,7 @@ else
   skip "benchmark" "benchmark script missing"
 fi
 
-# 7. End-to-end smoke (accessibility and visual regression).
+# 7. Full browser qualification.
 if command -v pnpm >/dev/null 2>&1 && [[ -d "$ROOT_DIR/web/tests/e2e" ]]; then
   e2e_data="$(mktemp -d)"
   export BINNACLE_DATA_DIR="$e2e_data"
@@ -154,10 +160,11 @@ if command -v pnpm >/dev/null 2>&1 && [[ -d "$ROOT_DIR/web/tests/e2e" ]]; then
     sleep 1
   done
   if curl -sf "http://127.0.0.1:8080/healthz" >/dev/null 2>&1; then
-    run_optional "e2e accessibility" pnpm --dir web test:e2e a11y.spec.ts
-    run_optional "e2e visual regression" pnpm --dir web test:e2e:visual
+    run_check "e2e application" pnpm --dir web test:e2e
+    run_check "e2e landing" pnpm --dir web test:landing
+    run_check "e2e visual regression" pnpm --dir web test:e2e:visual
   else
-    skip "e2e smoke" "demo server did not start"
+    fail "e2e browser qualification" "demo server did not start"
   fi
   kill "$e2e_pid" >> "$RELEASE_RECORD_DIR/build.log" 2>&1 || true
   wait "$e2e_pid" >> "$RELEASE_RECORD_DIR/build.log" 2>&1 || true

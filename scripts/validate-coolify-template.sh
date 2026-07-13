@@ -4,20 +4,25 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/packaging/docker/docker-compose.yml"
 TEMPLATE_FILE="$ROOT_DIR/packaging/coolify/binnacle.yaml"
+SOURCE_FILE="$ROOT_DIR/compose.coolify.yml"
 
-python3 - "$COMPOSE_FILE" "$TEMPLATE_FILE" <<'PY'
+python3 - "$COMPOSE_FILE" "$TEMPLATE_FILE" "$SOURCE_FILE" <<'PY'
 import sys, yaml
 
 compose = yaml.safe_load(open(sys.argv[1]))
 template = yaml.safe_load(open(sys.argv[2]))
+source = yaml.safe_load(open(sys.argv[3]))
 
 def service(doc):
     return doc["services"]["binnacle"]
 
 c, t = service(compose), service(template)
+compose_image = c.get("image")
+if compose_image == "${BINNACLE_IMAGE:-ghcr.io/drilonrecica/binnacle:stable}":
+    compose_image = "ghcr.io/drilonrecica/binnacle:stable"
 
 checks = [
-    ("image", c.get("image"), t.get("image")),
+    ("image", compose_image, t.get("image")),
     ("read_only", c.get("read_only"), t.get("read_only")),
     ("privileged", c.get("privileged"), t.get("privileged")),
     ("user", c.get("user"), t.get("user")),
@@ -40,4 +45,21 @@ if failed:
     sys.exit(1)
 
 print("Coolify template matches canonical Compose deployment.")
+
+s = service(source)
+required = {
+    "build.context": s.get("build", {}).get("context") == ".",
+    "build.dockerfile": s.get("build", {}).get("dockerfile") == "packaging/docker/Dockerfile",
+    "read_only": s.get("read_only") is True,
+    "privileged": s.get("privileged") is False,
+    "healthcheck": s.get("healthcheck", {}).get("test") == ["CMD", "/usr/local/bin/binnacle", "--healthcheck"],
+}
+missing = [name for name, valid in required.items() if not valid]
+if missing:
+    raise SystemExit("Invalid source-build Coolify configuration: " + ", ".join(missing))
+
+for key in ("BINNACLE_DOCKER_SOCKET", "BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS", "BINNACLE_MASTER_KEY"):
+    if key not in s.get("environment", {}):
+        raise SystemExit(f"Source-build Coolify configuration does not pass through {key}")
+print("Source-build Coolify Compose is valid.")
 PY

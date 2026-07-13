@@ -6,6 +6,7 @@ PNPM ?= pnpm
 DOCKER ?= docker
 BINNACLE_BIN ?= bin/binnacle
 VERSION ?= dev
+LDFLAGS ?= -s -w -X main.version=$(VERSION)
 GO_SOURCE_FILES := $(shell find cmd internal -type f -name '*.go' -print)
 
 .DEFAULT_GOAL := help
@@ -42,11 +43,11 @@ build: ## Build the production frontend and CGO-enabled Binnacle binary.
 
 	$(PNPM) --dir web build
 	mkdir -p $(dir $(BINNACLE_BIN))
-	CGO_ENABLED=1 $(GO) build -o $(BINNACLE_BIN) ./cmd/binnacle
+	CGO_ENABLED=1 $(GO) build -ldflags='$(LDFLAGS)' -o $(BINNACLE_BIN) ./cmd/binnacle
 
 image: build ## Build a local container image for the current platform.
 
-	$(DOCKER) build -f packaging/docker/Dockerfile -t ghcr.io/drilonrecica/binnacle:local .
+	$(DOCKER) build --build-arg VERSION=$(VERSION) -f packaging/docker/Dockerfile -t ghcr.io/drilonrecica/binnacle:local .
 
 image-multi: ## Build a multi-arch container image (requires buildx and a registry push).
 

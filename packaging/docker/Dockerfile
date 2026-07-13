@@ -12,6 +12,7 @@ COPY web/ web/
 RUN pnpm --dir web build
 
 FROM golang:1.26-bookworm AS build
+ARG VERSION=dev
 WORKDIR /src
 RUN apt-get update \
  && apt-get install -y --no-install-recommends gcc libc6-dev libsqlite3-dev \
@@ -20,7 +21,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /src/internal/webembed/dist internal/webembed/dist
-RUN CGO_ENABLED=1 go build -ldflags='-s -w' -o /binnacle ./cmd/binnacle
+RUN CGO_ENABLED=1 go build -ldflags="-s -w -X main.version=${VERSION}" -o /binnacle ./cmd/binnacle
 
 FROM debian:bookworm-slim
 RUN apt-get update \

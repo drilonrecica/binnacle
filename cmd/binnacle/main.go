@@ -45,7 +45,12 @@ func main() {
 	demoContainers := flag.Int("demo-containers", 30, "number of synthetic containers to generate in demo mode")
 	demoChecks := flag.Int("demo-checks", 10, "number of synthetic checks to generate in demo mode")
 	healthcheck := flag.Bool("healthcheck", false, "perform a one-shot local health check and exit")
+	showVersion := flag.Bool("version", false, "print the Binnacle version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 	if *healthcheck {
 		if err := runHealthcheck(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
