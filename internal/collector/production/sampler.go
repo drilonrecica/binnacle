@@ -150,7 +150,7 @@ func (s *Sampler) collect(ctx context.Context, pending []metrics.Event) {
 			ids := make([]string, 0, len(resourceValues))
 			for _, resource := range resourceValues {
 				ids = append(ids, string(resource.ID))
-				_ = s.Store.UpsertResource(ctx, storage.Resource{ID: string(resource.ID), HostID: "host", StableKey: resource.StableKey, SourceKind: resource.SourceKind, Name: resource.Name, ProjectName: resource.Project, EnvironmentName: resource.Environment, Category: resource.Category, Status: string(resource.Status)})
+				_ = s.Store.UpsertResource(ctx, storage.Resource{ID: string(resource.ID), HostID: "host", StableKey: resource.StableKey, SourceKind: resource.SourceKind, Name: resource.Name, Context: resource.Context, ProjectName: resource.Project, EnvironmentName: resource.Environment, Category: resource.Category, Status: string(resource.Status)})
 			}
 			_ = s.Store.ArchiveMissingResources(ctx, ids, now.Add(-5*time.Minute))
 		}
@@ -172,7 +172,7 @@ func (s *Sampler) handleDockerEvent(ctx context.Context, event dockerapi.Event) 
 	case "start", "unpause", "restart", "health_status":
 		// Refresh metadata on lifecycle/health changes.
 		if inspect, err := s.Docker.Inspect(ctx, event.ID); err == nil {
-			s.Cache.Set(dockercollector.Metadata{ID: inspect.ID, Name: inspect.Name, Image: inspect.Image, Created: inspect.Created, State: inspect.State, Health: inspect.Health, Labels: inspect.Labels, Networks: inspect.Networks, Mounts: inspect.Mounts})
+			s.Cache.Set(dockercollector.Metadata{ID: inspect.ID, Name: inspect.Name, Image: inspect.Image, Created: inspect.Created, State: inspect.State, Health: inspect.Health, Labels: inspect.Labels, Environment: inspect.Environment, Networks: inspect.Networks, Mounts: inspect.Mounts})
 		}
 	}
 }
@@ -399,10 +399,14 @@ func (s *Sampler) collectDocker(ctx context.Context, now time.Time, hostTotal *i
 		if inspectErr != nil {
 			return nil, inspectErr
 		}
-		identity := resources.Resolve(inspect.Labels, inspect.Name, "")
+		identity := resources.ResolveMetadata(resources.Metadata{Labels: inspect.Labels, Environment: inspect.Environment, ContainerName: inspect.Name, Image: inspect.Image})
+		resolvedCategory := category(inspect.Labels, identity)
+		if identity.Context == "" {
+			identity.Context = resolvedCategory
+		}
 		group := groups[identity.StableKey]
 		if group == nil {
-			group = &resourceGroup{identity: identity, category: category(inspect.Labels, identity), environment: inspect.Labels["coolify.environment"]}
+			group = &resourceGroup{identity: identity, category: resolvedCategory, environment: inspect.Labels["coolify.environment"]}
 			if metadata, ok := coolify.Resolve(inspect.Labels); ok {
 				group.infrastructure = metadata.Infrastructure
 				if metadata.Environment != "" {
@@ -416,7 +420,7 @@ func (s *Sampler) collectDocker(ctx context.Context, now time.Time, hostTotal *i
 		}
 		status := containerStatus(inspect.State, inspect.Health)
 		group.status = append(group.status, status)
-		component := metrics.ResourceComponent{ID: metrics.ContainerID(container.ID), Name: inspect.Name, Status: status}
+		component := metrics.ResourceComponent{ID: metrics.ContainerID(container.ID), Name: inspect.Name, Status: status, RuntimeState: inspect.State, HealthStatus: inspect.Health}
 		if inspect.State != "running" {
 			group.components = append(group.components, component)
 			continue
@@ -464,7 +468,7 @@ func (s *Sampler) collectDocker(ctx context.Context, now time.Time, hostTotal *i
 	result := make([]metrics.ResourceSnapshot, 0, len(groups))
 	for stable, group := range groups {
 		id := resourceID(stable)
-		result = append(result, metrics.ResourceSnapshot{ID: id, Name: group.identity.Name, Status: resources.RollupStatus(group.status), CPUHostPercent: number(group.cpu, group.cpuOK), MemoryBytes: integer(group.memory, group.memoryOK), RXBPS: number(group.rx, group.rxOK), TXBPS: number(group.tx, group.txOK), BlockReadBPS: number(group.read, group.readOK), BlockWriteBPS: number(group.write, group.writeOK), LastSeenAt: now, Category: group.category, Project: group.identity.Project, Environment: group.environment, Infrastructure: group.infrastructure, Components: group.components, StableKey: stable, SourceKind: group.identity.Source})
+		result = append(result, metrics.ResourceSnapshot{ID: id, Name: group.identity.Name, Status: resources.RollupStatus(group.status), CPUHostPercent: number(group.cpu, group.cpuOK), MemoryBytes: integer(group.memory, group.memoryOK), RXBPS: number(group.rx, group.rxOK), TXBPS: number(group.tx, group.txOK), BlockReadBPS: number(group.read, group.readOK), BlockWriteBPS: number(group.write, group.writeOK), LastSeenAt: now, Category: group.category, Context: group.identity.Context, Project: group.identity.Project, Environment: group.environment, Infrastructure: group.infrastructure, Components: group.components, StableKey: stable, SourceKind: group.identity.Source})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result, nil
@@ -473,7 +477,7 @@ func (s *Sampler) collectDocker(ctx context.Context, now time.Time, hostTotal *i
 func (s *Sampler) inspect(ctx context.Context, id string) (dockerapi.Inspect, error) {
 	if s.Cache != nil {
 		if v, ok := s.Cache.Get(id); ok {
-			return dockerapi.Inspect{ID: v.ID, Name: v.Name, Image: v.Image, Created: v.Created, State: v.State, Health: v.Health, Labels: v.Labels, Networks: v.Networks, Mounts: v.Mounts}, nil
+			return dockerapi.Inspect{ID: v.ID, Name: v.Name, Image: v.Image, Created: v.Created, State: v.State, Health: v.Health, Labels: v.Labels, Environment: v.Environment, Networks: v.Networks, Mounts: v.Mounts}, nil
 		}
 	}
 	inspect, err := s.Docker.Inspect(ctx, id)
@@ -481,7 +485,7 @@ func (s *Sampler) inspect(ctx context.Context, id string) (dockerapi.Inspect, er
 		return dockerapi.Inspect{}, err
 	}
 	if s.Cache != nil {
-		s.Cache.Set(dockercollector.Metadata{ID: inspect.ID, Name: inspect.Name, Image: inspect.Image, Created: inspect.Created, State: inspect.State, Health: inspect.Health, Labels: inspect.Labels, Networks: inspect.Networks, Mounts: inspect.Mounts})
+		s.Cache.Set(dockercollector.Metadata{ID: inspect.ID, Name: inspect.Name, Image: inspect.Image, Created: inspect.Created, State: inspect.State, Health: inspect.Health, Labels: inspect.Labels, Environment: inspect.Environment, Networks: inspect.Networks, Mounts: inspect.Mounts})
 	}
 	return inspect, nil
 }

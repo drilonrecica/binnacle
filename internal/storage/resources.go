@@ -15,6 +15,7 @@ type Resource struct {
 	StableKey       string     `json:"-"`
 	SourceKind      string     `json:"sourceKind"`
 	Name            string     `json:"name"`
+	Context         string     `json:"context,omitempty"`
 	Category        string     `json:"category"`
 	Status          string     `json:"status"`
 	ProjectName     string     `json:"project,omitempty"`
@@ -27,7 +28,7 @@ func (m *Manager) UpsertResource(ctx context.Context, r Resource) error {
 		return fmt.Errorf("storage is not open")
 	}
 	now := time.Now().UnixMilli()
-	_, e := m.db.ExecContext(ctx, "INSERT INTO resources(id,host_id,stable_key,source_kind,name,project_name,environment_name,category,status,first_seen_at,last_seen_at) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(host_id,stable_key) DO UPDATE SET name=excluded.name,project_name=excluded.project_name,environment_name=excluded.environment_name,category=excluded.category,status=excluded.status,archived_at=NULL,last_seen_at=excluded.last_seen_at", r.ID, r.HostID, r.StableKey, r.SourceKind, r.Name, nullable(r.ProjectName), nullable(r.EnvironmentName), r.Category, r.Status, now, now)
+	_, e := m.db.ExecContext(ctx, "INSERT INTO resources(id,host_id,stable_key,source_kind,name,context,project_name,environment_name,category,status,first_seen_at,last_seen_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(host_id,stable_key) DO UPDATE SET name=excluded.name,context=excluded.context,project_name=excluded.project_name,environment_name=excluded.environment_name,category=excluded.category,status=excluded.status,archived_at=NULL,last_seen_at=excluded.last_seen_at", r.ID, r.HostID, r.StableKey, r.SourceKind, r.Name, r.Context, nullable(r.ProjectName), nullable(r.EnvironmentName), r.Category, r.Status, now, now)
 	return e
 }
 
@@ -48,7 +49,7 @@ func (m *Manager) ArchiveMissingResources(ctx context.Context, active []string, 
 }
 
 func (m *Manager) ArchivedResources(ctx context.Context) ([]Resource, error) {
-	rows, err := m.db.QueryContext(ctx, "SELECT id,host_id,stable_key,source_kind,name,COALESCE(project_name,''),COALESCE(environment_name,''),category,status,archived_at FROM resources WHERE status='archived' ORDER BY archived_at DESC,name")
+	rows, err := m.db.QueryContext(ctx, "SELECT id,host_id,stable_key,source_kind,name,COALESCE(context,''),COALESCE(project_name,''),COALESCE(environment_name,''),category,status,archived_at FROM resources WHERE status='archived' ORDER BY archived_at DESC,name")
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +58,7 @@ func (m *Manager) ArchivedResources(ctx context.Context) ([]Resource, error) {
 	for rows.Next() {
 		var resource Resource
 		var archived int64
-		if err = rows.Scan(&resource.ID, &resource.HostID, &resource.StableKey, &resource.SourceKind, &resource.Name, &resource.ProjectName, &resource.EnvironmentName, &resource.Category, &resource.Status, &archived); err != nil {
+		if err = rows.Scan(&resource.ID, &resource.HostID, &resource.StableKey, &resource.SourceKind, &resource.Name, &resource.Context, &resource.ProjectName, &resource.EnvironmentName, &resource.Category, &resource.Status, &archived); err != nil {
 			return nil, err
 		}
 		value := time.UnixMilli(archived).UTC()
@@ -70,7 +71,7 @@ func (m *Manager) ArchivedResources(ctx context.Context) ([]Resource, error) {
 func (m *Manager) Resource(ctx context.Context, id string) (Resource, error) {
 	var resource Resource
 	var archived sql.NullInt64
-	err := m.db.QueryRowContext(ctx, "SELECT id,host_id,stable_key,source_kind,name,COALESCE(project_name,''),COALESCE(environment_name,''),category,status,archived_at FROM resources WHERE id=?", id).Scan(&resource.ID, &resource.HostID, &resource.StableKey, &resource.SourceKind, &resource.Name, &resource.ProjectName, &resource.EnvironmentName, &resource.Category, &resource.Status, &archived)
+	err := m.db.QueryRowContext(ctx, "SELECT id,host_id,stable_key,source_kind,name,COALESCE(context,''),COALESCE(project_name,''),COALESCE(environment_name,''),category,status,archived_at FROM resources WHERE id=?", id).Scan(&resource.ID, &resource.HostID, &resource.StableKey, &resource.SourceKind, &resource.Name, &resource.Context, &resource.ProjectName, &resource.EnvironmentName, &resource.Category, &resource.Status, &archived)
 	if archived.Valid {
 		value := time.UnixMilli(archived.Int64).UTC()
 		resource.ArchivedAt = &value

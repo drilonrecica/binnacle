@@ -26,11 +26,14 @@ checks = [
     ("read_only", c.get("read_only"), t.get("read_only")),
     ("privileged", c.get("privileged"), t.get("privileged")),
     ("user", c.get("user"), t.get("user")),
+    ("labels", c.get("labels", {}), t.get("labels", {})),
     ("security_opt", sorted(c.get("security_opt", [])), sorted(t.get("security_opt", []))),
     ("environment keys", sorted(c.get("environment", {}).keys()), sorted(t.get("environment", {}).keys())),
     ("volume mounts", sorted(c.get("volumes", [])), sorted(t.get("volumes", []))),
-    ("memory limit", c.get("deploy", {}).get("resources", {}).get("limits", {}).get("memory"),
-                    t.get("deploy", {}).get("resources", {}).get("limits", {}).get("memory")),
+    ("restart", c.get("restart"), t.get("restart")),
+    ("healthcheck", c.get("healthcheck"), t.get("healthcheck")),
+    ("resource configuration", c.get("deploy", {}).get("resources", {}),
+                               t.get("deploy", {}).get("resources", {})),
 ]
 
 failed = False
@@ -57,6 +60,15 @@ required = {
 missing = [name for name, valid in required.items() if not valid]
 if missing:
     raise SystemExit("Invalid source-build Coolify configuration: " + ", ".join(missing))
+
+for name, expected, actual in (
+    ("labels", c.get("labels", {}), s.get("labels", {})),
+    ("restart", c.get("restart"), s.get("restart")),
+    ("healthcheck", c.get("healthcheck"), s.get("healthcheck")),
+    ("resource configuration", c.get("deploy", {}).get("resources", {}), s.get("deploy", {}).get("resources", {})),
+):
+    if expected != actual:
+        raise SystemExit(f"Source-build Coolify drift: {name} differs\n  compose: {expected}\n  source:  {actual}")
 
 for key in ("BINNACLE_DOCKER_SOCKET", "BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS", "BINNACLE_MASTER_KEY"):
     if key not in s.get("environment", {}):

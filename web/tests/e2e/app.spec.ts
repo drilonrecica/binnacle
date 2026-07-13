@@ -113,6 +113,9 @@ async function mockSettings(page: Page) {
 test('renders the Binnacle application shell', async ({ page }) => {
   await mockAuthSession(page);
   await mockOnboarding(page);
+  await page.route('**/api/v1/session', (route) =>
+    route.fulfill({ status: 204 }),
+  );
   await page.route('**/api/v1/live', (route) =>
     route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
   );
@@ -121,6 +124,51 @@ test('renders the Binnacle application shell', async ({ page }) => {
   await expect(page).toHaveTitle('Binnacle — Watch');
   await expect(page.getByRole('link', { name: 'Binnacle' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Watch' })).toBeVisible();
+});
+
+test('sorts resources and explains starting health', async ({ page }) => {
+  await mockAuthSession(page);
+  await mockOnboarding(page);
+  await page.route('**/api/v1/session', (route) =>
+    route.fulfill({ status: 204 }),
+  );
+  await page.route('**/api/v1/live', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: `event: snapshot\nid: 1\ndata: {"seq":1,"ts":"2026-07-11T12:00:00Z","bootIdentity":"boot","host":{},"resources":[{"id":"res_beta","name":"Beta","status":"unknown","context":"api.example.com","cpuHostPct":20,"memoryBytes":2048,"lastSeenAt":"2026-07-11T12:00:00Z","components":[{"id":"123456789012","name":"beta-1","status":"unknown","runtimeState":"running","healthStatus":"starting"}]},{"id":"res_alpha","name":"Alpha","status":"healthy","context":"production","cpuHostPct":10,"memoryBytes":1024,"lastSeenAt":"2026-07-11T12:00:00Z","components":[]}],"collectors":{}}\n\n`,
+    }),
+  );
+  await page.goto('/resources');
+
+  const rows = page.locator('tbody tr');
+  await expect(rows.nth(0)).toContainText('Alpha');
+  await expect(rows.nth(1)).toContainText('starting');
+  await page.getByLabel('Sort by').selectOption('cpu');
+  await expect(rows.nth(0)).toContainText('Beta');
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        localStorage.getItem('binnacle.resources.sort.active'),
+      ),
+    )
+    .toContain('"field":"cpu"');
+  await page.getByRole('button', { name: 'Sort ascending' }).click();
+  await expect(rows.nth(0)).toContainText('Alpha');
+
+  await page.getByRole('link', { name: 'Beta', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Beta' })).toContainText(
+    'starting',
+  );
+  await page.getByText('Technical metadata').click();
+  await expect(
+    page.getByText(/runtime: running; health: starting/),
+  ).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/resources');
+  await expect(page.getByLabel('Sort by')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Sort/ })).toBeVisible();
 });
 
 test('creates a health check from the Alerts console', async ({ page }) => {

@@ -17,7 +17,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func TestUpgradeSchema14PreservesDataAndAddsChecksAlerts(t *testing.T) {
+func TestUpgradeSchema15PreservesResourcesAndAddsContext(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "binnacle.db")
@@ -38,7 +38,7 @@ func TestUpgradeSchema14PreservesDataAndAddsChecksAlerts(t *testing.T) {
 		if _, err = fmt.Sscanf(filepath.Base(entry), "%03d_", &version); err != nil {
 			t.Fatal(err)
 		}
-		if version > 14 {
+		if version > 15 {
 			break
 		}
 		body, readErr := migrations.FS().ReadFile(entry)
@@ -68,12 +68,16 @@ func TestUpgradeSchema14PreservesDataAndAddsChecksAlerts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer manager.Close()
-	if version, versionErr := manager.SchemaVersion(ctx); versionErr != nil || version != 15 {
+	if version, versionErr := manager.SchemaVersion(ctx); versionErr != nil || version != 16 {
 		t.Fatalf("schema version=%d err=%v", version, versionErr)
 	}
 	var name string
 	if err = manager.DB().QueryRowContext(ctx, "SELECT name FROM resources WHERE id='resource-1'").Scan(&name); err != nil || name != "existing" {
 		t.Fatalf("existing data was not preserved: name=%q err=%v", name, err)
+	}
+	var resourceContext string
+	if err = manager.DB().QueryRowContext(ctx, "SELECT context FROM resources WHERE id='resource-1'").Scan(&resourceContext); err != nil || resourceContext != "" {
+		t.Fatalf("existing resource context=%q err=%v", resourceContext, err)
 	}
 
 	repo := alerts.NewRepository(manager.DB())

@@ -27,6 +27,7 @@ type Container struct{ ID, Name, Image string }
 type Inspect struct {
 	ID, Name, Image, Created, State, Health string
 	Labels                                  map[string]string
+	Environment                             map[string]string
 	Networks                                []string
 	Mounts                                  []Mount
 }
@@ -90,6 +91,7 @@ func (e *Engine) Inspect(ctx context.Context, id string) (Inspect, error) {
 	result := Inspect{ID: value.ID, Name: strings.TrimPrefix(value.Name, "/"), Created: value.Created}
 	if value.Config != nil {
 		result.Image, result.Labels = value.Config.Image, value.Config.Labels
+		result.Environment = allowedEnvironment(value.Config.Env)
 	}
 	if value.State != nil {
 		result.State = value.State.Status
@@ -104,6 +106,25 @@ func (e *Engine) Inspect(ctx context.Context, id string) (Inspect, error) {
 		result.Mounts = append(result.Mounts, Mount{Source: mount.Source, Destination: mount.Destination, Type: string(mount.Type)})
 	}
 	return result, nil
+}
+
+var allowedEnvironmentKeys = map[string]bool{
+	"COOLIFY_FQDN":          true,
+	"COOLIFY_URL":           true,
+	"COOLIFY_RESOURCE_UUID": true,
+}
+
+// allowedEnvironment deliberately returns only non-secret Coolify metadata.
+// Container environments commonly contain credentials and must never enter caches or APIs.
+func allowedEnvironment(values []string) map[string]string {
+	result := map[string]string{}
+	for _, value := range values {
+		key, raw, ok := strings.Cut(value, "=")
+		if ok && allowedEnvironmentKeys[key] {
+			result[key] = raw
+		}
+	}
+	return result
 }
 func (e *Engine) Stats(ctx context.Context, id string) (Stats, error) {
 	response, err := e.client.ContainerStatsOneShot(ctx, id)

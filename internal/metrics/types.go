@@ -118,6 +118,8 @@ type ResourceComponent struct {
 	ID             ContainerID    `json:"id"`
 	Name           string         `json:"name"`
 	Status         ResourceStatus `json:"status"`
+	RuntimeState   string         `json:"runtimeState,omitempty"`
+	HealthStatus   string         `json:"healthStatus,omitempty"`
 	CPUHostPercent *float64       `json:"cpuHostPct,omitempty"`
 	MemoryBytes    *int64         `json:"memoryBytes,omitempty"`
 	RXBPS          *float64       `json:"rxBps,omitempty"`
@@ -139,6 +141,7 @@ type ResourceSnapshot struct {
 	BlockWriteBPS  *float64            `json:"blockWriteBps"`
 	LastSeenAt     time.Time           `json:"lastSeenAt"`
 	Category       string              `json:"category,omitempty"`
+	Context        string              `json:"context,omitempty"`
 	Project        string              `json:"project,omitempty"`
 	Environment    string              `json:"environment,omitempty"`
 	Infrastructure bool                `json:"infrastructure,omitempty"`

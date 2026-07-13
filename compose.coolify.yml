@@ -15,6 +15,10 @@ services:
       context: .
       dockerfile: packaging/docker/Dockerfile
 
+    labels:
+      binnacle.name: Binnacle
+      binnacle.context: monitoring
+
     restart: unless-stopped
     read_only: true
     privileged: false
@@ -53,6 +57,8 @@ services:
       resources:
         limits:
           memory: 128M
+        reservations:
+          memory: 64M
 
 volumes:
   binnacle-data:

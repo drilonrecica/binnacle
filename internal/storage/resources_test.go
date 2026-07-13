@@ -19,7 +19,7 @@ func TestArchivedResourcesRemainDiscoverableAndCanReactivate(t *testing.T) {
 	if err := manager.UpsertHost(ctx, "host", HostIdentity("", "test"), "Server"); err != nil {
 		t.Fatal(err)
 	}
-	resource := Resource{ID: "res_archived", HostID: "host", StableKey: "compose:project:web", SourceKind: "compose", Name: "Web", ProjectName: "Project", Category: "service", Status: "healthy"}
+	resource := Resource{ID: "res_archived", HostID: "host", StableKey: "compose:project:web", SourceKind: "compose", Name: "Web", Context: "project/production", ProjectName: "Project", Category: "service", Status: "healthy"}
 	if err := manager.UpsertResource(ctx, resource); err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestArchivedResourcesRemainDiscoverableAndCanReactivate(t *testing.T) {
 		t.Fatal(err)
 	}
 	archived, err := manager.ArchivedResources(ctx)
-	if err != nil || len(archived) != 1 || archived[0].ProjectName != "Project" || archived[0].ArchivedAt == nil {
+	if err != nil || len(archived) != 1 || archived[0].ProjectName != "Project" || archived[0].Context != "project/production" || archived[0].ArchivedAt == nil {
 		t.Fatalf("archived=%+v err=%v", archived, err)
 	}
 	if err = manager.UpsertResource(ctx, resource); err != nil {

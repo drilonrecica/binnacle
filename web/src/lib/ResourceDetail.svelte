@@ -7,6 +7,7 @@
   import HistoryCharts from './HistoryCharts.svelte';
   import HistoryDeletion from './HistoryDeletion.svelte';
   import AlertSummary from './AlertSummary.svelte';
+  import { resourceContext, resourceStatusLabel } from './resource-sort';
   let { live, id }: { live: LiveStore; id: string } = $props();
   let current = $derived(
     live.snapshot?.resources.find((value) => value.id === id),
@@ -16,6 +17,7 @@
     name: string;
     status: string;
     category: string;
+    context?: string;
     project?: string;
     environment?: string;
     archivedAt?: string;
@@ -45,7 +47,10 @@
         <span>RESOURCE</span>
         <h1 id="resource-title">{current.name}</h1>
       </div>
-      <ConsoleState state={current.status} />
+      <ConsoleState
+        state={current.status}
+        label={resourceStatusLabel(current)}
+      />
     </header>
     <dl class="instrument-sheet resource-instruments">
       <div>
@@ -59,9 +64,7 @@
       <div>
         <dt>CONTEXT</dt>
         <dd>
-          {current.project ?? current.category ?? 'service'}{current.environment
-            ? `/${current.environment}`
-            : ''}
+          {resourceContext(current)}
         </dd>
       </div>
       <div>
@@ -82,9 +85,16 @@
             ><tr><th>State</th><th>Component</th><th>Identity</th></tr></thead
           ><tbody
             >{#each current.components as component (component.id)}<tr
-                ><td><ConsoleState state={component.status} /></td><th
-                  scope="row">{component.name}</th
-                ><td><code>{component.id}</code></td></tr
+                ><td
+                  ><ConsoleState
+                    state={component.status}
+                    label={component.healthStatus === 'starting'
+                      ? 'starting'
+                      : component.status}
+                  /></td
+                ><th scope="row">{component.name}</th><td
+                  ><code>{component.id}</code></td
+                ></tr
               >{/each}</tbody
           >
         </table>{:else}<p class="console-empty">
@@ -98,6 +108,17 @@
         <dd><code>{current.id}</code></dd>
         <dt>Category</dt>
         <dd>{current.category ?? '—'}</dd>
+        <dt>Context</dt>
+        <dd>{resourceContext(current) || '—'}</dd>
+        {#each current.components ?? [] as component (component.id)}
+          <dt>Component {component.name}</dt>
+          <dd>
+            <code
+              >runtime: {component.runtimeState || '—'}; health: {component.healthStatus ||
+                '—'}</code
+            >
+          </dd>
+        {/each}
       </dl>
     </details>
   </section>
@@ -121,9 +142,7 @@
       <div>
         <dt>CONTEXT</dt>
         <dd>
-          {archived.project ?? archived.category}{archived.environment
-            ? `/${archived.environment}`
-            : ''}
+          {resourceContext(archived)}
         </dd>
       </div>
       <div>

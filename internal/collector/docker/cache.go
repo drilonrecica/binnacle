@@ -10,6 +10,7 @@ import (
 type Metadata struct {
 	ID, Name, Image, Created, State, Health string
 	Labels                                  map[string]string
+	Environment                             map[string]string
 	Networks                                []string
 	Mounts                                  []dockerapi.Mount
 }
@@ -30,7 +31,7 @@ func (c *Cache) Discover(ctx context.Context, client dockerapi.Client) error {
 		if e != nil {
 			return e
 		}
-		next[item.ID] = Metadata{ID: v.ID, Name: v.Name, Image: v.Image, Created: v.Created, State: v.State, Health: v.Health, Labels: copyLabels(v.Labels), Networks: append([]string(nil), v.Networks...), Mounts: append([]dockerapi.Mount(nil), v.Mounts...)}
+		next[item.ID] = Metadata{ID: v.ID, Name: v.Name, Image: v.Image, Created: v.Created, State: v.State, Health: v.Health, Labels: copyLabels(v.Labels), Environment: copyLabels(v.Environment), Networks: append([]string(nil), v.Networks...), Mounts: append([]dockerapi.Mount(nil), v.Mounts...)}
 	}
 	c.mu.Lock()
 	c.values = next
@@ -45,7 +46,7 @@ func (c *Cache) Get(id string) (Metadata, bool) {
 }
 func (c *Cache) Set(v Metadata) {
 	c.mu.Lock()
-	c.values[v.ID] = Metadata{ID: v.ID, Name: v.Name, Image: v.Image, Created: v.Created, State: v.State, Health: v.Health, Labels: copyLabels(v.Labels), Networks: append([]string(nil), v.Networks...), Mounts: append([]dockerapi.Mount(nil), v.Mounts...)}
+	c.values[v.ID] = Metadata{ID: v.ID, Name: v.Name, Image: v.Image, Created: v.Created, State: v.State, Health: v.Health, Labels: copyLabels(v.Labels), Environment: copyLabels(v.Environment), Networks: append([]string(nil), v.Networks...), Mounts: append([]dockerapi.Mount(nil), v.Mounts...)}
 	c.mu.Unlock()
 }
 func (c *Cache) Remove(id string) { c.mu.Lock(); delete(c.values, id); c.mu.Unlock() }

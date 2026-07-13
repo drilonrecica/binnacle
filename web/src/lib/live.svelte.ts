@@ -25,10 +25,17 @@ export interface LiveSnapshot {
     memoryBytes?: number | null;
     lastSeenAt?: string;
     category?: string;
+    context?: string;
     project?: string;
     environment?: string;
     infrastructure?: boolean;
-    components?: Array<{ id: string; name: string; status: string }>;
+    components?: Array<{
+      id: string;
+      name: string;
+      status: string;
+      runtimeState?: string;
+      healthStatus?: string;
+    }>;
   }>;
   collectors: Record<
     string,

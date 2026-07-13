@@ -9,12 +9,33 @@ import (
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/dockerapi"
+	"github.com/drilonrecica/binnacle/internal/metrics"
 )
 
 type fakeDocker struct{ stats dockerapi.Stats }
 
 func (f *fakeDocker) List(context.Context) ([]dockerapi.Container, error) {
 	return []dockerapi.Container{{ID: "123456789012", Name: "web"}}, nil
+}
+
+func TestContainerStatus(t *testing.T) {
+	tests := []struct {
+		state, health string
+		want          metrics.ResourceStatus
+	}{
+		{"running", "healthy", metrics.StatusHealthy},
+		{"running", "", metrics.StatusHealthy},
+		{"running", "starting", metrics.StatusUnknown},
+		{"running", "unhealthy", metrics.StatusDown},
+		{"paused", "", metrics.StatusPaused},
+		{"exited", "", metrics.StatusDown},
+		{"created", "", metrics.StatusUnknown},
+	}
+	for _, test := range tests {
+		if got := containerStatus(test.state, test.health); got != test.want {
+			t.Errorf("containerStatus(%q, %q)=%q want %q", test.state, test.health, got, test.want)
+		}
+	}
 }
 func (f *fakeDocker) Inspect(context.Context, string) (dockerapi.Inspect, error) {
 	return dockerapi.Inspect{ID: "123456789012", Name: "web", State: "running", Labels: map[string]string{"com.docker.compose.project": "project", "com.docker.compose.service": "web"}}, nil

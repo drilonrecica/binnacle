@@ -9,6 +9,7 @@
     prioritizedResources,
     staleResource,
   } from './watch';
+  import { resourceContext, resourceStatusLabel } from './resource-sort';
 
   let {
     live,
@@ -206,7 +207,7 @@
                             ? '●'
                             : '▲'}</span
                       >
-                      {stale ? 'stale' : resource.status}
+                      {stale ? 'stale' : resourceStatusLabel(resource)}
                     </span>
                   </td>
                   <th scope="row">
@@ -217,11 +218,7 @@
                     >
                   </th>
                   <td class="resource-context">
-                    {resource.project ??
-                      resource.category ??
-                      'service'}{#if resource.environment}<span
-                        >/{resource.environment}</span
-                      >{/if}
+                    {resourceContext(resource)}
                   </td>
                   <td>{stale ? '—' : value(resource.cpuHostPct, '%')}</td>
                   <td>{stale ? '—' : formatBytes(resource.memoryBytes)}</td>
@@ -273,7 +270,7 @@
               <span aria-hidden="true"
                 >{stale ? '◇' : selected.status === 'healthy' ? '●' : '▲'}</span
               >
-              {stale ? 'stale' : selected.status}
+              {stale ? 'stale' : resourceStatusLabel(selected)}
             </span>
             <span>{selected.category ?? 'service'}</span>
           </div>
@@ -307,7 +304,9 @@
                 {#each selected.components as component (component.id)}
                   <li>
                     <span class="roster-state" data-state={component.status}
-                      >{component.status}</span
+                      >{component.healthStatus === 'starting'
+                        ? 'starting'
+                        : component.status}</span
                     ><code>{component.name}</code>
                   </li>
                 {/each}

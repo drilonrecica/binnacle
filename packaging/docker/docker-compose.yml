@@ -7,6 +7,9 @@ services:
   binnacle:
     image: ${BINNACLE_IMAGE:-ghcr.io/drilonrecica/binnacle:stable}
     container_name: binnacle
+    labels:
+      binnacle.name: Binnacle
+      binnacle.context: monitoring
     restart: unless-stopped
     read_only: true
     privileged: false

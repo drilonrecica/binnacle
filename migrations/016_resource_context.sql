@@ -1,0 +1,1 @@
+ALTER TABLE resources ADD COLUMN context TEXT NOT NULL DEFAULT '';
