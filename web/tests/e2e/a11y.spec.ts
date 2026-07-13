@@ -294,6 +294,91 @@ test('events page has no detectable a11y violations', async ({ page }) => {
   await scan(page);
 });
 
+test('incidents page has no detectable a11y violations', async ({ page }) => {
+  await mockAuthSession(page, 'authenticated');
+  await mockOnboarding(page, true);
+  await mockLive(page);
+  for (const path of [
+    'incidents',
+    'alerts?*',
+    'alert-rules',
+    'checks',
+    'silences',
+    'notification-channels',
+    'notification-deliveries',
+  ]) {
+    await page.route(`**/api/v1/${path}`, (route) =>
+      route.fulfill({ json: [] }),
+    );
+  }
+  await page.goto('/alerts');
+  await scan(page);
+});
+
+test('incident detail has no detectable a11y violations', async ({ page }) => {
+  await mockAuthSession(page, 'authenticated');
+  await mockOnboarding(page, true);
+  await mockLive(page);
+  await page.route('**/api/v1/incidents', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'inc-1',
+          status: 'open',
+          severity: 'critical',
+          title: 'resource incident on api',
+          targetType: 'resource',
+          targetId: 'api',
+          alertCount: 1,
+          firingAlertCount: 1,
+          openedAt: '2026-07-11T12:00:00Z',
+        },
+      ],
+    }),
+  );
+  await page.route('**/api/v1/incidents/inc-1', (route) =>
+    route.fulfill({
+      json: {
+        id: 'inc-1',
+        status: 'open',
+        severity: 'critical',
+        title: 'resource incident on api',
+        targetType: 'resource',
+        targetId: 'api',
+        alertCount: 1,
+        firingAlertCount: 1,
+        openedAt: '2026-07-11T12:00:00Z',
+        alerts: [
+          {
+            id: 'alert-1',
+            family: 'resource_health',
+            severity: 'critical',
+            status: 'firing',
+            message: 'API is unhealthy',
+            startedAt: '2026-07-11T12:00:00Z',
+          },
+        ],
+        deliveries: [],
+      },
+    }),
+  );
+  for (const path of [
+    'alerts?*',
+    'alert-rules',
+    'checks',
+    'silences',
+    'notification-channels',
+    'notification-deliveries',
+  ]) {
+    await page.route(`**/api/v1/${path}`, (route) =>
+      route.fulfill({ json: [] }),
+    );
+  }
+  await page.goto('/alerts');
+  await page.getByRole('button', { name: 'View details' }).click();
+  await scan(page);
+});
+
 test('settings page has no detectable a11y violations', async ({ page }) => {
   await mockAuthSession(page, 'authenticated');
   await mockOnboarding(page, true);

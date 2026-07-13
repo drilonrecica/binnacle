@@ -52,7 +52,7 @@ func TestChecksAlertsMigrationIsCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != 16 {
-		t.Fatalf("schema version=%d want 16", version)
+	if version != 17 {
+		t.Fatalf("schema version=%d want 17", version)
 	}
 }

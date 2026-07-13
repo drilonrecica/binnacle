@@ -19,7 +19,10 @@
       property="og:description"
       content="A lightweight, read-only monitoring dashboard for Docker and Coolify hosts with local history and no external telemetry."
     />
-    <meta property="og:url" content="https://drilonrecica.github.io/binnacle/" />
+    <meta
+      property="og:url"
+      content="https://drilonrecica.github.io/binnacle/"
+    />
     <meta
       property="og:image"
       content="https://drilonrecica.github.io/binnacle/assets/watch-console.png"
@@ -49,7 +52,12 @@
     />
     <title>Binnacle — Clear monitoring for Docker servers</title>
     <link rel="stylesheet" href="assets/style.css" />
-    <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32" />
+    <link
+      rel="icon"
+      href="assets/favicon-32.png"
+      type="image/png"
+      sizes="32x32"
+    />
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
   </head>
   <body>
@@ -84,9 +92,9 @@
           </p>
           <p class="hero-summary">
             Binnacle shows host pressure, container usage, Coolify and Compose
-            services, checks, alerts, effective health, events, and local history in one
-            lightweight, read-only dashboard — without Prometheus, Grafana, or
-            external telemetry.
+            services, checks, incidents, alerts, notifications, effective
+            health, events, and local history in one lightweight, read-only
+            dashboard — without Prometheus, Grafana, or external telemetry.
           </p>
           <div class="actions">
             <a
@@ -99,8 +107,8 @@
             >
           </div>
           <p class="release-note">
-            <strong>Pre-release:</strong> v0.2 is implemented and undergoing
-            release qualification. No v0.2 tag has been published yet.
+            <strong>Pre-release:</strong> v0.3 is implemented and undergoing
+            release qualification. No v0.3 tag has been published yet.
           </p>
         </div>
 
@@ -204,8 +212,8 @@
             <span>01.6</span>
             <h3>Useful history</h3>
             <p>
-              Keeps local metric and event history so you can see what
-              changed, not just what is happening now.
+              Keeps local metric and event history so you can see what changed,
+              not just what is happening now.
             </p>
           </li>
         </ol>
@@ -239,12 +247,25 @@
           <div class="mapping" aria-label="Container metadata grouping example">
             <span>LABELS / RESOURCE MAPPING</span>
             <dl>
-              <div><dt>coolify.resource.uuid</dt><dd>personal-site</dd></div>
-              <div><dt>compose.project</dt><dd>personal-site</dd></div>
-              <div><dt>compose.service</dt><dd>web</dd></div>
-              <div><dt>containers</dt><dd>web-1, web-2</dd></div>
+              <div>
+                <dt>coolify.resource.uuid</dt>
+                <dd>personal-site</dd>
+              </div>
+              <div>
+                <dt>compose.project</dt>
+                <dd>personal-site</dd>
+              </div>
+              <div>
+                <dt>compose.service</dt>
+                <dd>web</dd>
+              </div>
+              <div>
+                <dt>containers</dt>
+                <dd>web-1, web-2</dd>
+              </div>
               <div class="mapping-result">
-                <dt>logical resource</dt><dd>web / 2 units</dd>
+                <dt>logical resource</dt>
+                <dd>web / 2 units</dd>
               </div>
             </dl>
           </div>
@@ -302,15 +323,22 @@
           </div>
           <div>
             <dt>Uptime Kuma</dt>
-            <dd>Endpoint availability checks, status pages, and notifications.</dd>
+            <dd>
+              Endpoint availability checks, status pages, and notifications.
+            </dd>
           </div>
           <div>
             <dt>Coolify</dt>
-            <dd>Deployment control with built-in resource and status monitoring.</dd>
+            <dd>
+              Deployment control with built-in resource and status monitoring.
+            </dd>
           </div>
           <div>
             <dt>Binnacle</dt>
-            <dd>Read-only Docker pressure, service context, events, and local history.</dd>
+            <dd>
+              Read-only Docker pressure, service context, events, and local
+              history.
+            </dd>
           </div>
         </dl>
       </section>
@@ -331,16 +359,15 @@
           <div>
             <strong>IN DEVELOPMENT</strong>
             <p>
-              The v0.2 feature set is implemented. Release qualification is in
-              progress and no v0.2 tag has been published.
+              The v0.3 feature set is implemented. Release qualification is in
+              progress and no v0.3 tag has been published.
             </p>
           </div>
           <div>
             <strong>NEXT</strong>
             <p>
-              Notifications and incident grouping. Container logs,
-              multi-server monitoring, and workload controls remain later or
-              excluded scope.
+              Bounded log access and read-only process diagnostics. Multi-server
+              monitoring and workload controls remain later or excluded scope.
             </p>
           </div>
         </div>
@@ -371,7 +398,9 @@
             <span>01</span>
             <div>
               <h3>Generate first-run credentials</h3>
-              <pre tabindex="0"><code>export BINNACLE_SETUP_TOKEN="$(openssl rand -hex 32)"
+              <pre
+                tabindex="0"
+              ><code>export BINNACLE_SETUP_TOKEN="$(openssl rand -hex 32)"
 export DOCKER_GID="$(getent group docker | cut -d: -f3)"</code></pre>
             </div>
           </li>
@@ -401,7 +430,7 @@ export DOCKER_GID="$(getent group docker | cut -d: -f3)"</code></pre>
             <div>
               <h3>Follow the release-aware guide</h3>
               <p>
-                No public v0.2 image has been released yet. The guide records
+                No public v0.3 image has been released yet. The guide records
                 supported source-build paths and will carry the exact image tag
                 after release.
               </p>
@@ -416,12 +445,13 @@ export DOCKER_GID="$(getent group docker | cut -d: -f3)"</code></pre>
         <aside class="socket-warning" aria-labelledby="socket-warning-title">
           <strong id="socket-warning-title">DOCKER SOCKET BOUNDARY</strong>
           <p>
-            Read-only by design describes Binnacle’s behavior, not Docker
-            socket isolation. The socket remains privileged even when mounted
+            Read-only by design describes Binnacle’s behavior, not Docker socket
+            isolation. The socket remains privileged even when mounted
             <code>:ro</code>. Prefer a constrained read-only socket proxy for
             hardened deployments.
           </p>
-          <a href="https://github.com/drilonrecica/binnacle/blob/master/SECURITY.md"
+          <a
+            href="https://github.com/drilonrecica/binnacle/blob/master/SECURITY.md"
             >Read the security policy</a
           >
         </aside>
@@ -459,8 +489,7 @@ export DOCKER_GID="$(getent group docker | cut -d: -f3)"</code></pre>
             href="https://github.com/drilonrecica/binnacle/blob/master/ROADMAP.md"
             ><span>REF / 05</span>Roadmap</a
           >
-          <a
-            href="https://github.com/drilonrecica/binnacle/blob/master/LICENSE"
+          <a href="https://github.com/drilonrecica/binnacle/blob/master/LICENSE"
             ><span>REF / 06</span>AGPLv3 license</a
           >
         </nav>

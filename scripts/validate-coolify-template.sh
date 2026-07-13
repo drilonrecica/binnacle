@@ -70,7 +70,10 @@ for name, expected, actual in (
     if expected != actual:
         raise SystemExit(f"Source-build Coolify drift: {name} differs\n  compose: {expected}\n  source:  {actual}")
 
-for key in ("BINNACLE_DOCKER_SOCKET", "BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS", "BINNACLE_MASTER_KEY"):
+for key in ("BINNACLE_DOCKER_SOCKET", "BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS", "BINNACLE_MASTER_KEY",
+            "BINNACLE_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS", "BINNACLE_NOTIFICATIONS_MAX_CONCURRENCY",
+            "BINNACLE_NOTIFICATIONS_QUEUE_CAPACITY", "BINNACLE_NOTIFICATIONS_DELIVERY_TIMEOUT",
+            "BINNACLE_NOTIFICATIONS_REMINDER_INTERVAL"):
     if key not in s.get("environment", {}):
         raise SystemExit(f"Source-build Coolify configuration does not pass through {key}")
 print("Source-build Coolify Compose is valid.")

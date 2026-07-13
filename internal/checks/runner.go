@@ -16,6 +16,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/outbound"
 )
 
 type Resolver interface {
@@ -30,50 +32,19 @@ type Runner struct {
 	Now          func() time.Time
 }
 
-var metadataAddresses = map[netip.Addr]struct{}{
-	netip.MustParseAddr("169.254.169.254"): {}, netip.MustParseAddr("100.100.100.200"): {},
-	netip.MustParseAddr("fd00:ec2::254"): {},
-}
-
 func (r *Runner) validateURL(ctx context.Context, raw string) (*url.URL, error) {
-	u, err := url.Parse(raw)
-	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
-		return nil, fmt.Errorf("%s", FailureTargetBlocked)
-	}
-	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
-	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
-		return nil, fmt.Errorf("%s", FailureTargetBlocked)
-	}
-	resolver := r.Resolver
-	if resolver == nil {
-		resolver = net.DefaultResolver
-	}
-	addrs, err := resolver.LookupNetIP(ctx, "ip", host)
-	if err != nil {
+	u, err := r.policy().ValidateURL(ctx, raw, "http", "https")
+	if errors.Is(err, outbound.ErrDNS) {
 		return nil, fmt.Errorf("%s: %w", FailureDNS, err)
 	}
-	if len(addrs) == 0 {
-		return nil, fmt.Errorf("%s", FailureDNS)
-	}
-	for _, addr := range addrs {
-		if !r.allowed(addr.Unmap()) {
-			return nil, fmt.Errorf("%s", FailureTargetBlocked)
-		}
+	if err != nil {
+		return nil, fmt.Errorf("%s", FailureTargetBlocked)
 	}
 	return u, nil
 }
 
-func (r *Runner) allowed(addr netip.Addr) bool {
-	if !addr.IsValid() || addr.IsUnspecified() || addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsMulticast() {
-		return false
-	}
-	if _, blocked := metadataAddresses[addr]; blocked {
-		return false
-	}
-	if addr.IsPrivate() && !r.AllowPrivate {
-		return false
-	}
-	return true
+func (r *Runner) policy() outbound.Policy {
+	return outbound.Policy{AllowPrivate: r.AllowPrivate, Resolver: r.Resolver, Dialer: r.Dialer, Dial: r.DialContext}
 }
 
 func (r *Runner) Run(ctx context.Context, check Check) Result {
@@ -89,44 +60,10 @@ func (r *Runner) Run(ctx context.Context, check Check) Result {
 		result.FailureCode = classify(err)
 		return result
 	}
-	dialer := r.Dialer
-	if dialer == nil {
-		dialer = &net.Dialer{}
-	}
 	transport := &http.Transport{
 		Proxy: nil, DisableKeepAlives: true, TLSHandshakeTimeout: check.Timeout,
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(address)
-			if err != nil {
-				return nil, err
-			}
-			resolver := r.Resolver
-			if resolver == nil {
-				resolver = net.DefaultResolver
-			}
-			addrs, err := resolver.LookupNetIP(ctx, "ip", host)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", FailureDNS, err)
-			}
-			var last error
-			for _, addr := range addrs {
-				if !r.allowed(addr.Unmap()) {
-					return nil, fmt.Errorf("%s", FailureTargetBlocked)
-				}
-				dial := r.DialContext
-				if dial == nil {
-					dial = dialer.DialContext
-				}
-				conn, dialErr := dial(ctx, network, net.JoinHostPort(addr.String(), port))
-				if dialErr == nil {
-					return conn, nil
-				}
-				last = dialErr
-			}
-			if last == nil {
-				last = errors.New("no resolved addresses")
-			}
-			return nil, last
+			return r.policy().DialContext(ctx, network, address)
 		},
 	}
 	client := &http.Client{Transport: transport, Timeout: check.Timeout}

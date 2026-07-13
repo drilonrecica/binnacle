@@ -31,18 +31,23 @@ type PersistenceMetrics interface {
 	WriteLatency() time.Duration
 }
 type DurationProvider interface{ CollectionDuration() time.Duration }
+type NotificationHealthProvider interface {
+	HealthSnapshot() (queue int, permanent int, dropped int64, lastSuccess *time.Time)
+}
 
 type Monitor struct {
-	DatabasePath   string
-	DatabaseTarget int64
-	QueueCapacity  int
-	Engine         *metrics.Engine
-	Persistence    PersistenceMetrics
-	Collector      DurationProvider
-	mu             sync.Mutex
-	previousCPU    time.Duration
-	previousAt     time.Time
-	readCPU        func() time.Duration
+	DatabasePath              string
+	DatabaseTarget            int64
+	QueueCapacity             int
+	Engine                    *metrics.Engine
+	Persistence               PersistenceMetrics
+	Collector                 DurationProvider
+	Notifications             NotificationHealthProvider
+	NotificationQueueCapacity int
+	mu                        sync.Mutex
+	previousCPU               time.Duration
+	previousAt                time.Time
+	readCPU                   func() time.Duration
 }
 
 func (m *Monitor) Snapshot() MonitorSnapshot {
@@ -81,7 +86,22 @@ func (m *Monitor) Snapshot() MonitorSnapshot {
 		metric("sse_clients", "SSE clients", sseClients(m.Engine), "clients", "normal", "Currently connected live clients."),
 		metric("docker", "Docker API health", dockerStatus, "", dockerStatusValue(dockerStatus), "Current Docker collector state."),
 	}
+	if m.Notifications != nil {
+		queue, permanent, notificationDropped, lastSuccess := m.Notifications.HealthSnapshot()
+		values = append(values,
+			metric("notification_queue", "Notification queue", queue, "deliveries", queueStatus(int64(queue), m.NotificationQueueCapacity), "Durable notification deliveries waiting to run."),
+			metric("notification_failures", "Permanent notification failures", permanent, "deliveries", nonzeroStatus(uint64(permanent)), "Deliveries requiring configuration changes or manual retry."),
+			metric("notification_dropped", "Dropped notification dispatches", notificationDropped, "dispatches", nonzeroStatus(uint64(notificationDropped)), "Worker dispatches deferred because the bounded queue was full."),
+			metric("notification_last_success", "Last successful notification", lastSuccessValue(lastSuccess), "", available(lastSuccessValue(lastSuccess)), "Most recent successful outbound delivery."),
+		)
+	}
 	return MonitorSnapshot{At: now, Metrics: values}
+}
+func lastSuccessValue(value *time.Time) any {
+	if value == nil {
+		return nil
+	}
+	return value.UTC().Format(time.RFC3339)
 }
 
 func (m *Monitor) processCPU(now time.Time) any {

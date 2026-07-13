@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: AGPL-3.0-only
-# Release gate automation for Binnacle v0.2.0.
+# Release gate automation for Binnacle v0.3.0.
 # Produces a Markdown release record in RELEASE_RECORD_DIR.
 set -euo pipefail
 
@@ -8,7 +8,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 RELEASE_RECORD_DIR="${RELEASE_RECORD_DIR:-release-record}"
 mkdir -p "$RELEASE_RECORD_DIR"
 
-VERSION="${VERSION:-v0.2.0}"
+VERSION="${VERSION:-v0.3.0}"
 COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 SHORT_COMMIT="$(git -C "$ROOT_DIR" rev-parse --short HEAD)"
 DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -88,7 +88,7 @@ record ""
 run_check "make check" make check
 
 # Checks and alerts security/lifecycle qualification.
-run_check "checks and alerts tests" go test -race ./internal/checks ./internal/alerts ./internal/api ./internal/demo
+run_check "incidents and notifications tests" go test -race ./internal/checks ./internal/alerts ./internal/notifications ./internal/outbound ./internal/api ./internal/demo
 
 # 2. License and security policy presence.
 if [[ -s "$ROOT_DIR/LICENSE" && -s "$ROOT_DIR/SECURITY.md" ]]; then
@@ -160,7 +160,10 @@ if command -v pnpm >/dev/null 2>&1 && [[ -d "$ROOT_DIR/web/tests/e2e" ]]; then
     sleep 1
   done
   if curl -sf "http://127.0.0.1:8080/healthz" >/dev/null 2>&1; then
-    run_check "e2e application" pnpm --dir web test:e2e
+    # Serialize the broad suite on release hosts. Parallel Chromium instances
+    # can starve page navigation while the demo server and container runtime
+    # are active, producing non-deterministic timeout failures.
+    run_check "e2e application" pnpm --dir web exec playwright test --workers=1
     run_check "e2e landing" pnpm --dir web test:landing
     run_check "e2e visual regression" pnpm --dir web test:e2e:visual
   else

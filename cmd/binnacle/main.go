@@ -27,6 +27,7 @@ import (
 	"github.com/drilonrecica/binnacle/internal/diagnostics"
 	"github.com/drilonrecica/binnacle/internal/dockerapi"
 	"github.com/drilonrecica/binnacle/internal/metrics"
+	"github.com/drilonrecica/binnacle/internal/notifications"
 	"github.com/drilonrecica/binnacle/internal/onboarding"
 	"github.com/drilonrecica/binnacle/internal/settings"
 	"github.com/drilonrecica/binnacle/internal/storage"
@@ -91,6 +92,20 @@ func main() {
 	onboardingService.SetRetentionSettings(settingsService)
 	checkRepository := checks.NewRepository(nil)
 	alertRepository := alerts.NewRepository(nil)
+	secretStore, err := auth.NewSecretStore(nil, config.Paths.MasterKey)
+	if err != nil {
+		log.Error("master encryption key is invalid", "error", err)
+		os.Exit(1)
+	}
+	notificationRepository := notifications.NewRepository(nil, secretStore)
+	notificationWorker := notifications.NewWorker(notificationRepository, notifications.Config{
+		MaxConcurrency:   config.Notifications.MaxConcurrency,
+		QueueCapacity:    config.Notifications.QueueCapacity,
+		DeliveryTimeout:  config.Notifications.DeliveryTimeout,
+		ReminderInterval: config.Notifications.ReminderInterval,
+		AllowPrivate:     config.Notifications.AllowPrivateTargets,
+	})
+	alertRepository.SetIncidentSink(notificationRepository)
 	allowPrivate, _ := strconv.ParseBool(os.Getenv("BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS"))
 	var checkRunner interface {
 		Run(context.Context, checks.Check) checks.Result
@@ -137,6 +152,8 @@ func main() {
 		settingsService.SetDB(store.DB())
 		checkRepository.SetDB(store.DB())
 		alertRepository.SetDB(store.DB())
+		secretStore.SetDB(store.DB())
+		notificationRepository.SetDB(store.DB())
 		if err := alertRepository.SeedDefaults(ctx); err != nil {
 			return err
 		}
@@ -168,6 +185,7 @@ func main() {
 		application.Add(checkScheduler)
 	}
 	application.Add(alertEvaluator)
+	application.Add(notificationWorker)
 
 	apiServer := api.New()
 	proxies, _ := auth.ParseTrustedProxies(config.HTTP.TrustedProxyCIDRs)
@@ -181,7 +199,7 @@ func main() {
 	apiServer.EnableMetrics(store, authorizer, protection)
 	apiServer.EnableEvents(store, authorizer, protection)
 	apiServer.EnableHistoryDeletion(store, authorizer, sessions)
-	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, Persistence: persistence, Collector: productionSampler}
+	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, Persistence: persistence, Collector: productionSampler, Notifications: notificationWorker, NotificationQueueCapacity: config.Notifications.QueueCapacity}
 	apiServer.EnableMonitorHealth(monitor, authorizer)
 	bundleService := diagnostics.NewBundleService(func(ctx context.Context) diagnostics.BundleData {
 		schema, schemaErr := store.SchemaVersion(ctx)
@@ -224,6 +242,7 @@ func main() {
 	apiServer.EnableSettings(settingsService, sessions, sessions)
 	apiServer.EnableChecks(checkRepository, checkScheduler, sessions, sessions, protection)
 	apiServer.EnableAlerts(alertRepository, sessions, sessions, protection)
+	apiServer.EnableIncidentsNotifications(notificationRepository, notificationWorker, sessions, sessions, protection)
 	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, version, application, apiServer.Handler(), webembed.Handler()))
 	if err := application.Run(ctx); err != nil {
 		log.Error("application exited with error", "error", err)

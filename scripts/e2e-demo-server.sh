@@ -8,6 +8,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DATA_DIR="$(mktemp -d)"
 export BINNACLE_DATA_DIR="$DATA_DIR"
 export BINNACLE_RUNTIME_DIR="$DATA_DIR/runtime"
+export BINNACLE_SETUP_TOKEN="${BINNACLE_SETUP_TOKEN:-binnacle-e2e-demo-token-32chars-long}"
 
 cleanup() {
   rm -rf "$DATA_DIR"

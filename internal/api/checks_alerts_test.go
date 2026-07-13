@@ -13,7 +13,8 @@ func TestChecksAndAlertsRequireAuthentication(t *testing.T) {
 	protection := auth.NewProtection(32, auth.TrustedProxies{})
 	server.EnableChecks(nil, nil, DemoAuthorizer(false), nil, protection)
 	server.EnableAlerts(nil, DemoAuthorizer(false), nil, protection)
-	for _, path := range []string{"/api/v1/checks", "/api/v1/alerts", "/api/v1/alert-rules", "/api/v1/silences"} {
+	server.EnableIncidentsNotifications(nil, nil, DemoAuthorizer(false), nil)
+	for _, path := range []string{"/api/v1/checks", "/api/v1/alerts", "/api/v1/alert-rules", "/api/v1/silences", "/api/v1/incidents", "/api/v1/notification-channels", "/api/v1/notification-deliveries"} {
 		req := httptest.NewRequest(http.MethodGet, "http://binnacle.test"+path, nil)
 		rec := httptest.NewRecorder()
 		server.Handler().ServeHTTP(rec, req)
@@ -22,6 +23,7 @@ func TestChecksAndAlertsRequireAuthentication(t *testing.T) {
 		}
 	}
 }
+
 func TestChecksMutationRequiresAuthenticationBeforeCSRF(t *testing.T) {
 	server := New()
 	server.EnableChecks(nil, nil, DemoAuthorizer(false), nil)

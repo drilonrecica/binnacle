@@ -3,7 +3,7 @@
 Binnacle is distributed as a container image. The supported paths are Coolify
 (one-click service), Docker Compose, or GHCR.
 
-> **Development status:** v0.2 is implemented but no v0.2 tag or image has been
+> **Development status:** v0.3 is implemented but no v0.3 tag or image has been
 > published. The `stable` examples below apply to published releases; qualify a
 > source-built `local` image before using unreleased code in production.
 
@@ -84,7 +84,12 @@ Key variables you may need to set at deployment time:
 - `BINNACLE_HOST_PROC` — defaults to `/host/proc`.
 - `BINNACLE_HOST_SYS` — defaults to `/host/sys`.
 - `BINNACLE_DOCKER_SOCKET` — defaults to `/var/run/docker.sock`.
-- `BINNACLE_MASTER_KEY` — 32-byte hex key for encrypting UI-entered secrets.
+- `BINNACLE_MASTER_KEY` — raw/base64 32-byte key or 64-character hex key for notification secrets.
+- `BINNACLE_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS` — private webhook/SMTP opt-in; defaults to `false` and requires restart.
+- `BINNACLE_NOTIFICATIONS_MAX_CONCURRENCY` — delivery workers; defaults to `4`.
+- `BINNACLE_NOTIFICATIONS_QUEUE_CAPACITY` — dispatch queue; defaults to `1000`.
+- `BINNACLE_NOTIFICATIONS_DELIVERY_TIMEOUT` — per-attempt timeout; defaults to `15s`.
+- `BINNACLE_NOTIFICATIONS_REMINDER_INTERVAL` — open-incident reminders; defaults to `2h`.
 
 Additional settings are available in the authenticated Settings interface. See
 the [product boundaries](../PRODUCT.md) for the supported runtime and security

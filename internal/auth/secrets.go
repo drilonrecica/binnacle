@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -35,6 +36,8 @@ type SecretStore struct {
 	aead cipher.AEAD
 }
 
+func (s *SecretStore) SetDB(db *sql.DB) { s.db = db }
+
 func NewSecretStore(db *sql.DB, encodedKey string) (*SecretStore, error) {
 	if encodedKey == "" {
 		return &SecretStore{db: db}, nil
@@ -57,6 +60,11 @@ func NewSecretStore(db *sql.DB, encodedKey string) (*SecretStore, error) {
 func decodeMasterKey(value string) ([]byte, error) {
 	if len(value) == 32 {
 		return []byte(value), nil
+	}
+	if len(value) == 64 {
+		if decoded, err := hex.DecodeString(value); err == nil && len(decoded) == 32 {
+			return decoded, nil
+		}
 	}
 	for _, encoding := range []*base64.Encoding{base64.RawURLEncoding, base64.StdEncoding, base64.RawStdEncoding} {
 		if decoded, err := encoding.DecodeString(value); err == nil && len(decoded) == 32 {

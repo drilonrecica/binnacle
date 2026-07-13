@@ -31,18 +31,60 @@
     expectedStatusMin?: number;
     expectedStatusMax?: number;
     bodySubstring?: string;
+    status?: string;
+    title?: string;
+    alertCount?: number;
+    firingAlertCount?: number;
+    openedAt?: string;
+    resolvedAt?: string;
+    updatedAt?: string;
+    targetType?: string;
+    kind?: string;
+    minimumSeverity?: string;
+    notifyResolved?: boolean;
+    secretConfigured?: boolean;
+    channelId?: string;
+    incidentId?: string;
+    eventType?: string;
+    attemptCount?: number;
+    failureCode?: string;
+    idempotencyKey?: string;
+    alerts?: Item[];
+    deliveries?: Item[];
   };
-  type Tab = 'active' | 'rules' | 'checks' | 'silences';
-  let tab = $state<Tab>('active');
+  type Tab =
+    | 'incidents'
+    | 'alerts'
+    | 'rules'
+    | 'checks'
+    | 'silences'
+    | 'channels'
+    | 'deliveries';
+  let tab = $state<Tab>('incidents');
   let active = $state<Item[]>([]),
+    incidents = $state<Item[]>([]),
     rules = $state<Item[]>([]),
     checks = $state<Item[]>([]),
-    silences = $state<Item[]>([]);
+    silences = $state<Item[]>([]),
+    channels = $state<Item[]>([]),
+    deliveries = $state<Item[]>([]);
+  let selectedIncident = $state<Item | null>(null);
   let error = $state(''),
     resourceId = $state(''),
     name = $state(''),
     url = $state(''),
     required = $state(true);
+  let channelName = $state(''),
+    channelKind = $state('webhook'),
+    channelTarget = $state(''),
+    channelSender = $state(''),
+    channelRecipients = $state(''),
+    channelUsername = $state(''),
+    channelPassword = $state(''),
+    channelBearer = $state(''),
+    channelSigningSecret = $state(''),
+    channelTLS = $state('starttls'),
+    channelCriticalOnly = $state(false);
   let silenceScope = $state('server'),
     silenceScopeId = $state(''),
     silenceReason = $state(''),
@@ -60,7 +102,14 @@
       ...init,
       headers,
     });
-    if (!response.ok) throw new Error('The alerts service is unavailable.');
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
+      throw new Error(
+        body?.error?.message ?? 'The alerts service is unavailable.',
+      );
+    }
     return response.status === 204
       ? (undefined as T)
       : (response.json() as Promise<T>);
@@ -68,15 +117,71 @@
   async function load() {
     error = '';
     try {
-      [active, rules, checks, silences] = await Promise.all([
-        request<Item[]>('/api/v1/alerts?status=firing'),
-        request<Item[]>('/api/v1/alert-rules'),
-        request<Item[]>('/api/v1/checks'),
-        request<Item[]>('/api/v1/silences'),
-      ]);
+      [incidents, active, rules, checks, silences, channels, deliveries] =
+        await Promise.all([
+          request<Item[]>('/api/v1/incidents'),
+          request<Item[]>('/api/v1/alerts?status=firing'),
+          request<Item[]>('/api/v1/alert-rules'),
+          request<Item[]>('/api/v1/checks'),
+          request<Item[]>('/api/v1/silences'),
+          request<Item[]>('/api/v1/notification-channels'),
+          request<Item[]>('/api/v1/notification-deliveries'),
+        ]);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Alerts are unavailable.';
     }
+  }
+  async function loadIncidents() {
+    if (document.visibilityState !== 'visible') return;
+    try {
+      incidents = await request<Item[]>('/api/v1/incidents');
+    } catch {
+      // The full refresh action reports errors; polling remains quiet.
+    }
+  }
+  async function inspectIncident(id: string) {
+    try {
+      selectedIncident = await request<Item>(
+        `/api/v1/incidents/${encodeURIComponent(id)}`,
+      );
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Incident is unavailable.';
+    }
+  }
+  async function createChannel() {
+    const smtp = channelKind === 'smtp';
+    await mutate('/api/v1/notification-channels', 'POST', {
+      name: channelName,
+      kind: channelKind,
+      enabled: true,
+      minimumSeverity: channelCriticalOnly ? 'critical' : 'warning',
+      notifyResolved: true,
+      ...(smtp
+        ? {
+            host: channelTarget,
+            sender: channelSender,
+            recipients: channelRecipients
+              .split(',')
+              .map((value) => value.trim())
+              .filter(Boolean),
+            tlsMode: channelTLS,
+            username: channelUsername,
+            password: channelPassword,
+          }
+        : {
+            url: channelTarget,
+            bearerToken: channelBearer,
+            signingSecret: channelSigningSecret,
+          }),
+    });
+    channelName = '';
+    channelTarget = '';
+    channelSender = '';
+    channelRecipients = '';
+    channelUsername = '';
+    channelPassword = '';
+    channelBearer = '';
+    channelSigningSecret = '';
   }
   async function createCheck() {
     try {
@@ -162,6 +267,8 @@
     value ? new Date(value).toLocaleString() : '—';
   onMount(() => {
     void load();
+    const timer = window.setInterval(() => void loadIncidents(), 15_000);
+    return () => window.clearInterval(timer);
   });
 </script>
 
@@ -170,17 +277,78 @@
     code="ALT"
     title="Alerts"
     id="alerts-title"
-    detail={`${active.length} active`}
+    detail={`${incidents.filter((item) => item.status === 'open').length} open incidents`}
   />
   <div class="control-rail" role="tablist" aria-label="Alerts sections">
-    {#each ['active', 'rules', 'checks', 'silences'] as item}<button
+    {#each ['incidents', 'alerts', 'rules', 'checks', 'silences', 'channels', 'deliveries'] as item}<button
         role="tab"
         aria-selected={tab === item}
         onclick={() => (tab = item as Tab)}>{item}</button
-      >{/each}<button onclick={() => load()}>Refresh</button>
+      >{/each}
   </div>
+  <button onclick={() => load()}>Refresh</button>
   {#if error}<Alert level="error">{error}</Alert>{/if}
-  {#if tab === 'active'}
+  {#if tab === 'incidents'}
+    {#if selectedIncident}<section
+        class="card"
+        aria-labelledby="incident-detail-title"
+      >
+        <h2 id="incident-detail-title">{selectedIncident.title}</h2>
+        <p>
+          {selectedIncident.status} · {selectedIncident.severity} · {selectedIncident.targetType}:{selectedIncident.targetId}
+        </p>
+        <button onclick={() => (selectedIncident = null)}>Close details</button>
+        <div class="table-scroll">
+          <table class="console-table">
+            <caption>Incident member alerts</caption><thead
+              ><tr
+                ><th>Status</th><th>Severity</th><th>Alert</th><th>Started</th
+                ></tr
+              ></thead
+            ><tbody
+              >{#each selectedIncident.alerts ?? [] as member (member.id)}<tr
+                  ><td>{member.status}</td><td>{member.severity}</td><td
+                    >{member.message}</td
+                  ><td>{localTime(member.startedAt)}</td></tr
+                >{/each}</tbody
+            >
+          </table>
+        </div>
+        <p>
+          {(selectedIncident.deliveries ?? []).length} related notification
+          {(selectedIncident.deliveries ?? []).length === 1
+            ? 'delivery'
+            : 'deliveries'}
+        </p>
+      </section>{/if}
+    {#if !incidents.length}<EmptyState title="No incidents"
+        ><p>
+          Firing alerts will be grouped here by affected target.
+        </p></EmptyState
+      >{:else}<div class="table-scroll">
+        <table class="console-table">
+          <caption>Incidents</caption><thead
+            ><tr
+              ><th>Status</th><th>Severity</th><th>Incident</th><th>Target</th
+              ><th>Alerts</th><th>Opened</th><th>Action</th></tr
+            ></thead
+          ><tbody
+            >{#each incidents as item (item.id)}<tr
+                ><td>{item.status}</td><td>{item.severity}</td><td
+                  >{item.title}</td
+                ><td>{item.targetType}:{item.targetId}</td><td
+                  >{item.firingAlertCount ?? 0} firing / {item.alertCount ??
+                    0}</td
+                ><td>{age(item.openedAt)}</td><td
+                  ><button onclick={() => inspectIncident(item.id)}
+                    >View details</button
+                  ></td
+                ></tr
+              >{/each}</tbody
+          >
+        </table>
+      </div>{/if}
+  {:else if tab === 'alerts'}
     {#if !active.length}<EmptyState title="No active alerts"
         ><p>All evaluated conditions are healthy.</p></EmptyState
       >{:else}<div class="table-scroll">
@@ -291,7 +459,7 @@
           >
         </table>
       </div>{/if}
-  {:else}
+  {:else if tab === 'silences'}
     <form
       class="control-rail"
       onsubmit={(e) => {
@@ -344,6 +512,145 @@
                         'DELETE',
                       )}>Cancel</button
                   ></td
+                ></tr
+              >{/each}</tbody
+          >
+        </table>
+      </div>{/if}
+  {:else if tab === 'channels'}
+    <form
+      class="control-rail"
+      onsubmit={(event) => {
+        event.preventDefault();
+        void createChannel();
+      }}
+    >
+      <label
+        >Name<input required maxlength="120" bind:value={channelName} /></label
+      ><label
+        >Type<select bind:value={channelKind}
+          ><option value="webhook">HTTPS webhook</option><option value="smtp"
+            >SMTP email</option
+          ></select
+        ></label
+      ><label
+        >{channelKind === 'smtp' ? 'SMTP host:port' : 'HTTPS URL'}<input
+          required
+          type={channelKind === 'smtp' ? 'text' : 'url'}
+          bind:value={channelTarget}
+        /></label
+      >{#if channelKind === 'smtp'}<label
+          >Sender<input
+            required
+            type="email"
+            bind:value={channelSender}
+          /></label
+        ><label
+          >Recipients (comma-separated)<input
+            required
+            bind:value={channelRecipients}
+          /></label
+        ><label
+          >TLS<select bind:value={channelTLS}
+            ><option value="starttls">STARTTLS</option><option value="implicit"
+              >Implicit TLS</option
+            ></select
+          ></label
+        ><label>Username (optional)<input bind:value={channelUsername} /></label
+        ><label
+          >Password (optional)<input
+            type="password"
+            autocomplete="new-password"
+            bind:value={channelPassword}
+          /></label
+        >{:else}<label
+          >Bearer token (optional)<input
+            type="password"
+            autocomplete="new-password"
+            bind:value={channelBearer}
+          /></label
+        ><label
+          >HMAC signing secret (optional)<input
+            type="password"
+            autocomplete="new-password"
+            bind:value={channelSigningSecret}
+          /></label
+        >{/if}<label
+        ><input type="checkbox" bind:checked={channelCriticalOnly} />
+        Critical only</label
+      ><button type="submit">Create channel</button>
+    </form>
+    {#if !channels.length}<EmptyState title="No notification channels"
+        ><p>
+          Configure an HTTPS webhook or TLS-protected SMTP channel.
+        </p></EmptyState
+      >{:else}<div class="table-scroll">
+        <table class="console-table">
+          <caption>Notification channels</caption><thead
+            ><tr
+              ><th>Channel</th><th>Type</th><th>Filter</th><th>Status</th><th
+                >Actions</th
+              ></tr
+            ></thead
+          ><tbody
+            >{#each channels as channel (channel.id)}<tr
+                ><td>{channel.name}</td><td>{channel.kind}</td><td
+                  >{channel.minimumSeverity}+</td
+                ><td
+                  >{channel.enabled ? 'Enabled' : 'Disabled'} · {channel.secretConfigured
+                    ? 'secret configured'
+                    : 'secret unavailable'}</td
+                ><td
+                  ><button
+                    onclick={() =>
+                      mutate(
+                        `/api/v1/notification-channels/${encodeURIComponent(channel.id)}/test`,
+                        'POST',
+                      )}>Test</button
+                  ><button
+                    onclick={() =>
+                      mutate(
+                        `/api/v1/notification-channels/${encodeURIComponent(channel.id)}`,
+                        'PATCH',
+                        { enabled: !channel.enabled },
+                      )}>{channel.enabled ? 'Disable' : 'Enable'}</button
+                  ><button
+                    onclick={() =>
+                      mutate(
+                        `/api/v1/notification-channels/${encodeURIComponent(channel.id)}`,
+                        'DELETE',
+                      )}>Delete</button
+                  ></td
+                ></tr
+              >{/each}</tbody
+          >
+        </table>
+      </div>{/if}
+  {:else}
+    {#if !deliveries.length}<EmptyState title="No delivery history"
+        ><p>Notification attempts will appear here.</p></EmptyState
+      >{:else}<div class="table-scroll">
+        <table class="console-table">
+          <caption>Notification delivery history</caption><thead
+            ><tr
+              ><th>Status</th><th>Event</th><th>Channel</th><th>Attempts</th><th
+                >Failure</th
+              ><th>Action</th></tr
+            ></thead
+          ><tbody
+            >{#each deliveries as delivery (delivery.id)}<tr
+                ><td>{delivery.status}</td><td>{delivery.eventType}</td><td
+                  >{delivery.channelId}</td
+                ><td>{delivery.attemptCount ?? 0}</td><td
+                  >{delivery.failureCode ?? '—'}</td
+                ><td
+                  >{#if delivery.status === 'permanent_failure'}<button
+                      onclick={() =>
+                        mutate(
+                          `/api/v1/notification-deliveries/${encodeURIComponent(delivery.id)}/retry`,
+                          'POST',
+                        )}>Retry</button
+                    >{/if}</td
                 ></tr
               >{/each}</tbody
           >

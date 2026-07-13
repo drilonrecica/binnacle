@@ -44,7 +44,7 @@ test('field manual assets, links, and accessibility are valid', async ({
     page.getByText('No external telemetry', { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText('No v0.2 tag has been published yet.'),
+    page.getByText('No v0.3 tag has been published yet.'),
   ).toBeVisible();
   await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
   await expect(page.locator('script')).toHaveCount(0);

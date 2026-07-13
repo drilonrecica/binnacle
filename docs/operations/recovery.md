@@ -1,5 +1,9 @@
 # Recovery
 
+Notification deliveries left in progress by a crash return to pending on
+startup with the same idempotency key. Use Delivery History for manual retry so
+the audit record remains intact.
+
 ## Disk-full condition
 
 When the database or WAL grows past configured thresholds, Binnacle enters a degraded persistence state:

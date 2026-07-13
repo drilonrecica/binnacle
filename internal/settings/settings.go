@@ -11,19 +11,20 @@ import (
 )
 
 type Config struct {
-	Paths       Paths       `toml:"paths"`
-	HTTP        HTTP        `toml:"http"`
-	Collection  Collection  `toml:"collection"`
-	Live        Live        `toml:"live"`
-	Persistence Persistence `toml:"persistence"`
-	Retention   Retention   `toml:"retention"`
-	Database    Database    `toml:"database"`
-	Charts      Charts      `toml:"charts"`
-	Docker      Docker      `toml:"docker"`
-	Checks      Checks      `toml:"checks"`
-	Logs        Logs        `toml:"logs"`
-	Sessions    Sessions    `toml:"sessions"`
-	Demo        bool        `toml:"demo"`
+	Paths         Paths         `toml:"paths"`
+	HTTP          HTTP          `toml:"http"`
+	Collection    Collection    `toml:"collection"`
+	Live          Live          `toml:"live"`
+	Persistence   Persistence   `toml:"persistence"`
+	Retention     Retention     `toml:"retention"`
+	Database      Database      `toml:"database"`
+	Charts        Charts        `toml:"charts"`
+	Docker        Docker        `toml:"docker"`
+	Checks        Checks        `toml:"checks"`
+	Notifications Notifications `toml:"notifications"`
+	Logs          Logs          `toml:"logs"`
+	Sessions      Sessions      `toml:"sessions"`
+	Demo          bool          `toml:"demo"`
 }
 type Paths struct {
 	DataDir      string `toml:"data_dir"`
@@ -72,6 +73,13 @@ type Docker struct {
 type Checks struct {
 	MaxConcurrency int `toml:"max_concurrency"`
 }
+type Notifications struct {
+	AllowPrivateTargets bool          `toml:"allow_private_targets"`
+	MaxConcurrency      int           `toml:"max_concurrency"`
+	QueueCapacity       int           `toml:"queue_capacity"`
+	DeliveryTimeout     time.Duration `toml:"delivery_timeout"`
+	ReminderInterval    time.Duration `toml:"reminder_interval"`
+}
 type Logs struct {
 	MaxResponseBytes int64 `toml:"max_response_bytes"`
 	MaxLines         int   `toml:"max_lines"`
@@ -85,7 +93,7 @@ func Defaults() Config {
 	return Config{
 		Paths: Paths{DataDir: "/var/lib/binnacle", HostProc: "/proc", HostSys: "/sys"}, HTTP: HTTP{ListenAddress: ":8080"},
 		Collection: Collection{HostInterval: 2 * time.Second, ContainerInterval: 2 * time.Second, MinimumInterval: time.Second}, Live: Live{SSEInterval: 2 * time.Second}, Persistence: Persistence{RawInterval: 10 * time.Second, QueueBatchLimit: 60},
-		Retention: Retention{Preset: "balanced", Raw: 48 * time.Hour, OneMinute: 30 * 24 * time.Hour, FifteenMinute: 365 * 24 * time.Hour, OneHour: 0}, Database: Database{TargetBudgetBytes: 1073741824, WarningRatio: .80, CriticalRatio: .95, EmergencyPauseRatio: .98}, Charts: Charts{MaxPointsPerSeries: 1000}, Docker: Docker{SocketPath: "/var/run/docker.sock", MaxConcurrency: 4}, Checks: Checks{MaxConcurrency: 8}, Logs: Logs{MaxResponseBytes: 1048576, MaxLines: 5000}, Sessions: Sessions{IdleTimeout: 12 * time.Hour, AbsoluteLifetime: 720 * time.Hour},
+		Retention: Retention{Preset: "balanced", Raw: 48 * time.Hour, OneMinute: 30 * 24 * time.Hour, FifteenMinute: 365 * 24 * time.Hour, OneHour: 0}, Database: Database{TargetBudgetBytes: 1073741824, WarningRatio: .80, CriticalRatio: .95, EmergencyPauseRatio: .98}, Charts: Charts{MaxPointsPerSeries: 1000}, Docker: Docker{SocketPath: "/var/run/docker.sock", MaxConcurrency: 4}, Checks: Checks{MaxConcurrency: 8}, Notifications: Notifications{MaxConcurrency: 4, QueueCapacity: 1000, DeliveryTimeout: 15 * time.Second, ReminderInterval: 2 * time.Hour}, Logs: Logs{MaxResponseBytes: 1048576, MaxLines: 5000}, Sessions: Sessions{IdleTimeout: 12 * time.Hour, AbsoluteLifetime: 720 * time.Hour},
 	}
 }
 func RetentionPreset(name string) (Retention, bool) {
@@ -137,6 +145,9 @@ func (c Config) Validate() error {
 	if c.Persistence.QueueBatchLimit <= 0 || c.Charts.MaxPointsPerSeries <= 0 || c.Docker.MaxConcurrency <= 0 || c.Checks.MaxConcurrency <= 0 || c.Logs.MaxResponseBytes <= 0 || c.Logs.MaxLines <= 0 || c.Database.TargetBudgetBytes <= 0 {
 		return fmt.Errorf("limits and budgets must be positive")
 	}
+	if c.Notifications.MaxConcurrency < 1 || c.Notifications.MaxConcurrency > 32 || c.Notifications.QueueCapacity < 1 || c.Notifications.QueueCapacity > 10000 || c.Notifications.DeliveryTimeout < time.Second || c.Notifications.DeliveryTimeout > time.Minute || c.Notifications.ReminderInterval < time.Minute || c.Notifications.ReminderInterval > 24*time.Hour {
+		return fmt.Errorf("notification limits are outside supported bounds")
+	}
 	if !(0 < c.Database.WarningRatio && c.Database.WarningRatio < c.Database.CriticalRatio && c.Database.CriticalRatio < c.Database.EmergencyPauseRatio && c.Database.EmergencyPauseRatio <= 1) {
 		return fmt.Errorf("database ratios must be ordered between zero and one")
 	}
@@ -152,7 +163,7 @@ func (c Config) Validate() error {
 // UIOverridable reports whether a key can be changed without a deployment change.
 func UIOverridable(key string) bool {
 	switch key {
-	case "paths.data_dir", "paths.database_path", "paths.runtime_dir", "paths.master_key", "http.listen_address", "docker.socket_path", "paths.host_proc", "paths.host_sys":
+	case "paths.data_dir", "paths.database_path", "paths.runtime_dir", "paths.master_key", "http.listen_address", "docker.socket_path", "paths.host_proc", "paths.host_sys", "notifications.allow_private_targets", "notifications.max_concurrency", "notifications.queue_capacity", "notifications.delivery_timeout", "notifications.reminder_interval":
 		return false
 	}
 	return true

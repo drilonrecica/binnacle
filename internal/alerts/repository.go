@@ -12,10 +12,14 @@ import (
 	"time"
 )
 
-type Repository struct{ db *sql.DB }
+type Repository struct {
+	db   *sql.DB
+	sink IncidentSink
+}
 
-func NewRepository(db *sql.DB) *Repository { return &Repository{db: db} }
-func (r *Repository) SetDB(db *sql.DB)     { r.db = db }
+func NewRepository(db *sql.DB) *Repository              { return &Repository{db: db} }
+func (r *Repository) SetDB(db *sql.DB)                  { r.db = db }
+func (r *Repository) SetIncidentSink(sink IncidentSink) { r.sink = sink }
 func (r *Repository) SeedDefaults(ctx context.Context) error {
 	if r.db == nil {
 		return errors.New("alerts repository unavailable")
@@ -70,15 +74,15 @@ func (r *Repository) Alerts(ctx context.Context, status, severity, resource, fam
 	if offset < 0 {
 		offset = 0
 	}
-	q := `SELECT id,dedup_key,rule_id,family,severity,target_type,target_id,status,started_at,resolved_at,last_observed_at,observed_value,message FROM alerts WHERE 1=1`
+	q := `SELECT a.id,a.dedup_key,a.rule_id,a.family,a.severity,a.target_type,a.target_id,a.status,a.started_at,a.resolved_at,a.last_observed_at,a.observed_value,a.message,COALESCE(ia.incident_id,'') FROM alerts a LEFT JOIN incident_alerts ia ON ia.alert_id=a.id WHERE 1=1`
 	args := []any{}
 	for _, f := range []struct{ v, col string }{{status, "status"}, {severity, "severity"}, {resource, "target_id"}, {family, "family"}} {
 		if f.v != "" {
-			q += " AND " + f.col + "=?"
+			q += " AND a." + f.col + "=?"
 			args = append(args, f.v)
 		}
 	}
-	q += ` ORDER BY CASE severity WHEN 'critical' THEN 0 ELSE 1 END,started_at DESC LIMIT ? OFFSET ?`
+	q += ` ORDER BY CASE a.severity WHEN 'critical' THEN 0 ELSE 1 END,a.started_at DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -90,7 +94,7 @@ func (r *Repository) Alerts(ctx context.Context, status, severity, resource, fam
 		var a Alert
 		var start, last int64
 		var resolved sql.NullInt64
-		if err = rows.Scan(&a.ID, &a.DedupKey, &a.RuleID, &a.Family, &a.Severity, &a.TargetType, &a.TargetID, &a.Status, &start, &resolved, &last, &a.ObservedValue, &a.Message); err != nil {
+		if err = rows.Scan(&a.ID, &a.DedupKey, &a.RuleID, &a.Family, &a.Severity, &a.TargetType, &a.TargetID, &a.Status, &start, &resolved, &last, &a.ObservedValue, &a.Message, &a.IncidentID); err != nil {
 			return nil, err
 		}
 		a.StartedAt = time.Unix(start, 0).UTC()

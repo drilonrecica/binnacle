@@ -150,7 +150,7 @@ func readTOML(path string) (map[string]string, error) {
 }
 
 var environment = map[string]string{
-	"BINNACLE_DATA_DIR": "paths.data_dir", "BINNACLE_DATABASE_PATH": "paths.database_path", "BINNACLE_RUNTIME_DIR": "paths.runtime_dir", "BINNACLE_HOST_PROC": "paths.host_proc", "BINNACLE_HOST_SYS": "paths.host_sys", "BINNACLE_MASTER_KEY": "paths.master_key", "BINNACLE_LISTEN_ADDRESS": "http.listen_address", "BINNACLE_TRUSTED_PROXY_CIDRS": "http.trusted_proxy_cidrs", "BINNACLE_HOST_INTERVAL": "collection.host_interval", "BINNACLE_CONTAINER_INTERVAL": "collection.container_interval", "BINNACLE_MINIMUM_INTERVAL": "collection.minimum_interval", "BINNACLE_SSE_INTERVAL": "live.sse_interval", "BINNACLE_RAW_INTERVAL": "persistence.raw_interval", "BINNACLE_QUEUE_BATCH_LIMIT": "persistence.queue_batch_limit", "BINNACLE_RETENTION_PRESET": "retention.preset", "BINNACLE_RETENTION_RAW": "retention.raw", "BINNACLE_RETENTION_ONE_MINUTE": "retention.one_minute", "BINNACLE_RETENTION_FIFTEEN_MINUTE": "retention.fifteen_minute", "BINNACLE_RETENTION_ONE_HOUR": "retention.one_hour", "BINNACLE_DATABASE_TARGET_BUDGET_BYTES": "database.target_budget_bytes", "BINNACLE_DATABASE_WARNING_RATIO": "database.warning_ratio", "BINNACLE_DATABASE_CRITICAL_RATIO": "database.critical_ratio", "BINNACLE_DATABASE_EMERGENCY_PAUSE_RATIO": "database.emergency_pause_ratio", "BINNACLE_CHARTS_MAX_POINTS": "charts.max_points_per_series", "BINNACLE_DOCKER_SOCKET": "docker.socket_path", "BINNACLE_DOCKER_MAX_CONCURRENCY": "docker.max_concurrency", "BINNACLE_CHECKS_MAX_CONCURRENCY": "checks.max_concurrency", "BINNACLE_LOGS_MAX_RESPONSE_BYTES": "logs.max_response_bytes", "BINNACLE_LOGS_MAX_LINES": "logs.max_lines", "BINNACLE_SESSION_IDLE_TIMEOUT": "sessions.idle_timeout", "BINNACLE_SESSION_ABSOLUTE_LIFETIME": "sessions.absolute_lifetime", "BINNACLE_DEMO": "demo"}
+	"BINNACLE_DATA_DIR": "paths.data_dir", "BINNACLE_DATABASE_PATH": "paths.database_path", "BINNACLE_RUNTIME_DIR": "paths.runtime_dir", "BINNACLE_HOST_PROC": "paths.host_proc", "BINNACLE_HOST_SYS": "paths.host_sys", "BINNACLE_MASTER_KEY": "paths.master_key", "BINNACLE_LISTEN_ADDRESS": "http.listen_address", "BINNACLE_TRUSTED_PROXY_CIDRS": "http.trusted_proxy_cidrs", "BINNACLE_HOST_INTERVAL": "collection.host_interval", "BINNACLE_CONTAINER_INTERVAL": "collection.container_interval", "BINNACLE_MINIMUM_INTERVAL": "collection.minimum_interval", "BINNACLE_SSE_INTERVAL": "live.sse_interval", "BINNACLE_RAW_INTERVAL": "persistence.raw_interval", "BINNACLE_QUEUE_BATCH_LIMIT": "persistence.queue_batch_limit", "BINNACLE_RETENTION_PRESET": "retention.preset", "BINNACLE_RETENTION_RAW": "retention.raw", "BINNACLE_RETENTION_ONE_MINUTE": "retention.one_minute", "BINNACLE_RETENTION_FIFTEEN_MINUTE": "retention.fifteen_minute", "BINNACLE_RETENTION_ONE_HOUR": "retention.one_hour", "BINNACLE_DATABASE_TARGET_BUDGET_BYTES": "database.target_budget_bytes", "BINNACLE_DATABASE_WARNING_RATIO": "database.warning_ratio", "BINNACLE_DATABASE_CRITICAL_RATIO": "database.critical_ratio", "BINNACLE_DATABASE_EMERGENCY_PAUSE_RATIO": "database.emergency_pause_ratio", "BINNACLE_CHARTS_MAX_POINTS": "charts.max_points_per_series", "BINNACLE_DOCKER_SOCKET": "docker.socket_path", "BINNACLE_DOCKER_MAX_CONCURRENCY": "docker.max_concurrency", "BINNACLE_CHECKS_MAX_CONCURRENCY": "checks.max_concurrency", "BINNACLE_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS": "notifications.allow_private_targets", "BINNACLE_NOTIFICATIONS_MAX_CONCURRENCY": "notifications.max_concurrency", "BINNACLE_NOTIFICATIONS_QUEUE_CAPACITY": "notifications.queue_capacity", "BINNACLE_NOTIFICATIONS_DELIVERY_TIMEOUT": "notifications.delivery_timeout", "BINNACLE_NOTIFICATIONS_REMINDER_INTERVAL": "notifications.reminder_interval", "BINNACLE_LOGS_MAX_RESPONSE_BYTES": "logs.max_response_bytes", "BINNACLE_LOGS_MAX_LINES": "logs.max_lines", "BINNACLE_SESSION_IDLE_TIMEOUT": "sessions.idle_timeout", "BINNACLE_SESSION_ABSOLUTE_LIFETIME": "sessions.absolute_lifetime", "BINNACLE_DEMO": "demo"}
 var supported = func() map[string]bool {
 	m := map[string]bool{}
 	for _, k := range environment {
@@ -253,6 +253,20 @@ func apply(c *Config, values map[string]string) error {
 			i(&c.Docker.MaxConcurrency)
 		case "checks.max_concurrency":
 			i(&c.Checks.MaxConcurrency)
+		case "notifications.allow_private_targets":
+			var v bool
+			v, err = strconv.ParseBool(value)
+			if err == nil {
+				c.Notifications.AllowPrivateTargets = v
+			}
+		case "notifications.max_concurrency":
+			i(&c.Notifications.MaxConcurrency)
+		case "notifications.queue_capacity":
+			i(&c.Notifications.QueueCapacity)
+		case "notifications.delivery_timeout":
+			d(&c.Notifications.DeliveryTimeout)
+		case "notifications.reminder_interval":
+			d(&c.Notifications.ReminderInterval)
 		case "logs.max_response_bytes":
 			i64(&c.Logs.MaxResponseBytes)
 		case "logs.max_lines":
@@ -306,6 +320,7 @@ func lookup(c Config, key string) string {
 		"database.critical_ratio": strconv.FormatFloat(c.Database.CriticalRatio, 'f', -1, 64), "database.emergency_pause_ratio": strconv.FormatFloat(c.Database.EmergencyPauseRatio, 'f', -1, 64),
 		"charts.max_points_per_series": strconv.Itoa(c.Charts.MaxPointsPerSeries), "docker.max_concurrency": strconv.Itoa(c.Docker.MaxConcurrency),
 		"checks.max_concurrency": strconv.Itoa(c.Checks.MaxConcurrency), "logs.max_response_bytes": strconv.FormatInt(c.Logs.MaxResponseBytes, 10),
+		"notifications.allow_private_targets": strconv.FormatBool(c.Notifications.AllowPrivateTargets), "notifications.max_concurrency": strconv.Itoa(c.Notifications.MaxConcurrency), "notifications.queue_capacity": strconv.Itoa(c.Notifications.QueueCapacity), "notifications.delivery_timeout": c.Notifications.DeliveryTimeout.String(), "notifications.reminder_interval": c.Notifications.ReminderInterval.String(),
 		"logs.max_lines": strconv.Itoa(c.Logs.MaxLines), "sessions.idle_timeout": c.Sessions.IdleTimeout.String(),
 		"sessions.absolute_lifetime": c.Sessions.AbsoluteLifetime.String(), "demo": strconv.FormatBool(c.Demo),
 	}

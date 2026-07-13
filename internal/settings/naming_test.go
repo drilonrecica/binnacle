@@ -4,6 +4,7 @@ package settings
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBinnacleConfigurationNames(t *testing.T) {
@@ -31,5 +32,37 @@ func TestBinnacleConfigurationNames(t *testing.T) {
 	}, func(string) bool { return false })
 	if path != explicit {
 		t.Fatalf("discovered config path = %q", path)
+	}
+}
+
+func TestNotificationDeploymentSettings(t *testing.T) {
+	config := Defaults()
+	if config.Notifications.MaxConcurrency != 4 || config.Notifications.QueueCapacity != 1000 || config.Notifications.DeliveryTimeout != 15*time.Second || config.Notifications.ReminderInterval != 2*time.Hour || config.Notifications.AllowPrivateTargets {
+		t.Fatalf("notification defaults=%+v", config.Notifications)
+	}
+	values := map[string]string{
+		"notifications.allow_private_targets": "true",
+		"notifications.max_concurrency":       "8",
+		"notifications.queue_capacity":        "250",
+		"notifications.delivery_timeout":      "20s",
+		"notifications.reminder_interval":     "3h",
+	}
+	if err := apply(&config, values); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if !config.Notifications.AllowPrivateTargets || config.Notifications.MaxConcurrency != 8 || config.Notifications.QueueCapacity != 250 || config.Notifications.DeliveryTimeout != 20*time.Second || config.Notifications.ReminderInterval != 3*time.Hour {
+		t.Fatalf("notification settings=%+v", config.Notifications)
+	}
+	for key := range values {
+		if UIOverridable(key) {
+			t.Fatalf("%s must require restart", key)
+		}
+	}
+	config.Notifications.QueueCapacity = 0
+	if err := config.Validate(); err == nil {
+		t.Fatal("unbounded notification configuration was accepted")
 	}
 }

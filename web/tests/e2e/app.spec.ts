@@ -206,6 +206,167 @@ test('creates a health check from the Alerts console', async ({ page }) => {
   await expect.poll(() => created).toBe(true);
 });
 
+test('shows incidents and manages notification delivery workflows', async ({
+  page,
+}) => {
+  await mockAuthSession(page);
+  await mockOnboarding(page);
+  await page.route('**/api/v1/live', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
+  );
+  await page.route('**/api/v1/incidents', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'inc-1',
+          status: 'open',
+          severity: 'critical',
+          title: 'resource incident on api',
+          targetType: 'resource',
+          targetId: 'api',
+          alertCount: 2,
+          firingAlertCount: 1,
+          openedAt: '2026-07-11T12:00:00Z',
+        },
+      ],
+    }),
+  );
+  await page.route('**/api/v1/incidents/inc-1', (route) =>
+    route.fulfill({
+      json: {
+        id: 'inc-1',
+        status: 'open',
+        severity: 'critical',
+        title: 'resource incident on api',
+        targetType: 'resource',
+        targetId: 'api',
+        alertCount: 2,
+        firingAlertCount: 1,
+        openedAt: '2026-07-11T12:00:00Z',
+        alerts: [
+          {
+            id: 'alert-1',
+            family: 'resource_health',
+            severity: 'critical',
+            status: 'firing',
+            message: 'API is unhealthy',
+            startedAt: '2026-07-11T12:00:00Z',
+          },
+        ],
+        deliveries: [{ id: 'delivery-1', status: 'succeeded' }],
+      },
+    }),
+  );
+  for (const path of ['alerts?*', 'alert-rules', 'checks', 'silences']) {
+    await page.route(`**/api/v1/${path}`, (route) =>
+      route.fulfill({ json: [] }),
+    );
+  }
+  let channelCreated = false;
+  let smtpCreated = false;
+  let channelTested = false;
+  await page.route(
+    '**/api/v1/notification-channels/channel-existing/test',
+    (route) => {
+      channelTested = true;
+      return route.fulfill({
+        status: 202,
+        json: { deliveryId: 'test-delivery' },
+      });
+    },
+  );
+  await page.route('**/api/v1/notification-channels', async (route) => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as {
+        kind?: string;
+        url?: string;
+        host?: string;
+        sender?: string;
+        recipients?: string[];
+        tlsMode?: string;
+      };
+      channelCreated = body.url === 'https://hooks.example.com/incidents';
+      smtpCreated =
+        body.kind === 'smtp' &&
+        body.host === 'smtp.example.com:465' &&
+        body.sender === 'binnacle@example.com' &&
+        body.recipients?.[0] === 'ops@example.com' &&
+        body.tlsMode === 'implicit';
+      return route.fulfill({ status: 201, json: { id: 'channel-1' } });
+    }
+    return route.fulfill({
+      json: [
+        {
+          id: 'channel-existing',
+          name: 'Existing webhook',
+          kind: 'webhook',
+          enabled: true,
+          minimumSeverity: 'warning',
+          secretConfigured: true,
+        },
+      ],
+    });
+  });
+  let retried = false;
+  await page.route('**/api/v1/notification-deliveries', (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: 'delivery-1',
+          channelId: 'channel-1',
+          eventType: 'opened',
+          status: 'permanent_failure',
+          attemptCount: 7,
+          failureCode: 'http_400',
+        },
+      ],
+    }),
+  );
+  await page.route(
+    '**/api/v1/notification-deliveries/delivery-1/retry',
+    (route) => {
+      retried = true;
+      return route.fulfill({ status: 202, json: { deliveryId: 'delivery-1' } });
+    },
+  );
+
+  await page.goto('/alerts');
+  await expect(page.getByRole('tab', { name: 'incidents' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByText('resource incident on api')).toBeVisible();
+  await page.getByRole('button', { name: 'View details' }).click();
+  await expect(page.getByText('API is unhealthy')).toBeVisible();
+  await expect(page.getByText('1 related notification delivery')).toBeVisible();
+  await page.getByRole('button', { name: 'Close details' }).click();
+
+  await page.getByRole('tab', { name: 'channels' }).click();
+  await page.getByRole('button', { name: 'Test', exact: true }).click();
+  await expect.poll(() => channelTested).toBe(true);
+  await page.getByLabel('Name').fill('Operations webhook');
+  await page
+    .getByLabel('HTTPS URL')
+    .fill('https://hooks.example.com/incidents');
+  await page.getByRole('button', { name: 'Create channel' }).click();
+  await expect.poll(() => channelCreated).toBe(true);
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('');
+
+  await page.getByLabel('Type').selectOption('smtp');
+  await page.getByLabel('Name', { exact: true }).fill('Operations email');
+  await page.getByLabel('SMTP host:port').fill('smtp.example.com:465');
+  await page.getByLabel('Sender').fill('binnacle@example.com');
+  await page.getByLabel('Recipients (comma-separated)').fill('ops@example.com');
+  await page.getByLabel('TLS').selectOption('implicit');
+  await page.getByRole('button', { name: 'Create channel' }).click();
+  await expect.poll(() => smtpCreated).toBe(true);
+
+  await page.getByRole('tab', { name: 'deliveries' }).click();
+  await expect(page.getByText('http_400')).toBeVisible();
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect.poll(() => retried).toBe(true);
+});
+
 test('removed and unknown routes fall back to Watch', async ({ page }) => {
   await mockAuthSession(page);
   await mockOnboarding(page);

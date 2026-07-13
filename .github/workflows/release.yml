@@ -37,7 +37,7 @@ jobs:
       - run: pnpm --dir web install --frozen-lockfile
       - run: pnpm --dir web exec playwright install --with-deps chromium
       - name: Run release qualification
-        run: VERSION="${GITHUB_REF_NAME:-v0.2.0}" ./scripts/release-gate.sh
+        run: VERSION="${GITHUB_REF_NAME:-v0.3.0}" ./scripts/release-gate.sh
       - uses: actions/upload-artifact@v7.0.0
         if: always()
         with:

@@ -73,6 +73,22 @@ func SeedChecksAlerts(ctx context.Context, db *sql.DB, count, resources int, now
 		if err != nil {
 			return err
 		}
+		_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO incidents(id,group_key,status,severity,target_type,target_id,title,opened_at,updated_at,version,next_reminder_at)VALUES('demo-incident','resource:res_demo_2','open','warning','resource','res_demo_2','Demo service health incident',?,?,1,?)`, now.Add(-time.Minute).Unix(), now.Unix(), now.Add(2*time.Hour).Unix())
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO incident_alerts(incident_id,alert_id,joined_at)VALUES('demo-incident','demo-alert',?)`, now.Add(-time.Minute).Unix())
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO notification_channels(id,name,kind,enabled,minimum_severity,notify_resolved,config_json,secret_ref,created_at,updated_at)VALUES('demo-channel','Example webhook','webhook',0,'warning',1,'{}','demo.notification.secret',?,?)`, now.Add(-time.Hour).Unix(), now.Add(-time.Hour).Unix())
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO notification_deliveries(id,channel_id,incident_id,event_type,payload_json,idempotency_key,status,attempt_count,completed_at,created_at,updated_at)VALUES('demo-delivery','demo-channel','demo-incident','opened','{}','demo-idempotency','succeeded',1,?,?,?)`, now.Add(-50*time.Minute).Unix(), now.Add(-50*time.Minute).Unix(), now.Add(-50*time.Minute).Unix())
+		if err != nil {
+			return err
+		}
 	}
 	_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO silences(id,scope_type,scope_id,reason,starts_at,ends_at,created_by,created_at)VALUES('demo-silence','resource','res_demo_3','Demo maintenance',?,?,'demo',?)`, now.Add(-time.Minute).Unix(), now.Add(time.Hour).Unix(), now.Unix())
 	if err != nil {

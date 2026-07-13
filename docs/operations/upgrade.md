@@ -9,7 +9,12 @@ Container tags follow semantic versioning:
 - `stable` — release builds only (no prereleases).
 - `beta` — beta and release-candidate builds.
 - `edge` — development builds.
-- Exact version tags such as `v0.2.0` are immutable.
+- Exact version tags such as `v0.3.0` are immutable.
+
+The v0.3 upgrade applies schema 17. Back up `binnacle.db` and its WAL/SHM
+files before replacing the binary. Existing resources, alerts, checks,
+settings, and history are preserved. First startup reconciles currently firing
+alerts into incidents without sending retroactive notifications.
 
 Pick a channel in your Compose file or Coolify service settings:
 

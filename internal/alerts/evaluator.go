@@ -377,6 +377,9 @@ func (e *Evaluator) evaluate(ctx context.Context, rule Rule, targetType, target 
 	if tr.Triggered {
 		alertID := id()
 		_, err = tx.ExecContext(ctx, `INSERT INTO alerts(id,dedup_key,rule_id,family,severity,target_type,target_id,status,started_at,last_observed_at,observed_value,message)VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, alertID, key, rule.ID, rule.Family, rule.Severity, targetType, target, "firing", now.Unix(), now.Unix(), value, message(rule, target))
+		if err == nil && e.Repo.sink != nil {
+			err = e.Repo.sink.AlertFiredTx(ctx, tx, Alert{ID: alertID, DedupKey: key, RuleID: rule.ID, Family: rule.Family, Severity: rule.Severity, TargetType: targetType, TargetID: target, Status: "firing", StartedAt: now, LastObservedAt: now, ObservedValue: &value, Message: message(rule, target)}, now)
+		}
 		if err == nil {
 			err = insertEvent(ctx, tx, alertID, rule, target, "alert_triggered", now)
 		}
@@ -389,6 +392,9 @@ func (e *Evaluator) evaluate(ctx context.Context, rule Rule, targetType, target 
 			err = nil
 		} else if err == nil {
 			_, err = tx.ExecContext(ctx, `UPDATE alerts SET status='resolved',resolved_at=?,last_observed_at=? WHERE id=?`, now.Unix(), now.Unix(), alertID)
+			if err == nil && e.Repo.sink != nil {
+				err = e.Repo.sink.AlertResolvedTx(ctx, tx, alertID, now)
+			}
 			if err == nil {
 				err = insertEvent(ctx, tx, alertID, rule, target, "alert_resolved", now)
 			}

@@ -4,6 +4,8 @@
 package alerts
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"time"
 )
@@ -71,6 +73,14 @@ type Alert struct {
 	LastObservedAt time.Time  `json:"lastObservedAt"`
 	ObservedValue  *float64   `json:"observedValue,omitempty"`
 	Message        string     `json:"message"`
+	IncidentID     string     `json:"incidentId,omitempty"`
+}
+
+// IncidentSink participates in the same transaction as an alert transition.
+// Implementations must not commit or retain the transaction.
+type IncidentSink interface {
+	AlertFiredTx(context.Context, *sql.Tx, Alert, time.Time) error
+	AlertResolvedTx(context.Context, *sql.Tx, string, time.Time) error
 }
 type Silence struct {
 	ID        string    `json:"id"`
