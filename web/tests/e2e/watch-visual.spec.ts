@@ -3,8 +3,8 @@ import { expect, test, type Page } from '@playwright/test';
 const screenshotOptions = {
   animations: 'disabled' as const,
   caret: 'hide' as const,
-  // Bound cross-host font anti-aliasing drift without masking layout changes.
-  maxDiffPixelRatio: 0.002,
+  // Bound Fedora/Ubuntu font rendering drift without masking layout changes.
+  maxDiffPixelRatio: 0.005,
 };
 
 const session = {
