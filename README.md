@@ -14,7 +14,7 @@ separate observability stack.
 
 ## Status
 
-The v0.4 feature set is implemented and locally qualified, but has not been released or tagged.
+The v0.5 feature set is implemented and locally qualified, but has not been released or tagged.
 Builds from this repository are development builds. See the [roadmap](ROADMAP.md)
 and [release checklist](docs/operations/release-checklist.md) for current scope
 and qualification status.
@@ -39,7 +39,7 @@ hosts, and workload control are unsupported.
 
 ## Quick start
 
-No public v0.4 image exists yet. To evaluate the current development build with
+No public v0.5 image exists yet. To evaluate the current development build with
 synthetic data:
 
 ```bash
@@ -80,6 +80,7 @@ Frontend end-to-end suites require Playwright and are documented by
 - [Checks and alerts](docs/CHECKS_AND_ALERTS.md)
 - [Incidents and notifications](docs/INCIDENTS_AND_NOTIFICATIONS.md)
 - [Logs and process diagnostics](docs/DIAGNOSTICS.md)
+- [Coolify enrichment and administrator access](docs/COOLIFY_AND_ACCESS.md)
 - [Installation](docs/operations/install.md), [upgrades](docs/operations/upgrade.md), and [recovery](docs/operations/recovery.md)
 - [Security policy](SECURITY.md)
 - [Contributing guide](CONTRIBUTING.md) and [governance](GOVERNANCE.md)

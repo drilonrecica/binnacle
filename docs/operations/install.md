@@ -3,7 +3,7 @@
 Binnacle is distributed as a container image. The supported paths are Coolify
 (one-click service), Docker Compose, or GHCR.
 
-> **Development status:** v0.4 is implemented but no v0.4 tag or image has been
+> **Development status:** v0.5 is implemented but no v0.5 tag or image has been
 > published. The `stable` examples below apply to published releases; qualify a
 > source-built `local` image before using unreleased code in production.
 
@@ -91,6 +91,9 @@ Key variables you may need to set at deployment time:
 - `BINNACLE_LOGS_REDACTION_PATTERNS` — up to 16 additional RE2 patterns separated by `||`.
 - `BINNACLE_DOCKER_SOCKET` — defaults to `/var/run/docker.sock`.
 - `BINNACLE_MASTER_KEY` — raw/base64 32-byte key or 64-character hex key for notification secrets.
+- `BINNACLE_COOLIFY_URL` and `BINNACLE_COOLIFY_API_TOKEN[_FILE]` — optional read-only Coolify enrichment.
+- `BINNACLE_AUTH_MODE` — `local`, `proxy`, or `local_and_proxy`; defaults to `local`.
+- `BINNACLE_AUTH_PROXY_CIDRS`, `BINNACLE_AUTH_IDENTITY_HEADER`, and `BINNACLE_AUTH_ALLOWED_SUBJECT` — required together for proxy modes.
 - `BINNACLE_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS` — private webhook/SMTP opt-in; defaults to `false` and requires restart.
 - `BINNACLE_NOTIFICATIONS_MAX_CONCURRENCY` — delivery workers; defaults to `4`.
 - `BINNACLE_NOTIFICATIONS_QUEUE_CAPACITY` — dispatch queue; defaults to `1000`.

@@ -9,12 +9,11 @@ Container tags follow semantic versioning:
 - `stable` — release builds only (no prereleases).
 - `beta` — beta and release-candidate builds.
 - `edge` — development builds.
-- Exact version tags such as `v0.3.0` are immutable.
+- Exact version tags such as `v0.5.0` are immutable.
 
-The v0.3 upgrade applies schema 17. Back up `binnacle.db` and its WAL/SHM
-files before replacing the binary. Existing resources, alerts, checks,
-settings, and history are preserved. First startup reconciles currently firing
-alerts into incidents without sending retroactive notifications.
+The v0.5 upgrade applies schemas 18 and 19. Back up `binnacle.db` and its
+WAL/SHM files before replacing the binary. Existing resources, alerts, checks,
+incidents, sessions, secrets, settings, and history are preserved.
 
 Pick a channel in your Compose file or Coolify service settings:
 
@@ -48,6 +47,9 @@ image: ghcr.io/drilonrecica/binnacle:stable
 ## Migrations
 
 Binnacle runs forward-only SQLite migrations automatically at startup. Before migrating, it checks database integrity and available disk space. A failed migration is logged and the process stops; it does not delete or recreate the database.
+
+Schemas 18 and 19 add the bounded Coolify cache, deployment deduplication,
+TOTP/recovery state, and session authentication provenance.
 
 Downgrades are not supported. If you need to revert, restore from a backup taken before the upgrade.
 
