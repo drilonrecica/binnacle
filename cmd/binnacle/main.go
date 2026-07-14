@@ -117,6 +117,7 @@ func main() {
 	alertEvaluator := alerts.NewEvaluator(alertRepository, engine)
 
 	var dockerEngine dockerapi.Client
+	var dockerLogs dockerapi.LogClient
 	var productionSampler *production.Sampler
 	if *demoMode || config.Demo {
 		generator := demo.New(*demoSeed, realClock{})
@@ -135,7 +136,8 @@ func main() {
 			log.Error("Docker client configuration is invalid", "error", err)
 			os.Exit(1)
 		}
-		dockerEngine = dockerapi.New(rawEngine, config.Docker.MaxConcurrency)
+		limitedDocker := dockerapi.New(rawEngine, config.Docker.MaxConcurrency)
+		dockerEngine, dockerLogs = limitedDocker, limitedDocker
 		onboardingService.SetDocker(dockerEngine)
 		cache := dockercollector.NewCache()
 		productionSampler = &production.Sampler{Engine: engine, Docker: dockerEngine, Cache: cache, Store: store, HostProc: config.Paths.HostProc, DataDir: config.Paths.DataDir, MaxDockerConcurrency: config.Docker.MaxConcurrency, Interval: func() time.Duration {
@@ -243,6 +245,12 @@ func main() {
 	apiServer.EnableChecks(checkRepository, checkScheduler, sessions, sessions, protection)
 	apiServer.EnableAlerts(alertRepository, sessions, sessions, protection)
 	apiServer.EnableIncidentsNotifications(notificationRepository, notificationWorker, sessions, sessions, protection)
+	logService, err := diagnostics.NewLogService(dockerLogs, config.Logs.MaxLines, config.Logs.MaxResponseBytes, config.Logs.RedactionPatterns)
+	if err != nil {
+		log.Error("log diagnostics configuration is invalid", "error", err)
+		os.Exit(1)
+	}
+	apiServer.EnableLogs(logService, engine, sessions)
 	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, version, application, apiServer.Handler(), webembed.Handler()))
 	if err := application.Run(ctx); err != nil {
 		log.Error("application exited with error", "error", err)

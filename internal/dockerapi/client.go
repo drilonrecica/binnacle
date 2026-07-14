@@ -2,8 +2,12 @@
 package dockerapi
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -26,6 +30,7 @@ type Client interface {
 type Container struct{ ID, Name, Image string }
 type Inspect struct {
 	ID, Name, Image, Created, State, Health string
+	TTY                                     bool
 	Labels                                  map[string]string
 	Environment                             map[string]string
 	Networks                                []string
@@ -91,6 +96,7 @@ func (e *Engine) Inspect(ctx context.Context, id string) (Inspect, error) {
 	result := Inspect{ID: value.ID, Name: strings.TrimPrefix(value.Name, "/"), Created: value.Created}
 	if value.Config != nil {
 		result.Image, result.Labels = value.Config.Image, value.Config.Labels
+		result.TTY = value.Config.Tty
 		result.Environment = allowedEnvironment(value.Config.Env)
 	}
 	if value.State != nil {
@@ -106,6 +112,97 @@ func (e *Engine) Inspect(ctx context.Context, id string) (Inspect, error) {
 		result.Mounts = append(result.Mounts, Mount{Source: mount.Source, Destination: mount.Destination, Type: string(mount.Type)})
 	}
 	return result, nil
+}
+
+type LogOptions struct {
+	Since, Until time.Time
+	Tail         int
+	Follow       bool
+}
+
+// LogClient is a deliberately narrow, read-only extension to Client.
+type LogClient interface {
+	ReadLogs(context.Context, string, LogOptions, func(stream, line string) error) error
+}
+
+func (e *Engine) ReadLogs(ctx context.Context, id string, options LogOptions, emit func(string, string) error) error {
+	inspect, err := e.client.ContainerInspect(ctx, id)
+	if err != nil {
+		return err
+	}
+	tail := "all"
+	if options.Tail > 0 {
+		tail = fmt.Sprint(options.Tail)
+	}
+	reader, err := e.client.ContainerLogs(ctx, id, containertypes.LogsOptions{
+		ShowStdout: true, ShowStderr: true, Timestamps: true, Follow: options.Follow,
+		Since: formatDockerTime(options.Since), Until: formatDockerTime(options.Until), Tail: tail,
+	})
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	if inspect.Config != nil && inspect.Config.Tty {
+		return scanLogLines(ctx, reader, "stdout", emit)
+	}
+	return scanMultiplexedLogs(ctx, reader, emit)
+}
+
+func formatDockerTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func scanLogLines(ctx context.Context, reader io.Reader, stream string, emit func(string, string) error) error {
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 64<<10), 1<<20)
+	for scanner.Scan() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := emit(stream, scanner.Text()); err != nil {
+			return err
+		}
+	}
+	return scanner.Err()
+}
+
+func scanMultiplexedLogs(ctx context.Context, reader io.Reader, emit func(string, string) error) error {
+	buffered := bufio.NewReader(reader)
+	for {
+		header := make([]byte, 8)
+		if _, err := io.ReadFull(buffered, header); err != nil {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				return nil
+			}
+			return err
+		}
+		length := binary.BigEndian.Uint32(header[4:])
+		if length > 1<<20 {
+			return fmt.Errorf("docker log frame exceeds limit")
+		}
+		payload := make([]byte, length)
+		if _, err := io.ReadFull(buffered, payload); err != nil {
+			return err
+		}
+		stream := "stdout"
+		if header[0] == 2 {
+			stream = "stderr"
+		}
+		if header[0] != 1 && header[0] != 2 {
+			return fmt.Errorf("invalid docker log stream %d", header[0])
+		}
+		for _, line := range bytes.Split(bytes.TrimSuffix(payload, []byte{'\n'}), []byte{'\n'}) {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if err := emit(stream, string(line)); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 var allowedEnvironmentKeys = map[string]bool{
@@ -259,6 +356,13 @@ func (l *Limited) Diagnostics(ctx context.Context) (Diagnostics, error) {
 		return err
 	})
 	return out, err
+}
+func (l *Limited) ReadLogs(ctx context.Context, id string, options LogOptions, emit func(string, string) error) error {
+	logs, ok := l.Client.(LogClient)
+	if !ok {
+		return fmt.Errorf("docker log access is unavailable")
+	}
+	return l.with(ctx, func() error { return logs.ReadLogs(ctx, id, options, emit) })
 }
 func (l *Limited) Close() error {
 	if closer, ok := l.Client.(interface{ Close() error }); ok {

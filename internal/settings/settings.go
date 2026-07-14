@@ -81,8 +81,9 @@ type Notifications struct {
 	ReminderInterval    time.Duration `toml:"reminder_interval"`
 }
 type Logs struct {
-	MaxResponseBytes int64 `toml:"max_response_bytes"`
-	MaxLines         int   `toml:"max_lines"`
+	MaxResponseBytes  int64    `toml:"max_response_bytes"`
+	MaxLines          int      `toml:"max_lines"`
+	RedactionPatterns []string `toml:"redaction_patterns"`
 }
 type Sessions struct {
 	IdleTimeout      time.Duration `toml:"idle_timeout"`
@@ -144,6 +145,9 @@ func (c Config) Validate() error {
 	}
 	if c.Persistence.QueueBatchLimit <= 0 || c.Charts.MaxPointsPerSeries <= 0 || c.Docker.MaxConcurrency <= 0 || c.Checks.MaxConcurrency <= 0 || c.Logs.MaxResponseBytes <= 0 || c.Logs.MaxLines <= 0 || c.Database.TargetBudgetBytes <= 0 {
 		return fmt.Errorf("limits and budgets must be positive")
+	}
+	if c.Logs.MaxResponseBytes > 1<<20 || c.Logs.MaxLines > 5000 || len(c.Logs.RedactionPatterns) > 16 {
+		return fmt.Errorf("log limits exceed the supported ceilings")
 	}
 	if c.Notifications.MaxConcurrency < 1 || c.Notifications.MaxConcurrency > 32 || c.Notifications.QueueCapacity < 1 || c.Notifications.QueueCapacity > 10000 || c.Notifications.DeliveryTimeout < time.Second || c.Notifications.DeliveryTimeout > time.Minute || c.Notifications.ReminderInterval < time.Minute || c.Notifications.ReminderInterval > 24*time.Hour {
 		return fmt.Errorf("notification limits are outside supported bounds")
