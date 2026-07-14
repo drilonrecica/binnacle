@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import HistoryDeletion from './HistoryDeletion.svelte';
+  import AccessIntegrations from './AccessIntegrations.svelte';
   import {
     applyPreferences,
     preferences,
@@ -174,6 +175,7 @@
             >{snapshot.values[key].source} · Applies to session handling live</small
           >
         {/each}
+        <AccessIntegrations />
       </section>
 
       <section

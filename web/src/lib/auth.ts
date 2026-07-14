@@ -36,12 +36,37 @@ async function errorFrom(response: Response): Promise<AuthError> {
   );
 }
 
-export async function login(username: string, password: string): Promise<void> {
+export async function login(
+  username: string,
+  password: string,
+  code = '',
+): Promise<void> {
   const response = await fetch('/api/v1/auth/login', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, code }),
+  });
+  if (!response.ok) throw await errorFrom(response);
+}
+
+export interface AuthMethods {
+  mode: 'local' | 'proxy' | 'local_and_proxy';
+  local: boolean;
+  proxy: boolean;
+  proxyAvailable: boolean;
+}
+export async function authMethods(): Promise<AuthMethods> {
+  const response = await fetch('/api/v1/auth/methods', {
+    credentials: 'same-origin',
+  });
+  if (!response.ok) throw await errorFrom(response);
+  return response.json() as Promise<AuthMethods>;
+}
+export async function bootstrapExternalSession(): Promise<void> {
+  const response = await fetch('/api/v1/auth/external-session', {
+    method: 'POST',
+    credentials: 'same-origin',
   });
   if (!response.ok) throw await errorFrom(response);
 }
@@ -68,7 +93,7 @@ export function csrfToken(): string {
 
 export async function authenticatedMutation<T>(
   path: string,
-  method: 'POST' | 'PATCH' | 'DELETE',
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body?: unknown,
 ): Promise<T | null> {
   const response = await fetch(path, {
@@ -103,6 +128,7 @@ export function safeRedirect(value: string | null): string {
       '/resources',
       '/server',
       '/events',
+      '/logs',
       '/alerts',
       '/settings',
       '/onboarding',

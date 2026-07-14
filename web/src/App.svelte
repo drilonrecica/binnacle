@@ -13,7 +13,12 @@
   import Settings from './lib/Settings.svelte';
   import Login from './lib/Login.svelte';
   import SessionControls from './lib/SessionControls.svelte';
-  import { currentSession, type SessionInfo } from './lib/auth';
+  import {
+    authMethods,
+    bootstrapExternalSession,
+    currentSession,
+    type SessionInfo,
+  } from './lib/auth';
   import { onboardingState, setupAvailable } from './lib/onboarding';
   import Setup from './lib/Setup.svelte';
   import Onboarding from './lib/Onboarding.svelte';
@@ -87,6 +92,19 @@
     addEventListener('popstate', onPopState);
     void currentSession()
       .catch(() => null)
+      .then(async (value) => {
+        if (value) return value;
+        try {
+          const methods = await authMethods();
+          if (methods.proxyAvailable) {
+            await bootstrapExternalSession();
+            return await currentSession();
+          }
+        } catch {
+          /* normal local-login path */
+        }
+        return null;
+      })
       .then((value) => {
         session = value;
         allowed = value !== null;
