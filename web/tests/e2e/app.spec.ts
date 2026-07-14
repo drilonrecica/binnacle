@@ -108,6 +108,41 @@ async function mockSettings(page: Page) {
   await page.route('**/api/v1/settings', (route) =>
     route.fulfill({ json: { revision: 1, values } }),
   );
+  await mockPortabilitySettings(page);
+}
+
+async function mockPortabilitySettings(page: Page) {
+  const preferences = {
+    schemaVersion: 1,
+    theme: 'dark',
+    density: 'comfortable',
+    pinnedResources: [],
+    landingPage: 'watch',
+    chartRange: '24h',
+    updatedAt: '2026-07-11T12:00:00Z',
+  };
+  await page.route('**/api/v1/preferences', (route) =>
+    route.fulfill({ json: { exists: true, preferences } }),
+  );
+  await page.route('**/api/v1/api-tokens', (route) =>
+    route.fulfill({
+      json: {
+        tokens: [],
+        scopes: [
+          'server:read',
+          'resources:read',
+          'metrics:read',
+          'events:read',
+          'incidents:read',
+        ],
+      },
+    }),
+  );
+  await page.route('**/api/v1/resources', (route) =>
+    route.fulfill({
+      json: [{ id: 'res1', name: 'web-app', status: 'healthy' }],
+    }),
+  );
 }
 
 test('renders the Binnacle application shell', async ({ page }) => {
@@ -513,4 +548,47 @@ test('requires typed confirmation for history deletion', async ({ page }) => {
   await expect(
     page.getByText('completed: 42 of 42 rows deleted.'),
   ).toBeVisible();
+});
+
+test('creates a scoped API token and persists personalization', async ({
+  page,
+}) => {
+  await mockAuthSession(page);
+  await mockOnboarding(page);
+  await mockSettings(page);
+  await page.route('**/api/v1/live', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
+  );
+  let savedLanding = '';
+  await page.route('**/api/v1/preferences', async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback();
+    const value = route.request().postDataJSON() as { landingPage: string };
+    savedLanding = value.landingPage;
+    return route.fulfill({ json: value });
+  });
+  await page.route('**/api/v1/api-tokens', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    return route.fulfill({
+      status: 201,
+      json: {
+        token: {
+          id: 'tok_1',
+          name: 'reporter',
+          prefix: 'bnk_example',
+          scopes: ['server:read'],
+          createdAt: '2026-07-11T12:00:00Z',
+        },
+        plaintext: 'bnk_example_plaintext',
+      },
+    });
+  });
+  await page.goto('/settings');
+  await page.getByLabel('Default landing page').selectOption('events');
+  await expect.poll(() => savedLanding).toBe('events');
+  await page.getByLabel('Resource', { exact: true }).selectOption('res1');
+  await page.getByRole('button', { name: 'Pin', exact: true }).click();
+  await expect(page.getByText('web-app')).toBeVisible();
+  await page.getByLabel('Name', { exact: true }).fill('reporter');
+  await page.getByRole('button', { name: 'Create token' }).click();
+  await expect(page.getByText('bnk_example_plaintext')).toBeVisible();
 });

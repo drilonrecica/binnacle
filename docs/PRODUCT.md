@@ -13,7 +13,8 @@ attention while avoiding a separate observability stack.
 
 Coolify metadata is used when available, but plain Docker and Compose remain
 fully useful. The product favors useful defaults and a browser interface over
-mandatory YAML, exporters, or dashboard construction.
+mandatory YAML or dashboard construction. Its optional bounded Prometheus
+endpoint is an interoperability surface, not a second monitoring runtime.
 
 ## Product principles
 
@@ -55,8 +56,9 @@ Docker socket remains highly privileged even when mounted `:ro`. Hardened
 deployments should use a constrained socket proxy.
 
 Core monitoring works without internet access and sends no telemetry by
-default. Operational data and credentials remain local. Secrets are never
-returned through APIs or logs and UI-entered secrets are encrypted at rest
+default. Operational data and credentials remain local. Secrets and personal
+token plaintext are never returned after creation through APIs or logs, and
+UI-entered secrets are encrypted at rest
 using operator-provided key material. Network-facing features must use bounded
 I/O, validate destinations, and prevent server-side request forgery.
 

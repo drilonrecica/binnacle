@@ -11,7 +11,7 @@ Detailed feature specifications belong in release planning, not here.
 | v0.3 notifications and incident grouping | Implemented; tag not published | Durable HTTPS webhook and SMTP delivery with automatic target-based incidents. |
 | v0.4 diagnostics | Implemented; local qualification complete, tag not published | Bounded log access and read-only process diagnostics. |
 | v0.5 access and Coolify enrichment | Implemented; local qualification complete, tag not published | Coolify API enrichment, TOTP, and external authentication. |
-| v0.6 portability and integration | Planned | API tokens, export, an optional Prometheus endpoint, and limited personalization. |
+| v0.6 portability and integration | Implemented; local qualification complete, tag not published | Scoped API tokens, bounded exports, an optional Prometheus endpoint, and limited personalization. |
 
 ## Later direction
 

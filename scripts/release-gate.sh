@@ -8,7 +8,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 RELEASE_RECORD_DIR="${RELEASE_RECORD_DIR:-release-record}"
 mkdir -p "$RELEASE_RECORD_DIR"
 
-VERSION="${VERSION:-v0.5.0}"
+VERSION="${VERSION:-v0.6.0}"
 COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 SHORT_COMMIT="$(git -C "$ROOT_DIR" rev-parse --short HEAD)"
 DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -88,7 +88,7 @@ record ""
 run_check "make check" make check
 
 # Checks and alerts security/lifecycle qualification.
-run_check "security, access, and integration race tests" go test -race ./internal/auth ./internal/coolify ./internal/checks ./internal/alerts ./internal/notifications ./internal/outbound ./internal/api ./internal/diagnostics ./internal/dockerapi ./internal/demo
+run_check "security, access, and integration race tests" go test -race ./internal/auth ./internal/coolify ./internal/checks ./internal/alerts ./internal/notifications ./internal/outbound ./internal/api ./internal/diagnostics ./internal/dockerapi ./internal/demo ./internal/preferences ./internal/storage
 
 # 2. License and security policy presence.
 if [[ -s "$ROOT_DIR/LICENSE" && -s "$ROOT_DIR/SECURITY.md" ]]; then

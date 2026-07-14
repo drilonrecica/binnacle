@@ -1,7 +1,7 @@
-# v0.3 release checklist
+# Release checklist
 
 This checklist covers the objective gates required before publishing
-`v0.3.0`.
+the current candidate.
 
 ## Automated gate
 
@@ -11,7 +11,7 @@ Run the full release gate:
 ./scripts/release-gate.sh
 ```
 
-It produces `release-record/v0.3.0-<short-sha>.md` with a pass/fail
+It produces `release-record/v0.6.0-<short-sha>.md` with a pass/fail
 table and captured benchmark output.
 
 ## Required gates
@@ -25,8 +25,8 @@ table and captured benchmark output.
 | Container image build | Installation artifacts exist | Image build fails |
 | Demo container smoke | Unauthenticated liveness responds from the locally built candidate image | `/healthz` fails |
 | Benchmark | Performance regressions detected | RSS, CPU, write latency, or SSE exceed documented goals on reference hardware |
-| Incidents and notifications | Grouping, outbox, SSRF, delivery, and lifecycle semantics remain correct | Any incident or notification qualification test fails |
-| Browser and accessibility suites | Incident, channel, delivery, mobile, and accessibility workflows remain usable | Playwright or visual regression fails |
+| Security and integration race tests | Auth, tokens, enrichment, diagnostics, exports, storage, and preferences remain race-free | Any targeted race test fails |
+| Browser and accessibility suites | Access, diagnostics, token, preference, mobile, and accessibility workflows remain usable | Playwright or visual regression fails |
 
 ## Optional gates
 

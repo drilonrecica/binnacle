@@ -186,6 +186,24 @@ async function mockSettings(page: Page) {
   await page.route('**/api/v1/settings', (route) =>
     route.fulfill({ json: { revision: 1, values } }),
   );
+  const preferences = {
+    schemaVersion: 1,
+    theme: 'dark',
+    density: 'comfortable',
+    pinnedResources: [],
+    landingPage: 'watch',
+    chartRange: '24h',
+    updatedAt: '2026-07-11T12:00:00Z',
+  };
+  await page.route('**/api/v1/preferences', (route) =>
+    route.fulfill({ json: { exists: true, preferences } }),
+  );
+  await page.route('**/api/v1/api-tokens', (route) =>
+    route.fulfill({ json: { tokens: [], scopes: ['server:read'] } }),
+  );
+  await page.route('**/api/v1/resources', (route) =>
+    route.fulfill({ json: snapshot.resources }),
+  );
 }
 
 async function expectedTheme(page: Page) {

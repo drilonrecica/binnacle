@@ -9,12 +9,13 @@ Docker workloads on a Linux server. It combines live host and workload metrics,
 local history, Coolify/Compose-aware grouping, HTTP checks, deterministic
 alerts, incident grouping, durable webhook/SMTP notifications, timed silences,
 effective resource health, bounded container logs, and read-only host process
-diagnostics without requiring a
+diagnostics, scoped exports, optional Prometheus exposition, and persisted
+personalization without requiring a
 separate observability stack.
 
 ## Status
 
-The v0.5 feature set is implemented and locally qualified, but has not been released or tagged.
+The v0.6 feature set is implemented and locally qualified, but has not been released or tagged.
 Builds from this repository are development builds. See the [roadmap](ROADMAP.md)
 and [release checklist](docs/operations/release-checklist.md) for current scope
 and qualification status.
@@ -39,7 +40,7 @@ hosts, and workload control are unsupported.
 
 ## Quick start
 
-No public v0.5 image exists yet. To evaluate the current development build with
+No public v0.6 image exists yet. To evaluate the current development build with
 synthetic data:
 
 ```bash
@@ -81,6 +82,7 @@ Frontend end-to-end suites require Playwright and are documented by
 - [Incidents and notifications](docs/INCIDENTS_AND_NOTIFICATIONS.md)
 - [Logs and process diagnostics](docs/DIAGNOSTICS.md)
 - [Coolify enrichment and administrator access](docs/COOLIFY_AND_ACCESS.md)
+- [API tokens, exports, Prometheus, and personalization](docs/INTEROPERABILITY.md)
 - [Installation](docs/operations/install.md), [upgrades](docs/operations/upgrade.md), and [recovery](docs/operations/recovery.md)
 - [Security policy](SECURITY.md)
 - [Contributing guide](CONTRIBUTING.md) and [governance](GOVERNANCE.md)

@@ -9,9 +9,9 @@ Container tags follow semantic versioning:
 - `stable` — release builds only (no prereleases).
 - `beta` — beta and release-candidate builds.
 - `edge` — development builds.
-- Exact version tags such as `v0.5.0` are immutable.
+- Exact version tags such as `v0.6.0` are immutable.
 
-The v0.5 upgrade applies schemas 18 and 19. Back up `binnacle.db` and its
+The v0.6 upgrade applies schemas 20 and 21. Back up `binnacle.db` and its
 WAL/SHM files before replacing the binary. Existing resources, alerts, checks,
 incidents, sessions, secrets, settings, and history are preserved.
 
@@ -48,8 +48,10 @@ image: ghcr.io/drilonrecica/binnacle:stable
 
 Binnacle runs forward-only SQLite migrations automatically at startup. Before migrating, it checks database integrity and available disk space. A failed migration is logged and the process stops; it does not delete or recreate the database.
 
-Schemas 18 and 19 add the bounded Coolify cache, deployment deduplication,
-TOTP/recovery state, and session authentication provenance.
+Schemas 20 and 21 add hashed personal API token metadata and typed,
+versioned administrator preferences. The migration chain from schemas 17
+through 21 preserves resources, history, settings, alerts, incidents, sessions,
+and encrypted secrets.
 
 Downgrades are not supported. If you need to revert, restore from a backup taken before the upgrade.
 
