@@ -143,7 +143,12 @@
     >
   </div>
   {#if processError}<p role="status">{processError}</p>{/if}
-  <div class="table-scroll">
+  <div
+    class="table-scroll"
+    tabindex="0"
+    role="region"
+    aria-label="Top host processes"
+  >
     <table class="console-table">
       <thead
         ><tr

@@ -132,7 +132,13 @@
   {#if truncated}<Alert level="warning"
       >Output reached the configured line or byte limit.</Alert
     >{/if}
-  <div class="table-scroll" aria-live="polite">
+  <div
+    class="table-scroll"
+    tabindex="0"
+    role="region"
+    aria-label="Redacted container logs"
+    aria-live="polite"
+  >
     <table class="console-table event-log">
       <caption>{entries.length} redacted log lines</caption>
       <thead
