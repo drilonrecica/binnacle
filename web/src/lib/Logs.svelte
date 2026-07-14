@@ -132,6 +132,7 @@
   {#if truncated}<Alert level="warning"
       >Output reached the configured line or byte limit.</Alert
     >{/if}
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex (scroll container is keyboard-focusable for Safari/WCAG) -->
   <div
     class="table-scroll"
     tabindex="0"

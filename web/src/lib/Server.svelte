@@ -143,6 +143,7 @@
     >
   </div>
   {#if processError}<p role="status">{processError}</p>{/if}
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex (scroll container is keyboard-focusable for Safari/WCAG) -->
   <div
     class="table-scroll"
     tabindex="0"
