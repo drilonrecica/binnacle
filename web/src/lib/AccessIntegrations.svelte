@@ -112,7 +112,7 @@
 {#if error}<p role="alert">{error}</p>{/if}{#if message}<p role="status">
     {message}
   </p>{/if}
-<h3>Multi-factor authentication</h3>
+<h3>Local MFA</h3>
 {#if recoveryCodes.length}
   <p>These one-time recovery codes will not be shown again.</p>
   <ul class="technical-value">
