@@ -36,6 +36,8 @@ type SecretStore struct {
 	aead cipher.AEAD
 }
 
+func (s *SecretStore) Available() bool { return s != nil && s.aead != nil }
+
 func (s *SecretStore) SetDB(db *sql.DB) { s.db = db }
 
 func NewSecretStore(db *sql.DB, encodedKey string) (*SecretStore, error) {

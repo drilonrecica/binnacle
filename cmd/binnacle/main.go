@@ -98,6 +98,7 @@ func main() {
 		log.Error("master encryption key is invalid", "error", err)
 		os.Exit(1)
 	}
+	mfaService := auth.NewMFA(nil, credentials, secretStore, sessions)
 	notificationRepository := notifications.NewRepository(nil, secretStore)
 	coolifyIntegration := coolify.NewIntegration(secretStore, coolify.ClientConfig{BaseURL: config.Coolify.URL, Token: config.Coolify.APIToken, AllowInsecureHTTP: config.Coolify.AllowInsecureHTTP})
 	notificationWorker := notifications.NewWorker(notificationRepository, notifications.Config{
@@ -157,6 +158,7 @@ func main() {
 		checkRepository.SetDB(store.DB())
 		alertRepository.SetDB(store.DB())
 		secretStore.SetDB(store.DB())
+		mfaService.SetDB(store.DB())
 		notificationRepository.SetDB(store.DB())
 		coolifyIntegration.SetDB(store.DB())
 		if err := alertRepository.SeedDefaults(ctx); err != nil {
@@ -243,7 +245,8 @@ func main() {
 	})
 	apiServer.EnableDiagnostics(bundleService, authorizer, protection)
 	apiServer.EnableSetup(setup, protection, sessions)
-	apiServer.EnableAuth(credentials, sessions, protection)
+	apiServer.EnableAuth(credentials, sessions, protection, mfaService)
+	apiServer.EnableMFA(mfaService, credentials, sessions, protection)
 	apiServer.EnableOnboarding(onboardingService, sessions, sessions)
 	apiServer.EnableSettings(settingsService, sessions, sessions)
 	apiServer.EnableChecks(checkRepository, checkScheduler, sessions, sessions, protection)

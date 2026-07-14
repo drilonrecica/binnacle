@@ -9,7 +9,11 @@ import (
 	"github.com/drilonrecica/binnacle/internal/auth"
 )
 
-func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessions, protection *auth.Protection) {
+func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessions, protection *auth.Protection, mfaServices ...*auth.MFA) {
+	var mfa *auth.MFA
+	if len(mfaServices) > 0 {
+		mfa = mfaServices[0]
+	}
 	proxies := protection.Proxies()
 	limited := func(w http.ResponseWriter, r *http.Request, username string) bool {
 		ok, retry := protection.AllowLogin(r, username)
@@ -29,6 +33,7 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 		var body struct {
 			Username string `json:"username"`
 			Password string `json:"password"`
+			Code     string `json:"code,omitempty"`
 		}
 		if DecodeJSON(r, &body) != nil {
 			WriteError(w, http.StatusBadRequest, Error{Code: "invalid_request", Message: "A username and password are required."})
@@ -38,8 +43,11 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 			return
 		}
 		user, err := credentials.Authenticate(r.Context(), body.Username, body.Password)
+		if err == nil && mfa != nil {
+			err = mfa.Verify(r.Context(), user.ID, body.Code)
+		}
 		if err != nil {
-			WriteError(w, 401, Error{Code: "invalid_credentials", Message: "Invalid username or password."})
+			WriteError(w, 401, Error{Code: "invalid_credentials", Message: "Invalid username, password, or authentication code."})
 			return
 		}
 		if previous := auth.TokenFromRequest(r); previous != "" {
@@ -107,6 +115,120 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 		_ = sessions.RevokeAll(r.Context(), session.UserID)
 		auth.ClearSessionCookie(w, proxies.Secure(r))
 		auth.ClearCSRFCookie(w, proxies.Secure(r))
+		w.WriteHeader(http.StatusNoContent)
+	}))
+}
+
+func (s *Server) EnableMFA(mfa *auth.MFA, credentials *auth.Credentials, sessions *auth.Sessions, protection *auth.Protection) {
+	current := func(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
+		session, err := sessions.Authenticate(r.Context(), auth.TokenFromRequest(r))
+		if err != nil {
+			WriteError(w, 401, Error{Code: "unauthorized", Message: "A browser session is required."})
+			return auth.User{}, false
+		}
+		user, err := credentials.UserByID(r.Context(), session.UserID)
+		if err != nil {
+			WriteError(w, 401, Error{Code: "unauthorized", Message: "A browser session is required."})
+			return auth.User{}, false
+		}
+		return user, true
+	}
+	csrf := func(w http.ResponseWriter, r *http.Request) bool {
+		if !sessions.ValidCSRF(r) {
+			WriteError(w, 403, Error{Code: "csrf_invalid", Message: "A valid CSRF token is required."})
+			return false
+		}
+		return true
+	}
+	s.Handle("/api/v1/auth/mfa", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only GET is supported."})
+			return
+		}
+		user, ok := current(w, r)
+		if !ok {
+			return
+		}
+		enabled, err := mfa.Enabled(r.Context(), user.ID)
+		if err != nil {
+			WriteError(w, 500, Error{Code: "mfa_unavailable", Message: "MFA status is unavailable."})
+			return
+		}
+		WriteJSON(w, 200, map[string]bool{"enabled": enabled})
+	}))
+	s.Handle("/api/v1/auth/mfa/enroll", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only POST is supported."})
+			return
+		}
+		user, ok := current(w, r)
+		if !ok || !csrf(w, r) {
+			return
+		}
+		if allowed, retry := protection.AllowLogin(r, user.Username); !allowed {
+			seconds := maxRetry(retry)
+			w.Header().Set("Retry-After", fmt.Sprint(seconds))
+			WriteError(w, 429, Error{Code: "rate_limited", Message: "Too many authentication attempts."})
+			return
+		}
+		var body struct {
+			Password string `json:"password"`
+		}
+		if DecodeJSON(r, &body) != nil {
+			WriteError(w, 400, Error{Code: "invalid_request", Message: "Current password is required."})
+			return
+		}
+		enrollment, err := mfa.Begin(r.Context(), user, body.Password)
+		if err != nil {
+			WriteError(w, 400, Error{Code: "mfa_enrollment_failed", Message: "MFA enrollment could not be started."})
+			return
+		}
+		WriteJSON(w, 200, enrollment)
+	}))
+	s.Handle("/api/v1/auth/mfa/confirm", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only POST is supported."})
+			return
+		}
+		user, ok := current(w, r)
+		if !ok || !csrf(w, r) {
+			return
+		}
+		var body struct {
+			Code string `json:"code"`
+		}
+		if DecodeJSON(r, &body) != nil {
+			WriteError(w, 400, Error{Code: "invalid_request", Message: "Authentication code is required."})
+			return
+		}
+		codes, err := mfa.Confirm(r.Context(), user.ID, body.Code)
+		if err != nil {
+			WriteError(w, 400, Error{Code: "mfa_confirmation_failed", Message: "Authentication code is invalid or expired."})
+			return
+		}
+		WriteJSON(w, 200, map[string]any{"recoveryCodes": codes})
+	}))
+	s.Handle("/api/v1/auth/mfa/disable", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only POST is supported."})
+			return
+		}
+		user, ok := current(w, r)
+		if !ok || !csrf(w, r) {
+			return
+		}
+		var body struct {
+			Password string `json:"password"`
+			Code     string `json:"code"`
+		}
+		if DecodeJSON(r, &body) != nil {
+			WriteError(w, 400, Error{Code: "invalid_request", Message: "Password and authentication code are required."})
+			return
+		}
+		if err := mfa.Disable(r.Context(), user, body.Password, body.Code); err != nil {
+			WriteError(w, 401, Error{Code: "invalid_credentials", Message: "Invalid password or authentication code."})
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 }
