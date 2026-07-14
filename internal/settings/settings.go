@@ -27,6 +27,7 @@ type Config struct {
 	Logs          Logs          `toml:"logs"`
 	Coolify       Coolify       `toml:"coolify"`
 	Auth          Auth          `toml:"auth"`
+	Prometheus    Prometheus    `toml:"prometheus"`
 	Sessions      Sessions      `toml:"sessions"`
 	Demo          bool          `toml:"demo"`
 }
@@ -105,6 +106,9 @@ type Auth struct {
 	ProxyCIDRs     []string `toml:"proxy_cidrs"`
 	IdentityHeader string   `toml:"identity_header"`
 	AllowedSubject string   `toml:"allowed_subject"`
+}
+type Prometheus struct {
+	Enabled bool `toml:"enabled"`
 }
 
 func Defaults() Config {
@@ -201,7 +205,7 @@ func (c Config) Validate() error {
 // UIOverridable reports whether a key can be changed without a deployment change.
 func UIOverridable(key string) bool {
 	switch key {
-	case "paths.data_dir", "paths.database_path", "paths.runtime_dir", "paths.master_key", "http.listen_address", "docker.socket_path", "paths.host_proc", "paths.host_sys", "paths.host_passwd", "coolify.url", "coolify.api_token_file", "coolify.allow_insecure_http", "auth.mode", "auth.proxy_cidrs", "auth.identity_header", "auth.allowed_subject", "notifications.allow_private_targets", "notifications.max_concurrency", "notifications.queue_capacity", "notifications.delivery_timeout", "notifications.reminder_interval":
+	case "paths.data_dir", "paths.database_path", "paths.runtime_dir", "paths.master_key", "http.listen_address", "docker.socket_path", "paths.host_proc", "paths.host_sys", "paths.host_passwd", "coolify.url", "coolify.api_token_file", "coolify.allow_insecure_http", "auth.mode", "auth.proxy_cidrs", "auth.identity_header", "auth.allowed_subject", "prometheus.enabled", "notifications.allow_private_targets", "notifications.max_concurrency", "notifications.queue_capacity", "notifications.delivery_timeout", "notifications.reminder_interval":
 		return false
 	}
 	return true

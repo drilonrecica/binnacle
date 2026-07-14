@@ -96,6 +96,12 @@ func LoadWith(getenv func(string) string, exists func(string) bool, provider Ove
 			sources[key] = SourceEnvironment
 		}
 	}
+	if value := getenv("BINNACLE_PROMETHEUS_ENABLED"); value != "" {
+		if err := apply(&c, map[string]string{"prometheus.enabled": value}); err != nil {
+			return Config{}, nil, fmt.Errorf("BINNACLE_PROMETHEUS_ENABLED: %w", err)
+		}
+		sources["prometheus.enabled"] = SourceEnvironment
+	}
 	if token := strings.TrimSpace(getenv("BINNACLE_COOLIFY_API_TOKEN")); token != "" {
 		c.Coolify.APIToken = token
 		sources["coolify.api_token"] = SourceEnvironment
@@ -199,6 +205,7 @@ var supported = func() map[string]bool {
 	for _, key := range []string{"auth.mode", "auth.proxy_cidrs", "auth.identity_header", "auth.allowed_subject"} {
 		m[key] = true
 	}
+	m["prometheus.enabled"] = true
 	return m
 }()
 
@@ -270,6 +277,8 @@ func apply(c *Config, values map[string]string) error {
 			c.Auth.IdentityHeader = strings.TrimSpace(value)
 		case "auth.allowed_subject":
 			c.Auth.AllowedSubject = value
+		case "prometheus.enabled":
+			c.Prometheus.Enabled, err = strconv.ParseBool(value)
 		case "http.listen_address":
 			c.HTTP.ListenAddress = value
 		case "http.trusted_proxy_cidrs":
@@ -383,6 +392,7 @@ func lookup(c Config, key string) string {
 		"paths.host_proc": c.Paths.HostProc, "paths.host_sys": c.Paths.HostSys, "http.listen_address": c.HTTP.ListenAddress,
 		"paths.host_passwd": c.Paths.HostPasswd, "coolify.url": c.Coolify.URL, "coolify.api_token_file": c.Coolify.APITokenFile, "coolify.allow_insecure_http": strconv.FormatBool(c.Coolify.AllowInsecureHTTP),
 		"auth.mode": c.Auth.Mode, "auth.proxy_cidrs": strings.Join(c.Auth.ProxyCIDRs, ","), "auth.identity_header": c.Auth.IdentityHeader, "auth.allowed_subject": c.Auth.AllowedSubject,
+		"prometheus.enabled":       strconv.FormatBool(c.Prometheus.Enabled),
 		"http.trusted_proxy_cidrs": strings.Join(c.HTTP.TrustedProxyCIDRs, ","), "docker.socket_path": c.Docker.SocketPath,
 		"collection.host_interval": c.Collection.HostInterval.String(), "collection.container_interval": c.Collection.ContainerInterval.String(),
 		"collection.minimum_interval": c.Collection.MinimumInterval.String(), "live.sse_interval": c.Live.SSEInterval.String(),

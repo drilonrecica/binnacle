@@ -78,6 +78,28 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]Check, erro
 
 type scanner interface{ Scan(...any) error }
 
+type PrometheusState struct{ CheckID, ResourceID, Status string }
+
+func (r *Repository) PrometheusStates(ctx context.Context, limit int) ([]PrometheusState, error) {
+	if limit < 1 || limit > 1000 {
+		limit = 1000
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT c.id,c.resource_id,COALESCE(s.status,'unknown') FROM health_checks c LEFT JOIN health_check_state s ON s.check_id=c.id WHERE c.enabled=1 ORDER BY c.id LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	values := []PrometheusState{}
+	for rows.Next() {
+		var value PrometheusState
+		if err = rows.Scan(&value.CheckID, &value.ResourceID, &value.Status); err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	return values, rows.Err()
+}
+
 func scanCheck(s scanner) (Check, error) {
 	var c Check
 	var interval, timeout, created, updated int64
