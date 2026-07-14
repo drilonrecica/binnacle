@@ -17,8 +17,7 @@ func (s *Server) EnableMetrics(store *storage.Manager, authz Authorizer, protect
 			WriteError(w, http.StatusMethodNotAllowed, Error{Code: "method_not_allowed", Message: "Only GET is supported."})
 			return
 		}
-		if authz == nil || !authz.Authorize(r) {
-			WriteError(w, http.StatusUnauthorized, Error{Code: "unauthorized", Message: "Authentication is required."})
+		if !requireAuth(w, r, authz) {
 			return
 		}
 		if ok, retry := protection.AllowMetrics(r); !ok {

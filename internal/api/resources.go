@@ -18,8 +18,7 @@ type SnapshotDecorator interface {
 
 func (s *Server) EnableResources(engine *metrics.Engine, auth Authorizer, store *storage.Manager, protection *authpkg.Protection, decorators ...SnapshotDecorator) {
 	s.Handle("/api/v1/resources", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if auth == nil || !auth.Authorize(r) {
-			WriteError(w, 401, Error{Code: "unauthorized", Message: "Authentication is required."})
+		if !requireAuth(w, r, auth) {
 			return
 		}
 		if ok, retry := protection.AllowResources(r); !ok {

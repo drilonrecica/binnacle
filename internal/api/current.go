@@ -13,8 +13,7 @@ func (s *Server) EnableCurrent(engine *metrics.Engine, auth Authorizer) {
 				WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only GET is supported."})
 				return
 			}
-			if auth == nil || !auth.Authorize(r) {
-				WriteError(w, 401, Error{Code: "unauthorized", Message: "Authentication is required."})
+			if !requireAuth(w, r, auth) {
 				return
 			}
 			next(w, r)

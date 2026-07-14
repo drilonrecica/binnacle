@@ -83,7 +83,7 @@ func TestUpgradeSchema16PreservesExistingMonitoringData(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer manager.Close()
-	if version, versionErr := manager.SchemaVersion(ctx); versionErr != nil || version != 19 {
+	if version, versionErr := manager.SchemaVersion(ctx); versionErr != nil || version != 20 {
 		t.Fatalf("schema version=%d err=%v", version, versionErr)
 	}
 	var name string

@@ -18,8 +18,7 @@ func (s *Server) EnableEvents(store *storage.Manager, auth Authorizer, protectio
 			WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only GET is supported."})
 			return
 		}
-		if auth == nil || !auth.Authorize(r) {
-			WriteError(w, 401, Error{Code: "unauthorized", Message: "Authentication is required."})
+		if !requireAuth(w, r, auth) {
 			return
 		}
 		if ok, retry := protection.AllowEvents(r); !ok {

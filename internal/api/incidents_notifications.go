@@ -57,13 +57,6 @@ func (v channelInput) patch() notifications.SecretPatch {
 	return notifications.SecretPatch{URL: v.URL, BearerToken: v.BearerToken, SigningSecret: v.SigningSecret, Host: v.Host, Username: v.Username, Password: v.Password, Sender: v.Sender, Recipients: v.Recipients}
 }
 
-func requireAuth(w http.ResponseWriter, r *http.Request, a Authorizer) bool {
-	if a == nil || !a.Authorize(r) {
-		WriteError(w, 401, Error{Code: "unauthorized", Message: "Authentication is required."})
-		return false
-	}
-	return true
-}
 func allowNotificationAPI(w http.ResponseWriter, r *http.Request, protections []*auth.Protection) bool {
 	if len(protections) == 0 || protections[0] == nil {
 		return true

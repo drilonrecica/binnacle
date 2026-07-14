@@ -84,6 +84,7 @@ func main() {
 	setup := auth.NewSetupService(nil)
 	credentials := auth.NewCredentials(nil)
 	sessions := auth.NewSessions(nil, auth.SessionConfig{IdleTimeout: config.Sessions.IdleTimeout, AbsoluteLifetime: config.Sessions.AbsoluteLifetime})
+	tokenRepository := auth.NewAPITokenRepository(nil)
 	checker := diagnostics.OnboardingChecker{HostProc: config.Paths.HostProc, HostSys: config.Paths.HostSys, DataDir: config.Paths.DataDir}
 	onboardingService := onboarding.New(nil, checker)
 	settingsService := settings.NewService(settings.NewStore(nil), config, effectiveSettings, func(updated settings.Config) {
@@ -153,6 +154,7 @@ func main() {
 		setup.SetDB(store.DB())
 		credentials.SetDB(store.DB())
 		sessions.SetDB(store.DB())
+		tokenRepository.SetDB(store.DB())
 		onboardingService.SetDB(store.DB())
 		settingsService.SetDB(store.DB())
 		checkRepository.SetDB(store.DB())
@@ -206,11 +208,16 @@ func main() {
 	sessions.SetTrustedProxies(proxies)
 
 	authorizer := sessions
+	serverAuthorizer := api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeServerRead}
+	resourceAuthorizer := api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeResourcesRead}
+	metricsAuthorizer := api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeMetricsRead}
+	eventsAuthorizer := api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeEventsRead}
+	incidentsAuthorizer := api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeIncidentsRead, TokenPathPrefixes: []string{"/api/v1/incidents"}}
 	apiServer.EnableLive(engine, authorizer, protection, alertRepository, coolifyIntegration)
-	apiServer.EnableCurrent(engine, authorizer)
-	apiServer.EnableResources(engine, authorizer, store, protection, alertRepository, coolifyIntegration)
-	apiServer.EnableMetrics(store, authorizer, protection)
-	apiServer.EnableEvents(store, authorizer, protection)
+	apiServer.EnableCurrent(engine, serverAuthorizer)
+	apiServer.EnableResources(engine, resourceAuthorizer, store, protection, alertRepository, coolifyIntegration)
+	apiServer.EnableMetrics(store, metricsAuthorizer, protection)
+	apiServer.EnableEvents(store, eventsAuthorizer, protection)
 	apiServer.EnableHistoryDeletion(store, authorizer, sessions)
 	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, Persistence: persistence, Collector: productionSampler, Notifications: notificationWorker, NotificationQueueCapacity: config.Notifications.QueueCapacity}
 	apiServer.EnableMonitorHealth(monitor, authorizer)
@@ -257,7 +264,8 @@ func main() {
 	apiServer.EnableSettings(settingsService, sessions, sessions)
 	apiServer.EnableChecks(checkRepository, checkScheduler, sessions, sessions, protection)
 	apiServer.EnableAlerts(alertRepository, sessions, sessions, protection)
-	apiServer.EnableIncidentsNotifications(notificationRepository, notificationWorker, sessions, sessions, protection)
+	apiServer.EnableIncidentsNotifications(notificationRepository, notificationWorker, incidentsAuthorizer, sessions, protection)
+	apiServer.EnableAPITokens(tokenRepository, sessions)
 	apiServer.EnableCoolify(coolifyIntegration, sessions, sessions)
 	logService, err := diagnostics.NewLogService(dockerLogs, config.Logs.MaxLines, config.Logs.MaxResponseBytes, config.Logs.RedactionPatterns)
 	if err != nil {
