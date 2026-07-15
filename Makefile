@@ -11,7 +11,7 @@ GO_SOURCE_FILES := $(shell find cmd internal -type f -name '*.go' -print)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev dev-demo dev-host test check build image image-multi format-check go-test web-test web-check go-vet benchmark benchmark-matrix
+.PHONY: help dev dev-demo dev-host test check build web-build image image-multi format-check go-test web-test web-check go-vet benchmark benchmark-matrix
 
 help: ## Show the supported local development commands.
 
@@ -39,11 +39,14 @@ test: go-test web-test ## Run Go and frontend unit tests.
 
 check: format-check go-vet test web-check ## Run the local CI-quality subset.
 
-build: ## Build the production frontend and CGO-enabled Binnacle binary.
+build: web-build ## Build the production frontend and CGO-enabled Binnacle binary.
 
-	$(PNPM) --dir web build
 	mkdir -p $(dir $(BINNACLE_BIN))
 	CGO_ENABLED=1 $(GO) build -ldflags='$(LDFLAGS)' -o $(BINNACLE_BIN) ./cmd/binnacle
+
+web-build: ## Build the embedded production frontend.
+
+	$(PNPM) --dir web build
 
 image: build ## Build a local container image for the current platform.
 
@@ -86,7 +89,7 @@ format-check: ## Check Go and frontend formatting without modifying source.
 	fi
 	$(PNPM) --dir web format
 
-go-test: ## Run all Go tests.
+go-test: web-build ## Run all Go tests.
 
 	$(GO) test ./...
 
@@ -99,7 +102,7 @@ web-check: ## Run Svelte type checking and linting.
 	$(PNPM) --dir web check
 	$(PNPM) --dir web lint
 
-go-vet: ## Run Go vet.
+go-vet: web-build ## Run Go vet.
 
 	$(GO) vet ./...
 

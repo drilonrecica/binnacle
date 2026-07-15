@@ -166,7 +166,7 @@ if command -v pnpm >/dev/null 2>&1 && [[ -d "$ROOT_DIR/web/tests/e2e" ]]; then
     # are active, producing non-deterministic timeout failures.
     run_check "e2e application" pnpm --dir web exec playwright test --workers=1
     run_check "e2e landing" pnpm --dir web test:landing
-    run_check "e2e visual regression" pnpm --dir web test:e2e:visual
+    run_check "e2e visual regression" env BINNACLE_E2E_REUSE_SERVER=true pnpm --dir web test:e2e:visual
   else
     fail "e2e browser qualification" "demo server did not start"
   fi

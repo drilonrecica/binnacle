@@ -14,7 +14,8 @@ export default defineConfig({
   webServer: {
     command: '../scripts/e2e-demo-server.sh',
     url: 'http://127.0.0.1:8080/api/v1/session',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer:
+      process.env.BINNACLE_E2E_REUSE_SERVER === 'true' || !process.env.CI,
     timeout: 120_000,
   },
   projects: [

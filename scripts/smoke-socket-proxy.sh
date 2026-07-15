@@ -15,6 +15,10 @@ fi
 directory="$(mktemp -d)"
 container="binnacle-socket-proxy-smoke-$$"
 docker_gid="$(stat -c '%g' /var/run/docker.sock)"
+# Match the named-volume access used in production. Rootful Docker preserves
+# the host directory owner, and the proxy has no DAC override capability.
+chgrp "$docker_gid" "$directory"
+chmod 0770 "$directory"
 cleanup() {
   docker rm -f "$container" >/dev/null 2>&1 || true
   rm -rf "$directory"
@@ -46,20 +50,36 @@ status() {
   curl --silent --show-error --unix-socket "$socket" --output /dev/null --write-out '%{http_code}' "$@"
 }
 
+assert_status() {
+  local expected="$1"
+  local actual="$2"
+  local request="$3"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "$request returned HTTP $actual; expected $expected." >&2
+    exit 1
+  fi
+}
+
 assert_denied() {
-  case "$1" in
+  local actual="$1"
+  local request="$2"
+  case "$actual" in
     403 | 405) ;;
     *)
-      echo "Socket proxy unexpectedly allowed a forbidden request (HTTP $1)." >&2
+      echo "$request was not denied (HTTP $actual)." >&2
       exit 1
       ;;
   esac
 }
 
-test "$(status --head http://localhost/_ping)" = "200"
-test "$(status http://localhost/v1.55/version)" != "403"
-assert_denied "$(status --request POST http://localhost/v1.55/containers/create)"
-test "$(status http://localhost/v1.55/containers/example/archive)" = "403"
-test "$(status http://localhost/v1.55/images/json)" = "403"
+assert_status 200 "$(status --head http://localhost/_ping)" "HEAD /_ping"
+version_status="$(status http://localhost/v1.55/version)"
+if [[ "$version_status" == "403" || "$version_status" == "405" ]]; then
+  echo "GET /version was denied (HTTP $version_status)." >&2
+  exit 1
+fi
+assert_denied "$(status --request POST http://localhost/v1.55/containers/create)" "POST /containers/create"
+assert_status 403 "$(status http://localhost/v1.55/containers/example/archive)" "GET /containers/example/archive"
+assert_status 403 "$(status http://localhost/v1.55/images/json)" "GET /images/json"
 
 echo "Socket proxy allowlist smoke test passed."
