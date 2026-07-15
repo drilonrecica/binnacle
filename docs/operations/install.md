@@ -3,9 +3,9 @@
 Binnacle is distributed as a container image. The supported paths are Coolify
 (one-click service), Docker Compose, or GHCR.
 
-> **Development status:** v0.6 is implemented but no v0.6 tag or image has been
-> published. The `stable` examples below apply to published releases; qualify a
-> source-built `local` image before using unreleased code in production.
+> **Current release:** For production, pin the immutable `v0.6.0` image tag.
+> The `stable` tag tracks the latest stable release. Qualify a source-built
+> `local` image before using it in production.
 
 > **Qualification gates:** advanced authentication and portability are
 > implemented but disabled in packaged defaults. Leave both feature flags off
