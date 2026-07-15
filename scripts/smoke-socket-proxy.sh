@@ -46,9 +46,19 @@ status() {
   curl --silent --show-error --unix-socket "$socket" --output /dev/null --write-out '%{http_code}' "$@"
 }
 
+assert_denied() {
+  case "$1" in
+    403 | 405) ;;
+    *)
+      echo "Socket proxy unexpectedly allowed a forbidden request (HTTP $1)." >&2
+      exit 1
+      ;;
+  esac
+}
+
 test "$(status --head http://localhost/_ping)" = "200"
 test "$(status http://localhost/v1.55/version)" != "403"
-test "$(status --request POST http://localhost/v1.55/containers/create)" = "403"
+assert_denied "$(status --request POST http://localhost/v1.55/containers/create)"
 test "$(status http://localhost/v1.55/containers/example/archive)" = "403"
 test "$(status http://localhost/v1.55/images/json)" = "403"
 

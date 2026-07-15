@@ -68,6 +68,7 @@ jobs:
       - uses: github/codeql-action/upload-sarif@v4.37.0
         with:
           sarif_file: trivy.sarif
+          category: trivy-binnacle
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/wollomatic/socket-proxy:1.12.3@sha256:9e781fbe79315355d08901832f639119aa332ac27ee6157fc7f2fab5193c8600
@@ -77,3 +78,4 @@ jobs:
       - uses: github/codeql-action/upload-sarif@v4.37.0
         with:
           sarif_file: socket-proxy-trivy.sarif
+          category: trivy-socket-proxy
