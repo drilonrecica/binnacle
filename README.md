@@ -43,8 +43,9 @@ hosts, and workload control are unsupported.
 
 ## Quick start
 
-No public v0.6 image exists yet. To evaluate the current development build with
-synthetic data:
+For production installation with the published `v0.6.0` image, follow the
+[installation guide](docs/operations/install.md). To evaluate Binnacle locally
+with synthetic data:
 
 ```bash
 git clone https://github.com/drilonrecica/binnacle.git
@@ -53,9 +54,7 @@ make dev-demo
 ```
 
 Open `http://127.0.0.1:8080` and complete setup. This uses a fresh temporary
-database on each run. For Coolify, Compose, hardened deployments, and
-configuration details, follow the
-[installation guide](docs/operations/install.md).
+database on each run.
 
 > **Docker socket warning:** a Docker socket is privileged even when its
 > filesystem mount is read-only. Binnacle contains no mutation paths, but a

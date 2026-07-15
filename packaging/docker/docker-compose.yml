@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
     read_only: true
     privileged: false
-    user: "0:${DOCKER_GID:?DOCKER_GID is required; run export DOCKER_GID=$(getent group docker | cut -d: -f3)}"
+    user: "0:65532"
     cap_drop:
       - ALL
     security_opt:
@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
     read_only: true
     privileged: false
-    user: "binnacle:${DOCKER_GID:?DOCKER_GID is required; run export DOCKER_GID=$(getent group docker | cut -d: -f3)}"
+    user: "binnacle:65532"
     security_opt:
       - no-new-privileges:true
     depends_on:

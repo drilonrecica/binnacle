@@ -29,10 +29,10 @@ test('field manual assets, links, and accessibility are valid', async ({
     page.getByRole('heading', { name: 'Not another observability stack.' }),
   ).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Pre-release status.' }),
+    page.getByRole('heading', { name: 'Current release.' }),
   ).toBeVisible();
   await expect(
-    page.getByRole('link', { name: 'View development install guide' }),
+    page.getByRole('link', { name: 'View install guide' }),
   ).toHaveAttribute(
     'href',
     'https://github.com/drilonrecica/binnacle/blob/master/docs/operations/install.md',
@@ -44,7 +44,7 @@ test('field manual assets, links, and accessibility are valid', async ({
     page.getByText('No external telemetry', { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText('No v0.3 tag has been published yet.'),
+    page.getByText('v0.6.0 is available for amd64 and arm64', { exact: false }),
   ).toBeVisible();
   await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
   await expect(page.locator('script')).toHaveCount(0);
@@ -87,7 +87,7 @@ test('small mobile keeps navigation and install action usable', async ({
     page.getByRole('link', { name: 'Install', exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole('link', { name: 'View development install guide' }),
+    page.getByRole('link', { name: 'View install guide' }),
   ).toBeVisible();
   expect(
     await page.evaluate(

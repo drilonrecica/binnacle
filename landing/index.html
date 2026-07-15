@@ -80,7 +80,7 @@
         <div class="classification" aria-label="Product classification">
           <span>DOCKER MONITORING</span>
           <span>COOLIFY-AWARE</span>
-          <span>PRE-RELEASE</span>
+          <span>V0.6.0</span>
         </div>
         <div class="hero-copy">
           <p class="eyebrow">WATCH CONSOLE / SINGLE SERVER</p>
@@ -100,15 +100,15 @@
             <a
               class="button primary"
               href="https://github.com/drilonrecica/binnacle/blob/master/docs/operations/install.md"
-              >View development install guide</a
+              >View install guide</a
             >
             <a class="button" href="https://github.com/drilonrecica/binnacle"
               >View source</a
             >
           </div>
           <p class="release-note">
-            <strong>Pre-release:</strong> v0.3 is implemented and undergoing
-            release qualification. No v0.3 tag has been published yet.
+            <strong>Current release:</strong> v0.6.0 is available for amd64 and
+            arm64 from GHCR with an immutable version tag.
           </p>
         </div>
 
@@ -352,22 +352,23 @@
           <span>04</span>
           <div>
             <p>PROJECT STATUS / TRANSPARENT BY DEFAULT</p>
-            <h2 id="status-title">Pre-release status.</h2>
+            <h2 id="status-title">Current release.</h2>
           </div>
         </header>
         <div class="status-grid">
           <div>
-            <strong>IN DEVELOPMENT</strong>
+            <strong>STABLE RELEASE</strong>
             <p>
-              The v0.3 feature set is implemented. Release qualification is in
-              progress and no v0.3 tag has been published.
+              v0.6.0 passed release qualification and is published with a
+              multi-architecture container image and build provenance.
             </p>
           </div>
           <div>
             <strong>NEXT</strong>
             <p>
-              Bounded log access and read-only process diagnostics. Multi-server
-              monitoring and workload controls remain later or excluded scope.
+              Advanced authentication and portability remain disabled by default
+              pending acceptance. Multi-server monitoring remains later scope;
+              workload controls remain excluded.
             </p>
           </div>
         </div>
@@ -382,13 +383,14 @@
           <span>05</span>
           <div>
             <p>DEPLOYMENT SEQUENCE</p>
-            <h2 id="quickstart-title">Run the development build.</h2>
+            <h2 id="quickstart-title">Deploy v0.6.0.</h2>
           </div>
         </header>
         <div class="requirements">
           <span>REQUIREMENTS</span>
           <p>
-            Linux on amd64 or arm64 · Docker Engine 29.5.1+ · read access to host
+            Linux on amd64 or arm64 · Docker Engine 29.5.1+ · read access to
+            host
             <code>/proc</code>, <code>/sys</code>, and Docker · one persistent
             data volume
           </p>
@@ -397,11 +399,10 @@
           <li>
             <span>01</span>
             <div>
-              <h3>Generate first-run credentials</h3>
+              <h3>Docker Compose first-run token</h3>
               <pre
                 tabindex="0"
-              ><code>export BINNACLE_SETUP_TOKEN="$(openssl rand -hex 32)"
-export DOCKER_GID="$(getent group docker | cut -d: -f3)"</code></pre>
+              ><code>export BINNACLE_SETUP_TOKEN="$(openssl rand -hex 32)"</code></pre>
             </div>
           </li>
           <li>
@@ -411,8 +412,8 @@ export DOCKER_GID="$(getent group docker | cut -d: -f3)"</code></pre>
                 <span>PRIMARY PATH</span>
                 <h3 id="coolify-install-title">Coolify</h3>
                 <p>
-                  Deploy the included service template, set the setup token,
-                  attach a domain, and complete local onboarding.
+                  Deploy the included service template, copy the generated setup
+                  token, attach a domain, and complete local onboarding.
                 </p>
               </section>
               <section aria-labelledby="compose-install-title">
@@ -430,9 +431,9 @@ export DOCKER_GID="$(getent group docker | cut -d: -f3)"</code></pre>
             <div>
               <h3>Follow the release-aware guide</h3>
               <p>
-                No public v0.3 image has been released yet. The guide records
-                supported source-build paths and will carry the exact image tag
-                after release.
+                Use the immutable <code>v0.6.0</code> image tag in production.
+                The guide covers Coolify, Docker Compose, secrets, upgrades, and
+                the restricted Docker socket boundary.
               </p>
               <a
                 class="button primary"
@@ -497,7 +498,7 @@ export DOCKER_GID="$(getent group docker | cut -d: -f3)"</code></pre>
     </main>
 
     <footer>
-      <span>BINNACLE / AGPL-3.0-ONLY / PRE-RELEASE</span>
+      <span>BINNACLE / AGPL-3.0-ONLY / V0.6.0</span>
       <span>OBSERVES, NEVER OPERATES</span>
       <a href="https://github.com/drilonrecica/binnacle">SOURCE REPOSITORY</a>
     </footer>

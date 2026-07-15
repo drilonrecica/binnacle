@@ -6,12 +6,12 @@ Detailed feature specifications belong in release planning, not here.
 
 | Release | Status | Direction |
 | --- | --- | --- |
-| v0.1 foundation | Implemented | Single-server host and Docker monitoring, local history, Coolify/Compose-aware resources, authentication, and bounded operation. |
-| v0.2 checks and alerts | Implemented; tag not published | HTTP/HTTPS checks, deterministic local alerts, timed silences, deployment grace, and effective resource health. |
-| v0.3 notifications and incident grouping | Implemented; tag not published | Durable HTTPS webhook and SMTP delivery with automatic target-based incidents. |
-| v0.4 diagnostics | Implemented; local qualification complete, tag not published | Bounded log access and read-only process diagnostics. |
-| v0.5 access and Coolify enrichment | Implemented; advanced-auth acceptance pending, tag not published | Coolify API enrichment is available. TOTP and external authentication are deployment-gated off by default pending qualification. |
-| v0.6 portability and integration | Implemented; portability acceptance pending, tag not published | Personalization is available. Scoped API tokens, bounded exports, and Prometheus eligibility are deployment-gated off by default pending qualification. |
+| v0.1 foundation | Released in v0.6.0 | Single-server host and Docker monitoring, local history, Coolify/Compose-aware resources, authentication, and bounded operation. |
+| v0.2 checks and alerts | Released in v0.6.0 | HTTP/HTTPS checks, deterministic local alerts, timed silences, deployment grace, and effective resource health. |
+| v0.3 notifications and incident grouping | Released in v0.6.0 | Durable HTTPS webhook and SMTP delivery with automatic target-based incidents. |
+| v0.4 diagnostics | Released in v0.6.0 | Bounded log access and read-only process diagnostics. |
+| v0.5 access and Coolify enrichment | Released in v0.6.0; advanced-auth acceptance pending | Coolify API enrichment is available. TOTP and external authentication are deployment-gated off by default pending qualification. |
+| v0.6 portability and integration | Released in v0.6.0; portability acceptance pending | Personalization is available. Scoped API tokens, bounded exports, and Prometheus eligibility are deployment-gated off by default pending qualification. |
 
 ## Later direction
 

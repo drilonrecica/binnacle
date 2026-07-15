@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     read_only: true
     privileged: false
-    user: "0:${DOCKER_GID:?DOCKER_GID is required; run export DOCKER_GID=$(getent group docker | cut -d: -f3)}"
+    user: "0:65532"
     cap_drop:
       - ALL
     security_opt:
@@ -52,7 +52,7 @@ services:
     restart: unless-stopped
     read_only: true
     privileged: false
-    user: "binnacle:${DOCKER_GID:?DOCKER_GID is required; run export DOCKER_GID=$(getent group docker | cut -d: -f3)}"
+    user: "binnacle:65532"
     security_opt:
       - no-new-privileges:true
     depends_on:
@@ -63,7 +63,7 @@ services:
       BINNACLE_HOST_PROC: /host/proc
       BINNACLE_HOST_SYS: /host/sys
       BINNACLE_HOST_PASSWD: /host/etc/passwd
-      BINNACLE_SETUP_TOKEN: ${BINNACLE_SETUP_TOKEN:?BINNACLE_SETUP_TOKEN is required for the first installation}
+      BINNACLE_SETUP_TOKEN: ${SERVICE_HEX_64_BINNACLE_SETUP}
       BINNACLE_DOCKER_SOCKET: ${BINNACLE_DOCKER_SOCKET:-/var/run/binnacle-docker/docker.sock}
       BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS: ${BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS:-false}
       BINNACLE_MASTER_KEY: ${BINNACLE_MASTER_KEY:-}

@@ -85,11 +85,26 @@ for key in ("BINNACLE_DOCKER_SOCKET", "BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS", "
 
 raw_socket = "/var/run/docker.sock:/var/run/docker.sock:ro"
 for label, doc in (("Compose", compose), ("Coolify template", template), ("source-build Coolify", source)):
-    app_mounts = service(doc).get("volumes", [])
-    proxy_mounts = service(doc, "docker-socket-proxy").get("volumes", [])
+    app = service(doc)
+    proxy = service(doc, "docker-socket-proxy")
+    app_mounts = app.get("volumes", [])
+    proxy_mounts = proxy.get("volumes", [])
+    if app.get("user") != "binnacle:65532":
+        raise SystemExit(f"{label} does not use the fixed filtered-socket group")
+    if proxy.get("user") != "0:65532":
+        raise SystemExit(f"{label} socket proxy does not use the fixed filtered-socket group")
     if any("/var/run/docker.sock" in mount for mount in app_mounts):
         raise SystemExit(f"{label} exposes the raw Docker socket to Binnacle")
     if raw_socket not in proxy_mounts:
         raise SystemExit(f"{label} socket proxy does not have the read-only daemon socket mount")
+
+generated_setup_token = "${SERVICE_HEX_64_BINNACLE_SETUP}"
+for label, doc in (("Coolify template", template), ("source-build Coolify", source)):
+    if service(doc).get("environment", {}).get("BINNACLE_SETUP_TOKEN") != generated_setup_token:
+        raise SystemExit(f"{label} does not use Coolify's generated setup token")
+
+for path in sys.argv[1:]:
+    if "DOCKER_GID" in open(path).read():
+        raise SystemExit(f"{path} still requires host Docker group discovery")
 print("Source-build Coolify Compose is valid.")
 PY
