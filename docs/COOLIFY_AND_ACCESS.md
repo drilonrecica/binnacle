@@ -29,6 +29,13 @@ manual `binnacle.*` labels, Coolify API metadata, then Docker/Compose metadata.
 
 ## Local MFA
 
+TOTP and trusted-proxy authentication are implemented but disabled by default
+pending advanced-auth acceptance testing. Enable them with
+`BINNACLE_FEATURE_ADVANCED_AUTH=true`. Coolify enrichment is independent and
+remains available while advanced authentication is off. If stored TOTP
+enrollment exists, Binnacle refuses to start with the gate off so the
+administrator cannot be locked out; enrollment data is never deleted.
+
 Settings can enroll RFC 6238 TOTP for local authentication. Enrollment requires
 the current password and a configured master key. Binnacle displays a manual
 Base32 seed and `otpauth://` URI; no QR library is included. Confirmation
@@ -41,7 +48,7 @@ TOTP applies only to local login; an external identity provider owns its MFA.
 ## Trusted-proxy authentication
 
 Set `BINNACLE_AUTH_MODE` to `local`, `proxy`, or `local_and_proxy` (`local` is
-the default). Proxy modes also require:
+the default). Proxy modes require `BINNACLE_FEATURE_ADVANCED_AUTH=true` and:
 
 - `BINNACLE_AUTH_PROXY_CIDRS`: a separate allowlist for immediate proxy peers;
 - `BINNACLE_AUTH_IDENTITY_HEADER`: the trusted identity header;

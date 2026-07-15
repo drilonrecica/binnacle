@@ -8,6 +8,10 @@ export interface SettingValue {
 export interface SettingsSnapshot {
   revision: number;
   values: Record<string, SettingValue>;
+  features: {
+    advancedAuth: boolean;
+    portability: boolean;
+  };
 }
 
 export async function loadSettings(): Promise<SettingsSnapshot> {

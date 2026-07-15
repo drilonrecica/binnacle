@@ -96,16 +96,16 @@
           required
           bind:value={username}
         />
-        <label for="code"
-          >Authentication or recovery code <span>(when enabled)</span></label
-        >
-        <input
-          id="code"
-          name="code"
-          inputmode="numeric"
-          autocomplete="one-time-code"
-          bind:value={code}
-        />
+        {#if methods?.mfaAvailable}<label for="code"
+            >Authentication or recovery code <span>(when enabled)</span></label
+          >
+          <input
+            id="code"
+            name="code"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            bind:value={code}
+          />{/if}
         <label for="password">Password</label>
         <input
           id="password"

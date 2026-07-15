@@ -55,6 +55,7 @@ export interface AuthMethods {
   local: boolean;
   proxy: boolean;
   proxyAvailable: boolean;
+  mfaAvailable: boolean;
 }
 export async function authMethods(): Promise<AuthMethods> {
   const response = await fetch('/api/v1/auth/methods', {

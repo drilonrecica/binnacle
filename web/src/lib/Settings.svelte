@@ -164,7 +164,7 @@
           >
         {/each}
         <AccessIntegrations />
-        <APITokens />
+        {#if snapshot.features.portability}<APITokens />{/if}
       </section>
 
       <section

@@ -195,7 +195,13 @@ async function mockSettings(page: Page) {
     },
   };
   await page.route('**/api/v1/settings', (route) =>
-    route.fulfill({ json: { revision: 1, values } }),
+    route.fulfill({
+      json: {
+        revision: 1,
+        values,
+        features: { advancedAuth: false, portability: false },
+      },
+    }),
   );
   const preferences = {
     schemaVersion: 1,
@@ -247,7 +253,21 @@ async function scan(page: Page) {
 test('login page has no detectable a11y violations', async ({ page }) => {
   await mockAuthSession(page, 'guest');
   await mockSetupAvailable(page, false);
+  await page.route('**/api/v1/auth/methods', (route) =>
+    route.fulfill({
+      json: {
+        mode: 'local',
+        local: true,
+        proxy: false,
+        proxyAvailable: false,
+        mfaAvailable: false,
+      },
+    }),
+  );
   await page.goto('/login');
+  await expect(page.getByLabel('Authentication or recovery code')).toHaveCount(
+    0,
+  );
   await scan(page);
 });
 
@@ -402,7 +422,22 @@ test('settings page has no detectable a11y violations', async ({ page }) => {
   await mockOnboarding(page, true);
   await mockLive(page);
   await mockSettings(page);
+  await page.route('**/api/v1/auth/methods', (route) =>
+    route.fulfill({
+      json: {
+        mode: 'local',
+        local: true,
+        proxy: false,
+        proxyAvailable: false,
+        mfaAvailable: false,
+      },
+    }),
+  );
   await page.goto('/settings');
+  await expect(page.getByRole('heading', { name: 'Local MFA' })).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Personal API tokens' }),
+  ).toHaveCount(0);
   await scan(page);
 });
 

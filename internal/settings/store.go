@@ -65,6 +65,7 @@ type SettingView struct {
 type Snapshot struct {
 	Revision int64                  `json:"revision"`
 	Values   map[string]SettingView `json:"values"`
+	Features Features               `json:"features"`
 }
 
 type Service struct {
@@ -168,7 +169,7 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 		}
 		values[key] = SettingView{Value: lookup(resolved, key), Source: source, ApplyMode: mode}
 	}
-	return Snapshot{Revision: revision, Values: values}, nil
+	return Snapshot{Revision: revision, Values: values, Features: resolved.Features}, nil
 }
 
 func (s *Service) Patch(ctx context.Context, expected int64, changes map[string]string, actor string) (Snapshot, error) {
@@ -259,7 +260,7 @@ func (s *Service) snapshotLocked(ctx context.Context) (Snapshot, error) {
 		}
 		values[key] = SettingView{Value: lookup(s.current, key), Source: source, ApplyMode: mode}
 	}
-	return Snapshot{Revision: rev, Values: values}, nil
+	return Snapshot{Revision: rev, Values: values, Features: s.current.Features}, nil
 }
 
 type rower interface {

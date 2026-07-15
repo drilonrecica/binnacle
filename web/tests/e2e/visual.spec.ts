@@ -184,7 +184,13 @@ async function mockSettings(page: Page) {
     },
   };
   await page.route('**/api/v1/settings', (route) =>
-    route.fulfill({ json: { revision: 1, values } }),
+    route.fulfill({
+      json: {
+        revision: 1,
+        values,
+        features: { advancedAuth: false, portability: false },
+      },
+    }),
   );
   const preferences = {
     schemaVersion: 1,

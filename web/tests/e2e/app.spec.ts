@@ -23,7 +23,7 @@ async function mockOnboarding(page: Page) {
   );
 }
 
-async function mockSettings(page: Page) {
+async function mockSettings(page: Page, portability = false) {
   const values: Record<
     string,
     { value: string; source: string; applyMode: string }
@@ -106,7 +106,13 @@ async function mockSettings(page: Page) {
     },
   };
   await page.route('**/api/v1/settings', (route) =>
-    route.fulfill({ json: { revision: 1, values } }),
+    route.fulfill({
+      json: {
+        revision: 1,
+        values,
+        features: { advancedAuth: false, portability },
+      },
+    }),
   );
   await mockPortabilitySettings(page);
 }
@@ -555,7 +561,7 @@ test('creates a scoped API token and persists personalization', async ({
 }) => {
   await mockAuthSession(page);
   await mockOnboarding(page);
-  await mockSettings(page);
+  await mockSettings(page, true);
   await page.route('**/api/v1/live', (route) =>
     route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
   );
@@ -591,4 +597,97 @@ test('creates a scoped API token and persists personalization', async ({
   await page.getByLabel('Name', { exact: true }).fill('reporter');
   await page.getByRole('button', { name: 'Create token' }).click();
   await expect(page.getByText('bnk_example_plaintext')).toBeVisible();
+});
+
+test('hides unqualified access and portability controls by default on mobile', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockAuthSession(page);
+  await mockOnboarding(page);
+  await mockSettings(page);
+  await page.route('**/api/v1/live', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
+  );
+  await page.route('**/api/v1/auth/methods', (route) =>
+    route.fulfill({
+      json: {
+        mode: 'local',
+        local: true,
+        proxy: false,
+        proxyAvailable: false,
+        mfaAvailable: false,
+      },
+    }),
+  );
+  await page.route('**/api/v1/integrations/coolify', (route) =>
+    route.fulfill({
+      json: {
+        enabled: false,
+        tokenConfigured: false,
+        environmentAuthoritative: false,
+        collector: { state: 'disabled', resources: 0 },
+      },
+    }),
+  );
+  await page.goto('/settings');
+  await expect(page.getByRole('heading', { name: 'Local MFA' })).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Personal API tokens' }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Coolify enrichment' }),
+  ).toBeVisible();
+});
+
+test('restores the MFA enrollment workflow when advanced authentication is enabled', async ({
+  page,
+}) => {
+  await mockAuthSession(page);
+  await mockOnboarding(page);
+  await mockSettings(page);
+  await page.route('**/api/v1/live', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
+  );
+  await page.route('**/api/v1/auth/methods', (route) =>
+    route.fulfill({
+      json: {
+        mode: 'local',
+        local: true,
+        proxy: false,
+        proxyAvailable: false,
+        mfaAvailable: true,
+      },
+    }),
+  );
+  await page.route('**/api/v1/auth/mfa', (route) =>
+    route.fulfill({ json: { enabled: false } }),
+  );
+  await page.route('**/api/v1/auth/mfa/enroll', (route) =>
+    route.fulfill({
+      json: {
+        seed: 'JBSWY3DPEHPK3PXP',
+        uri: 'otpauth://totp/Binnacle%3Aadmin?secret=JBSWY3DPEHPK3PXP',
+        expiresAt: '2026-07-11T13:00:00Z',
+      },
+    }),
+  );
+  await page.route('**/api/v1/integrations/coolify', (route) =>
+    route.fulfill({
+      json: {
+        enabled: false,
+        tokenConfigured: false,
+        environmentAuthoritative: false,
+        collector: { state: 'disabled', resources: 0 },
+      },
+    }),
+  );
+  await page.goto('/settings');
+  await page
+    .getByLabel('Current password')
+    .fill('correct horse battery staple');
+  await page.getByRole('button', { name: 'Set up MFA' }).click();
+  await expect(
+    page.getByText('JBSWY3DPEHPK3PXP', { exact: true }),
+  ).toBeVisible();
 });

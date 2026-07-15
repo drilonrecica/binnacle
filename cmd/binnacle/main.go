@@ -166,6 +166,9 @@ func main() {
 		mfaService.SetDB(store.DB())
 		notificationRepository.SetDB(store.DB())
 		coolifyIntegration.SetDB(store.DB())
+		if err := auth.ValidateAdvancedAuthState(ctx, store.DB(), config.Features.AdvancedAuth); err != nil {
+			return err
+		}
 		if err := alertRepository.SeedDefaults(ctx); err != nil {
 			return err
 		}
@@ -211,11 +214,18 @@ func main() {
 	sessions.SetTrustedProxies(proxies)
 
 	authorizer := sessions
-	serverAuthorizer := api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeServerRead}
-	resourceAuthorizer := api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeResourcesRead}
-	metricsAuthorizer := api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeMetricsRead}
-	eventsAuthorizer := api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeEventsRead}
-	incidentsAuthorizer := api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeIncidentsRead, TokenPathPrefixes: []string{"/api/v1/incidents"}}
+	var serverAuthorizer api.Authorizer = sessions
+	var resourceAuthorizer api.Authorizer = sessions
+	var metricsAuthorizer api.Authorizer = sessions
+	var eventsAuthorizer api.Authorizer = sessions
+	var incidentsAuthorizer api.Authorizer = sessions
+	if config.Features.Portability {
+		serverAuthorizer = api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeServerRead}
+		resourceAuthorizer = api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeResourcesRead}
+		metricsAuthorizer = api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeMetricsRead}
+		eventsAuthorizer = api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeEventsRead}
+		incidentsAuthorizer = api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeIncidentsRead, TokenPathPrefixes: []string{"/api/v1/incidents"}}
+	}
 	apiServer.EnableLive(engine, authorizer, protection, alertRepository, coolifyIntegration)
 	apiServer.EnableCurrent(engine, serverAuthorizer)
 	apiServer.EnableResources(engine, resourceAuthorizer, store, protection, alertRepository, coolifyIntegration)
@@ -260,17 +270,24 @@ func main() {
 	})
 	apiServer.EnableDiagnostics(bundleService, authorizer, protection)
 	apiServer.EnableSetup(setup, protection, sessions)
-	apiServer.EnableAuth(credentials, sessions, protection, mfaService, proxyAuth)
-	apiServer.EnableProxyAuth(proxyAuth, credentials, sessions)
-	apiServer.EnableMFA(mfaService, credentials, sessions, protection)
+	if config.Features.AdvancedAuth {
+		apiServer.EnableAuth(credentials, sessions, protection, mfaService, proxyAuth)
+		apiServer.EnableProxyAuth(proxyAuth, credentials, sessions)
+		apiServer.EnableMFA(mfaService, credentials, sessions, protection)
+	} else {
+		apiServer.EnableAuth(credentials, sessions, protection)
+		apiServer.EnableAuthMethods(proxyAuth, false)
+	}
 	apiServer.EnableOnboarding(onboardingService, sessions, sessions)
 	apiServer.EnableSettings(settingsService, sessions, sessions)
 	apiServer.EnableChecks(checkRepository, checkScheduler, sessions, sessions, protection)
 	apiServer.EnableAlerts(alertRepository, sessions, sessions, protection)
 	apiServer.EnableIncidentsNotifications(notificationRepository, notificationWorker, incidentsAuthorizer, sessions, protection)
-	apiServer.EnableAPITokens(tokenRepository, sessions)
 	apiServer.EnablePreferences(preferenceRepository, sessions)
-	apiServer.EnableExports(store, notificationRepository, engine, metricsAuthorizer, eventsAuthorizer, incidentsAuthorizer, resourceAuthorizer, coolifyIntegration)
+	if config.Features.Portability {
+		apiServer.EnableAPITokens(tokenRepository, sessions)
+		apiServer.EnableExports(store, notificationRepository, engine, metricsAuthorizer, eventsAuthorizer, incidentsAuthorizer, resourceAuthorizer, coolifyIntegration)
+	}
 	apiServer.EnableCoolify(coolifyIntegration, sessions, sessions)
 	logService, err := diagnostics.NewLogService(dockerLogs, config.Logs.MaxLines, config.Logs.MaxResponseBytes, config.Logs.RedactionPatterns)
 	if err != nil {
@@ -279,7 +296,7 @@ func main() {
 	}
 	apiServer.EnableLogs(logService, engine, sessions)
 	apiServer.EnableProcesses(diagnostics.NewProcessScanner(config.Paths.HostProc, config.Paths.HostPasswd), sessions)
-	prometheusHandler := &api.PrometheusHandler{Enabled: config.Prometheus.Enabled, Tokens: tokenRepository, Engine: engine, Checks: checkRepository, Monitor: monitor}
+	prometheusHandler := &api.PrometheusHandler{Enabled: config.Features.Portability && config.Prometheus.Enabled, Tokens: tokenRepository, Engine: engine, Checks: checkRepository, Monitor: monitor}
 	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, version, application, apiServer.Handler(), webembed.Handler(), prometheusHandler))
 	if err := application.Run(ctx); err != nil {
 		log.Error("application exited with error", "error", err)

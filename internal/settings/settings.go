@@ -27,6 +27,7 @@ type Config struct {
 	Logs          Logs          `toml:"logs"`
 	Coolify       Coolify       `toml:"coolify"`
 	Auth          Auth          `toml:"auth"`
+	Features      Features      `toml:"features"`
 	Prometheus    Prometheus    `toml:"prometheus"`
 	Sessions      Sessions      `toml:"sessions"`
 	Demo          bool          `toml:"demo"`
@@ -107,6 +108,10 @@ type Auth struct {
 	IdentityHeader string   `toml:"identity_header"`
 	AllowedSubject string   `toml:"allowed_subject"`
 }
+type Features struct {
+	AdvancedAuth bool `toml:"advanced_auth" json:"advancedAuth"`
+	Portability  bool `toml:"portability" json:"portability"`
+}
 type Prometheus struct {
 	Enabled bool `toml:"enabled"`
 }
@@ -164,6 +169,12 @@ func (c Config) Validate() error {
 	if c.Auth.Mode != "local" && (len(c.Auth.ProxyCIDRs) == 0 || strings.TrimSpace(c.Auth.IdentityHeader) == "" || strings.TrimSpace(c.Auth.AllowedSubject) == "") {
 		return fmt.Errorf("proxy auth requires proxy_cidrs, identity_header, and allowed_subject")
 	}
+	if !c.Features.AdvancedAuth && c.Auth.Mode != "local" {
+		return fmt.Errorf("proxy authentication requires features.advanced_auth=true")
+	}
+	if !c.Features.Portability && c.Prometheus.Enabled {
+		return fmt.Errorf("prometheus requires features.portability=true")
+	}
 	if c.Collection.MinimumInterval <= 0 || c.Collection.HostInterval < c.Collection.MinimumInterval || c.Collection.ContainerInterval < c.Collection.MinimumInterval {
 		return fmt.Errorf("collection intervals must be at least minimum_interval")
 	}
@@ -205,7 +216,7 @@ func (c Config) Validate() error {
 // UIOverridable reports whether a key can be changed without a deployment change.
 func UIOverridable(key string) bool {
 	switch key {
-	case "paths.data_dir", "paths.database_path", "paths.runtime_dir", "paths.master_key", "http.listen_address", "docker.socket_path", "paths.host_proc", "paths.host_sys", "paths.host_passwd", "coolify.url", "coolify.api_token_file", "coolify.allow_insecure_http", "auth.mode", "auth.proxy_cidrs", "auth.identity_header", "auth.allowed_subject", "prometheus.enabled", "notifications.allow_private_targets", "notifications.max_concurrency", "notifications.queue_capacity", "notifications.delivery_timeout", "notifications.reminder_interval":
+	case "paths.data_dir", "paths.database_path", "paths.runtime_dir", "paths.master_key", "http.listen_address", "docker.socket_path", "paths.host_proc", "paths.host_sys", "paths.host_passwd", "coolify.url", "coolify.api_token_file", "coolify.allow_insecure_http", "auth.mode", "auth.proxy_cidrs", "auth.identity_header", "auth.allowed_subject", "features.advanced_auth", "features.portability", "prometheus.enabled", "notifications.allow_private_targets", "notifications.max_concurrency", "notifications.queue_capacity", "notifications.delivery_timeout", "notifications.reminder_interval":
 		return false
 	}
 	return true

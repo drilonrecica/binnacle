@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { authenticatedMutation } from './auth';
+  import { authenticatedMutation, authMethods } from './auth';
 
   type CoolifyStatus = {
     enabled: boolean;
@@ -21,6 +21,7 @@
   let password = $state('');
   let code = $state('');
   let mfaEnabled = $state(false);
+  let mfaAvailable = $state(false);
   let enrollment = $state<Enrollment | null>(null);
   let recoveryCodes = $state<string[]>([]);
   let busy = $state('');
@@ -28,17 +29,22 @@
   let error = $state('');
 
   onMount(() => {
-    void Promise.all([
-      fetch('/api/v1/integrations/coolify').then(async (r) => {
-        if (r.ok) {
-          coolify = await r.json();
-          url = coolify?.url ?? '';
-        }
-      }),
-      fetch('/api/v1/auth/mfa').then(async (r) => {
-        if (r.ok) mfaEnabled = (await r.json()).enabled;
-      }),
-    ]);
+    void fetch('/api/v1/integrations/coolify').then(async (r) => {
+      if (r.ok) {
+        coolify = await r.json();
+        url = coolify?.url ?? '';
+      }
+    });
+    void authMethods()
+      .then(async (methods) => {
+        mfaAvailable = methods.mfaAvailable;
+        if (!mfaAvailable) return;
+        const response = await fetch('/api/v1/auth/mfa');
+        if (response.ok) mfaEnabled = (await response.json()).enabled;
+      })
+      .catch(() => {
+        mfaAvailable = false;
+      });
   });
   async function action(name: string, run: () => Promise<void>) {
     busy = name;
@@ -112,49 +118,49 @@
 {#if error}<p role="alert">{error}</p>{/if}{#if message}<p role="status">
     {message}
   </p>{/if}
-<h3>Local MFA</h3>
-{#if recoveryCodes.length}
-  <p>These one-time recovery codes will not be shown again.</p>
-  <ul class="technical-value">
-    {#each recoveryCodes as recovery}<li>{recovery}</li>{/each}
-  </ul>
-{:else if enrollment}
-  <p>Manual Base32 seed: <code>{enrollment.seed}</code></p>
-  <p class="technical-value">{enrollment.uri}</p>
-  <label for="mfa-confirm">Six-digit code</label><input
-    id="mfa-confirm"
-    autocomplete="one-time-code"
-    inputmode="numeric"
-    bind:value={code}
-    maxlength="6"
-  />
-  <button onclick={confirm} disabled={busy !== ''}>Confirm MFA</button>
-{:else if mfaEnabled}
-  <p>
-    MFA is enabled for local authentication. The upstream provider owns MFA for
-    external authentication.
-  </p>
-  <label for="mfa-disable-password">Current password</label><input
-    id="mfa-disable-password"
-    type="password"
-    autocomplete="current-password"
-    bind:value={password}
-  />
-  <label for="mfa-disable-code">Authentication or recovery code</label><input
-    id="mfa-disable-code"
-    autocomplete="one-time-code"
-    bind:value={code}
-  />
-  <button onclick={disable} disabled={busy !== ''}>Disable MFA</button>
-{:else}
-  <label for="mfa-password">Current password</label><input
-    id="mfa-password"
-    type="password"
-    autocomplete="current-password"
-    bind:value={password}
-  />
-  <button onclick={enroll} disabled={busy !== ''}>Set up MFA</button>
-{/if}
+{#if mfaAvailable}<h3>Local MFA</h3>
+  {#if recoveryCodes.length}
+    <p>These one-time recovery codes will not be shown again.</p>
+    <ul class="technical-value">
+      {#each recoveryCodes as recovery}<li>{recovery}</li>{/each}
+    </ul>
+  {:else if enrollment}
+    <p>Manual Base32 seed: <code>{enrollment.seed}</code></p>
+    <p class="technical-value">{enrollment.uri}</p>
+    <label for="mfa-confirm">Six-digit code</label><input
+      id="mfa-confirm"
+      autocomplete="one-time-code"
+      inputmode="numeric"
+      bind:value={code}
+      maxlength="6"
+    />
+    <button onclick={confirm} disabled={busy !== ''}>Confirm MFA</button>
+  {:else if mfaEnabled}
+    <p>
+      MFA is enabled for local authentication. The upstream provider owns MFA
+      for external authentication.
+    </p>
+    <label for="mfa-disable-password">Current password</label><input
+      id="mfa-disable-password"
+      type="password"
+      autocomplete="current-password"
+      bind:value={password}
+    />
+    <label for="mfa-disable-code">Authentication or recovery code</label><input
+      id="mfa-disable-code"
+      autocomplete="one-time-code"
+      bind:value={code}
+    />
+    <button onclick={disable} disabled={busy !== ''}>Disable MFA</button>
+  {:else}
+    <label for="mfa-password">Current password</label><input
+      id="mfa-password"
+      type="password"
+      autocomplete="current-password"
+      bind:value={password}
+    />
+    <button onclick={enroll} disabled={busy !== ''}>Set up MFA</button>
+  {/if}{/if}
 
 <h3>Coolify enrichment</h3>
 {#if coolify}

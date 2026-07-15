@@ -7,6 +7,10 @@ Binnacle is distributed as a container image. The supported paths are Coolify
 > published. The `stable` examples below apply to published releases; qualify a
 > source-built `local` image before using unreleased code in production.
 
+> **Qualification gates:** advanced authentication and portability are
+> implemented but disabled in packaged defaults. Leave both feature flags off
+> unless you are explicitly running their acceptance tests.
+
 ## Requirements
 
 - Linux host (x86_64 or arm64)
@@ -92,8 +96,10 @@ Key variables you may need to set at deployment time:
 - `BINNACLE_DOCKER_SOCKET` — defaults to `/var/run/docker.sock`.
 - `BINNACLE_MASTER_KEY` — raw/base64 32-byte key or 64-character hex key for notification secrets.
 - `BINNACLE_COOLIFY_URL` and `BINNACLE_COOLIFY_API_TOKEN[_FILE]` — optional read-only Coolify enrichment.
-- `BINNACLE_PROMETHEUS_ENABLED` — enables token-authenticated `/metrics`; defaults to `false`.
-- `BINNACLE_AUTH_MODE` — `local`, `proxy`, or `local_and_proxy`; defaults to `local`.
+- `BINNACLE_FEATURE_ADVANCED_AUTH` — enables TOTP and trusted-proxy authentication; defaults to `false` pending qualification.
+- `BINNACLE_FEATURE_PORTABILITY` — enables personal API tokens, exports, and eligibility for Prometheus; defaults to `false` pending qualification.
+- `BINNACLE_PROMETHEUS_ENABLED` — enables token-authenticated `/metrics` only when portability is also enabled; defaults to `false`.
+- `BINNACLE_AUTH_MODE` — `local`, `proxy`, or `local_and_proxy`; defaults to `local`. Proxy modes require advanced authentication to be enabled.
 - `BINNACLE_AUTH_PROXY_CIDRS`, `BINNACLE_AUTH_IDENTITY_HEADER`, and `BINNACLE_AUTH_ALLOWED_SUBJECT` — required together for proxy modes.
 - `BINNACLE_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS` — private webhook/SMTP opt-in; defaults to `false` and requires restart.
 - `BINNACLE_NOTIFICATIONS_MAX_CONCURRENCY` — delivery workers; defaults to `4`.

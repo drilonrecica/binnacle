@@ -15,10 +15,13 @@ separate observability stack.
 
 ## Status
 
-The v0.6 feature set is implemented and locally qualified, but has not been released or tagged.
-Builds from this repository are development builds. See the [roadmap](ROADMAP.md)
-and [release checklist](docs/operations/release-checklist.md) for current scope
-and qualification status.
+The v0.6 feature set is implemented but has not been released or tagged.
+Advanced authentication (TOTP and trusted-proxy authentication) and portability
+(personal API tokens, exports, and Prometheus eligibility) are disabled by
+default pending their acceptance tests. Builds from this repository are
+development builds. See the [roadmap](ROADMAP.md) and [release
+checklist](docs/operations/release-checklist.md) for current qualification
+status.
 
 ## Guarantees and scope
 

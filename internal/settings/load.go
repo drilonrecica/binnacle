@@ -102,6 +102,14 @@ func LoadWith(getenv func(string) string, exists func(string) bool, provider Ove
 		}
 		sources["prometheus.enabled"] = SourceEnvironment
 	}
+	for env, key := range map[string]string{"BINNACLE_FEATURE_ADVANCED_AUTH": "features.advanced_auth", "BINNACLE_FEATURE_PORTABILITY": "features.portability"} {
+		if value := getenv(env); value != "" {
+			if err := apply(&c, map[string]string{key: value}); err != nil {
+				return Config{}, nil, fmt.Errorf("%s: %w", env, err)
+			}
+			sources[key] = SourceEnvironment
+		}
+	}
 	if token := strings.TrimSpace(getenv("BINNACLE_COOLIFY_API_TOKEN")); token != "" {
 		c.Coolify.APIToken = token
 		sources["coolify.api_token"] = SourceEnvironment
@@ -206,6 +214,8 @@ var supported = func() map[string]bool {
 		m[key] = true
 	}
 	m["prometheus.enabled"] = true
+	m["features.advanced_auth"] = true
+	m["features.portability"] = true
 	return m
 }()
 
@@ -279,6 +289,10 @@ func apply(c *Config, values map[string]string) error {
 			c.Auth.AllowedSubject = value
 		case "prometheus.enabled":
 			c.Prometheus.Enabled, err = strconv.ParseBool(value)
+		case "features.advanced_auth":
+			c.Features.AdvancedAuth, err = strconv.ParseBool(value)
+		case "features.portability":
+			c.Features.Portability, err = strconv.ParseBool(value)
 		case "http.listen_address":
 			c.HTTP.ListenAddress = value
 		case "http.trusted_proxy_cidrs":
@@ -393,6 +407,8 @@ func lookup(c Config, key string) string {
 		"paths.host_passwd": c.Paths.HostPasswd, "coolify.url": c.Coolify.URL, "coolify.api_token_file": c.Coolify.APITokenFile, "coolify.allow_insecure_http": strconv.FormatBool(c.Coolify.AllowInsecureHTTP),
 		"auth.mode": c.Auth.Mode, "auth.proxy_cidrs": strings.Join(c.Auth.ProxyCIDRs, ","), "auth.identity_header": c.Auth.IdentityHeader, "auth.allowed_subject": c.Auth.AllowedSubject,
 		"prometheus.enabled":       strconv.FormatBool(c.Prometheus.Enabled),
+		"features.advanced_auth":   strconv.FormatBool(c.Features.AdvancedAuth),
+		"features.portability":     strconv.FormatBool(c.Features.Portability),
 		"http.trusted_proxy_cidrs": strings.Join(c.HTTP.TrustedProxyCIDRs, ","), "docker.socket_path": c.Docker.SocketPath,
 		"collection.host_interval": c.Collection.HostInterval.String(), "collection.container_interval": c.Collection.ContainerInterval.String(),
 		"collection.minimum_interval": c.Collection.MinimumInterval.String(), "live.sse_interval": c.Live.SSEInterval.String(),

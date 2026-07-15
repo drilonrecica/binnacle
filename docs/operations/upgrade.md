@@ -11,9 +11,19 @@ Container tags follow semantic versioning:
 - `edge` — development builds.
 - Exact version tags such as `v0.6.0` are immutable.
 
-The v0.6 upgrade applies schemas 20 and 21. Back up `binnacle.db` and its
-WAL/SHM files before replacing the binary. Existing resources, alerts, checks,
+The access and portability work retains schemas 19 through 21. Back up
+`binnacle.db` and its WAL/SHM files before replacing the binary. Existing TOTP
+enrollment, API-token metadata, preferences, resources, alerts, checks,
 incidents, sessions, secrets, settings, and history are preserved.
+
+Advanced authentication and portability now default to disabled. An upgraded
+instance with stored TOTP enrollment will refuse startup until
+`BINNACLE_FEATURE_ADVANCED_AUTH=true` is set, preventing an administrator from
+being silently locked out. Existing API tokens remain stored but inactive while
+portability is disabled. Re-enabling either gate requires no migration or data
+conversion. Prometheus additionally requires both
+`BINNACLE_FEATURE_PORTABILITY=true` and
+`BINNACLE_PROMETHEUS_ENABLED=true`.
 
 Pick a channel in your Compose file or Coolify service settings:
 
@@ -48,10 +58,9 @@ image: ghcr.io/drilonrecica/binnacle:stable
 
 Binnacle runs forward-only SQLite migrations automatically at startup. Before migrating, it checks database integrity and available disk space. A failed migration is logged and the process stops; it does not delete or recreate the database.
 
-Schemas 20 and 21 add hashed personal API token metadata and typed,
-versioned administrator preferences. The migration chain from schemas 17
-through 21 preserves resources, history, settings, alerts, incidents, sessions,
-and encrypted secrets.
+Schema 19 adds TOTP and proxy-authentication state; schemas 20 and 21 add hashed
+personal API-token metadata and typed, versioned administrator preferences. The
+migration chain through schema 21 remains intact.
 
 Downgrades are not supported. If you need to revert, restore from a backup taken before the upgrade.
 

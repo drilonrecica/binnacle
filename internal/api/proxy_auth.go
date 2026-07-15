@@ -9,14 +9,22 @@ import (
 )
 
 func (s *Server) EnableProxyAuth(proxy *auth.ProxyAuthenticator, credentials *auth.Credentials, sessions *auth.Sessions) {
+	s.EnableAuthMethods(proxy, true)
+	s.enableExternalSession(proxy, credentials, sessions)
+}
+
+func (s *Server) EnableAuthMethods(proxy *auth.ProxyAuthenticator, mfaAvailable bool) {
 	s.Handle("/api/v1/auth/methods", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only GET is supported."})
 			return
 		}
 		_, available := proxy.Subject(r)
-		WriteJSON(w, 200, map[string]any{"mode": proxy.Mode(), "local": proxy.AllowsLocal(), "proxy": proxy.AllowsProxy(), "proxyAvailable": available})
+		WriteJSON(w, 200, map[string]any{"mode": proxy.Mode(), "local": proxy.AllowsLocal(), "proxy": proxy.AllowsProxy(), "proxyAvailable": available, "mfaAvailable": mfaAvailable})
 	}))
+}
+
+func (s *Server) enableExternalSession(proxy *auth.ProxyAuthenticator, credentials *auth.Credentials, sessions *auth.Sessions) {
 	s.Handle("/api/v1/auth/external-session", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only POST is supported."})

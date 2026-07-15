@@ -57,6 +57,22 @@ func (m *MFA) Enabled(ctx context.Context, userID string) (bool, error) {
 	err := m.db.QueryRowContext(ctx, "SELECT totp_enabled FROM users WHERE id=?", userID).Scan(&enabled)
 	return enabled, err
 }
+
+// ValidateAdvancedAuthState prevents disabling MFA while an administrator
+// still depends on it. Enrollment data is deliberately left untouched.
+func ValidateAdvancedAuthState(ctx context.Context, db *sql.DB, enabled bool) error {
+	if enabled {
+		return nil
+	}
+	var enrolled bool
+	if err := db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE totp_enabled=1)").Scan(&enrolled); err != nil {
+		return fmt.Errorf("check stored TOTP enrollment: %w", err)
+	}
+	if enrolled {
+		return errors.New("features.advanced_auth must be enabled while TOTP enrollment exists")
+	}
+	return nil
+}
 func (m *MFA) Begin(ctx context.Context, user User, password string) (Enrollment, error) {
 	if !m.secrets.Available() {
 		return Enrollment{}, ErrMasterKeyMissing

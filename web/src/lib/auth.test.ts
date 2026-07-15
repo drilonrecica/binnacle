@@ -27,6 +27,7 @@ describe('external authentication', () => {
             local: true,
             proxy: true,
             proxyAvailable: true,
+            mfaAvailable: true,
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         ),

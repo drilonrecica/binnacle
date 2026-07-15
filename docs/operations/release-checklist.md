@@ -27,6 +27,8 @@ table and captured benchmark output.
 | Benchmark | Performance regressions detected | RSS, CPU, write latency, or SSE exceed documented goals on reference hardware |
 | Security and integration race tests | Auth, tokens, enrichment, diagnostics, exports, storage, and preferences remain race-free | Any targeted race test fails |
 | Browser and accessibility suites | Access, diagnostics, token, preference, mobile, and accessibility workflows remain usable | Playwright or visual regression fails |
+| Advanced-auth acceptance | Default-hidden UI/routes, enabled TOTP/proxy workflows, and stored-enrollment startup refusal are verified | Any advanced-auth acceptance case fails |
+| Portability acceptance | Default-hidden UI/routes, session-only reads, enabled token/export/Prometheus workflows, mobile, and accessibility cases are verified | Any portability acceptance case fails |
 
 ## Optional gates
 
@@ -45,6 +47,11 @@ table and captured benchmark output.
   documented reason. Minor visual defects are acceptable if recorded.
 - **NO-GO:** Any critical security defect, normal-operation data loss, or
   required gate failure remains.
+
+Until the two feature-specific acceptance gates pass, packaged defaults keep
+`BINNACLE_FEATURE_ADVANCED_AUTH=false` and
+`BINNACLE_FEATURE_PORTABILITY=false`; implementation completion alone does not
+authorize enabling them by default.
 
 ## Evidence retention
 

@@ -104,3 +104,26 @@ func TestMFAEnrollmentRequiresMasterKeyAndPassword(t *testing.T) {
 		t.Fatalf("error=%v", err)
 	}
 }
+
+func TestAdvancedAuthDisabledRefusesStoredTOTPEnrollment(t *testing.T) {
+	ctx := context.Background()
+	manager := storage.New(filepath.Join(t.TempDir(), "binnacle.db"), filepath.Join(t.TempDir(), "run"))
+	if err := manager.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	credentials := NewCredentials(manager.DB())
+	user, err := credentials.CreateAdmin(ctx, "admin", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = manager.DB().ExecContext(ctx, "UPDATE users SET totp_enabled=1 WHERE id=?", user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = ValidateAdvancedAuthState(ctx, manager.DB(), false); err == nil {
+		t.Fatal("disabled advanced auth accepted stored TOTP enrollment")
+	}
+	if err = ValidateAdvancedAuthState(ctx, manager.DB(), true); err != nil {
+		t.Fatalf("enabled advanced auth rejected stored enrollment: %v", err)
+	}
+}

@@ -1,5 +1,12 @@
 # Interoperability, exports, and personalization
 
+Personal API tokens, attachment exports, and Prometheus eligibility are
+implemented but disabled by default pending portability acceptance testing. To
+qualify them, set `BINNACLE_FEATURE_PORTABILITY=true`. Existing token data is
+preserved while the gate is off, token-management and export routes return 404,
+and Bearer credentials do not authorize normal read endpoints. Personalization
+remains available independently.
+
 ## Personal API tokens
 
 Create and revoke tokens in **Settings → Authentication**. The plaintext is
@@ -40,6 +47,7 @@ The root `/metrics` endpoint is disabled by default. Enable it at deployment:
 
 ```yaml
 environment:
+  BINNACLE_FEATURE_PORTABILITY: "true"
   BINNACLE_PROMETHEUS_ENABLED: "true"
 ```
 
@@ -54,7 +62,8 @@ scrape_configs:
       - targets: [binnacle:8080]
 ```
 
-When disabled, `/metrics` returns 404. The exporter emits only current bounded
+Both settings are required. When either is disabled, `/metrics` returns 404.
+The exporter emits only current bounded
 host/resource metrics, health-check state, collector state, and Binnacle
 self-metrics. Unavailable values are omitted. Labels exclude domains and
 secrets; cardinality remains bounded by current resources and checks.
