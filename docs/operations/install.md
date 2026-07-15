@@ -39,7 +39,7 @@ Store it in a password manager. After the first administrator is created, the se
 1. Add the Binnacle service template to your Coolify instance (or use **Docker Compose Empty** and paste `packaging/coolify/binnacle.yaml`).
 2. Deploy the stack. Coolify generates a persistent 64-character setup token automatically.
 3. Expose the service on your chosen domain. Coolify's proxy routes to container port `8080`.
-4. Copy `SERVICE_HEX_64_BINNACLE_SETUP` from the stack environment, open the URL, and complete onboarding.
+4. Copy `SERVICE_HEX_64_BINNACLE` from the stack environment, open the URL, and complete onboarding.
 
 The Coolify template mounts the host `/proc`, `/sys`, `/etc/passwd`,
 `/etc/os-release`, and the Docker socket. It runs `read_only: true` with

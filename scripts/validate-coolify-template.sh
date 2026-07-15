@@ -98,7 +98,7 @@ for label, doc in (("Compose", compose), ("Coolify template", template), ("sourc
     if raw_socket not in proxy_mounts:
         raise SystemExit(f"{label} socket proxy does not have the read-only daemon socket mount")
 
-generated_setup_token = "${SERVICE_HEX_64_BINNACLE_SETUP}"
+generated_setup_token = "${SERVICE_HEX_64_BINNACLE}"
 for label, doc in (("Coolify template", template), ("source-build Coolify", source)):
     if service(doc).get("environment", {}).get("BINNACLE_SETUP_TOKEN") != generated_setup_token:
         raise SystemExit(f"{label} does not use Coolify's generated setup token")
