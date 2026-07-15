@@ -55,8 +55,8 @@ of those features.
 Coolify intentionally prefixes Docker containers, networks, and volumes with
 the stack UUID. Keep those generated names: they prevent collisions between
 multiple Binnacle deployments. The Compose service and volume names themselves
-are already stable (`binnacle`, `docker-socket-proxy`, `binnacle-data`, and
-`binnacle-docker-api`).
+are already stable (`binnacle`, `binnacle-docker-socket-proxy`,
+`binnacle-data`, and `binnacle-docker-api`).
 
 ## Install with Docker Compose
 

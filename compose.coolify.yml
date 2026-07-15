@@ -8,7 +8,7 @@
 # Coolify generates the first-run setup token automatically.
 
 services:
-  docker-socket-proxy:
+  binnacle-docker-socket-proxy:
     image: ghcr.io/wollomatic/socket-proxy:1.12.3@sha256:9e781fbe79315355d08901832f639119aa332ac27ee6157fc7f2fab5193c8600
     restart: unless-stopped
     read_only: true
@@ -47,6 +47,7 @@ services:
           memory: 32M
 
   binnacle:
+    image: ghcr.io/drilonrecica/binnacle:stable
     build:
       context: .
       dockerfile: packaging/docker/Dockerfile
@@ -64,7 +65,7 @@ services:
       - no-new-privileges:true
 
     depends_on:
-      docker-socket-proxy:
+      binnacle-docker-socket-proxy:
         condition: service_healthy
 
     expose:

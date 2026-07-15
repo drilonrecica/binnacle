@@ -17,7 +17,9 @@ def service(doc, name="binnacle"):
     return doc["services"][name]
 
 c, t = service(compose), service(template)
-cp, tp, sp = service(compose, "docker-socket-proxy"), service(template, "docker-socket-proxy"), service(source, "docker-socket-proxy")
+cp = service(compose, "docker-socket-proxy")
+tp = service(template, "binnacle-docker-socket-proxy")
+sp = service(source, "binnacle-docker-socket-proxy")
 compose_image = c.get("image")
 if compose_image == "${BINNACLE_IMAGE:-ghcr.io/drilonrecica/binnacle:stable}":
     compose_image = "ghcr.io/drilonrecica/binnacle:stable"
@@ -68,7 +70,7 @@ for name, expected, actual in (
     ("healthcheck", c.get("healthcheck"), s.get("healthcheck")),
     ("resource configuration", c.get("deploy", {}).get("resources", {}), s.get("deploy", {}).get("resources", {})),
     ("volume mounts", sorted(c.get("volumes", [])), sorted(s.get("volumes", []))),
-    ("depends_on", c.get("depends_on", {}), s.get("depends_on", {})),
+    ("depends_on", t.get("depends_on", {}), s.get("depends_on", {})),
     ("socket proxy", cp, sp),
 ):
     if expected != actual:
@@ -85,7 +87,7 @@ expected_coolify_environment = {
     "BINNACLE_COOLIFY_API_TOKEN": "${BINNACLE_COOLIFY_API_TOKEN:-}",
 }
 for label, doc in (("Coolify template", template), ("source-build Coolify", source)):
-    if set(doc.get("services", {})) != {"binnacle", "docker-socket-proxy"}:
+    if set(doc.get("services", {})) != {"binnacle", "binnacle-docker-socket-proxy"}:
         raise SystemExit(f"{label} exposes unexpected Compose service names")
     if set(doc.get("volumes", {})) != {"binnacle-data", "binnacle-docker-api"}:
         raise SystemExit(f"{label} exposes unexpected Compose volume names")
@@ -93,9 +95,13 @@ for label, doc in (("Coolify template", template), ("source-build Coolify", sour
         raise SystemExit(f"{label} exposes an unexpected environment configuration")
 
 raw_socket = "/var/run/docker.sock:/var/run/docker.sock:ro"
-for label, doc in (("Compose", compose), ("Coolify template", template), ("source-build Coolify", source)):
+for label, doc, proxy_name in (
+    ("Compose", compose, "docker-socket-proxy"),
+    ("Coolify template", template, "binnacle-docker-socket-proxy"),
+    ("source-build Coolify", source, "binnacle-docker-socket-proxy"),
+):
     app = service(doc)
-    proxy = service(doc, "docker-socket-proxy")
+    proxy = service(doc, proxy_name)
     app_mounts = app.get("volumes", [])
     proxy_mounts = proxy.get("volumes", [])
     if app.get("user") != "binnacle:65532":
