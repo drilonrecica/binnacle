@@ -60,6 +60,7 @@ func (e *Engine) Publish(snapshot Snapshot, events ...Event) {
 	snapshot.At = snapshot.At.UTC()
 	snapshot.Resources = append([]ResourceSnapshot(nil), snapshot.Resources...)
 	snapshot.Collectors = copyCollectors(snapshot.Collectors)
+	snapshot.Filesystems = append([]FilesystemObservation(nil), e.filesystems...)
 	e.snapshot = snapshot
 	for _, event := range events {
 		if event.ID == 0 {
@@ -117,6 +118,7 @@ func (e *Engine) PublishFilesystems(obs []FilesystemObservation) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.filesystems = append([]FilesystemObservation(nil), obs...)
+	e.snapshot.Filesystems = append([]FilesystemObservation(nil), obs...)
 }
 func (e *Engine) Snapshot() Snapshot { e.mu.RLock(); defer e.mu.RUnlock(); return clone(e.snapshot) }
 func (e *Engine) SSEClients() int    { e.mu.RLock(); defer e.mu.RUnlock(); return len(e.live) }
@@ -137,6 +139,7 @@ func clone(s Snapshot) Snapshot {
 		s.Resources[index].Components = append([]ResourceComponent(nil), s.Resources[index].Components...)
 	}
 	s.Collectors = copyCollectors(s.Collectors)
+	s.Filesystems = append([]FilesystemObservation(nil), s.Filesystems...)
 	return s
 }
 func copyCollectors(in map[string]CollectorHealth) map[string]CollectorHealth {

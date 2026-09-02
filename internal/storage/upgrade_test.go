@@ -17,7 +17,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func TestUpgradeSchema17Through21PreservesExistingData(t *testing.T) {
+func TestUpgradeSchema17Through22PreservesExistingData(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "binnacle.db")
@@ -98,7 +98,7 @@ func TestUpgradeSchema17Through21PreservesExistingData(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer manager.Close()
-	if version, versionErr := manager.SchemaVersion(ctx); versionErr != nil || version != 21 {
+	if version, versionErr := manager.SchemaVersion(ctx); versionErr != nil || version != 22 {
 		t.Fatalf("schema version=%d err=%v", version, versionErr)
 	}
 	var name string

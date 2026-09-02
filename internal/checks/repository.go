@@ -149,3 +149,25 @@ func nullString(v string) any {
 	}
 	return v
 }
+
+// States returns the latest stored result per check id.
+func (r *Repository) States(ctx context.Context) (map[string]Result, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT check_id,status,COALESCE(failure_code,''),latency_ms,checked_at,consecutive_successes,consecutive_failures FROM health_check_state`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]Result{}
+	for rows.Next() {
+		var result Result
+		var failure string
+		var checked int64
+		if err = rows.Scan(&result.CheckID, &result.Status, &failure, &result.LatencyMS, &checked, &result.ConsecutiveSuccesses, &result.ConsecutiveFailures); err != nil {
+			return nil, err
+		}
+		result.FailureCode = FailureCode(failure)
+		result.CheckedAt = time.Unix(checked, 0).UTC()
+		out[result.CheckID] = result
+	}
+	return out, rows.Err()
+}

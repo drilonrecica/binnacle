@@ -3,6 +3,7 @@ package preferences
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -37,5 +38,29 @@ func TestPutGetAndValidate(t *testing.T) {
 	invalid.LandingPage = "settings"
 	if _, err = repo.Put(context.Background(), "user-1", invalid); err == nil {
 		t.Fatal("accepted invalid landing page")
+	}
+}
+
+func TestPutNormalizesLegacyLandingPages(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store := storage.New(filepath.Join(dir, "db"), filepath.Join(dir, "run"))
+	if err := store.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if _, err := store.DB().ExecContext(ctx, "INSERT INTO users(id,username,password_hash,created_at,updated_at) VALUES('u2','legacy','hash',0,0)"); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewRepository(store.DB())
+	for legacy, want := range map[string]string{"watch": "overview", "server": "host", "events": "activity", "logs": "logs"} {
+		saved, err := repo.Put(ctx, "u2", Value{Theme: "dark", Density: "compact", LandingPage: legacy, ChartRange: "1h"})
+		if err != nil || saved.LandingPage != want {
+			t.Fatalf("%s: saved=%+v err=%v", legacy, saved, err)
+		}
+		loaded, _, err := repo.Get(ctx, "u2")
+		if err != nil || loaded.LandingPage != want {
+			t.Fatalf("%s: loaded=%+v err=%v", legacy, loaded, err)
+		}
 	}
 }
