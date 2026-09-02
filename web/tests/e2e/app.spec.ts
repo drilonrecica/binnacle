@@ -511,6 +511,12 @@ test('the command palette jumps to a resource', async ({ page }) => {
   const palette = page.getByRole('dialog', { name: 'Command palette' });
   await expect(palette).toBeVisible();
   await palette.getByRole('combobox').fill('postgres');
+  // Results come from the live snapshot; wait for the match before choosing.
+  await expect(
+    palette.getByRole('option', {
+      name: new RegExp(snapshot.resources[2].name),
+    }),
+  ).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/resources\/infra1$/);
   await expect(
