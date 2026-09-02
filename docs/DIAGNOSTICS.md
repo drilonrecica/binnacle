@@ -15,7 +15,7 @@ best-effort, not a guarantee. Applications should never write secrets to logs.
 Up to 16 additional Go RE2 expressions can be supplied with
 `BINNACLE_LOGS_REDACTION_PATTERNS`, separated by `||`.
 
-The Server page samples host processes only when requested. It uses two bounded
+The Host page samples host processes only when requested. It uses two bounded
 reads of the host `/proc`, serializes scans, returns 25 rows by default (100
 maximum), and does not persist results. `/etc/passwd` is mounted read-only only
 to display usernames; numeric UIDs are used when it is unavailable.

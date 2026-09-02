@@ -1,6 +1,6 @@
 # Accessibility
 
-Binnacle targets WCAG 2.2 Level AA. Automated checks run with `@axe-core/playwright` against the login, setup, onboarding, Watch, server, resources, resource detail, events, settings, monitor-health, diagnostics, and standalone landing pages.
+Binnacle targets WCAG 2.2 Level AA. Automated checks run with `@axe-core/playwright` against the login, setup, onboarding, Overview, Host, Resources, resource detail, Activity, Logs, Alerts (every tab), incident detail, every Settings section, the command palette, dialogs, and the standalone landing page.
 
 ## Automated coverage
 

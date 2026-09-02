@@ -9,7 +9,7 @@ remains available independently.
 
 ## Personal API tokens
 
-Create and revoke tokens in **Settings → Authentication**. The plaintext is
+Create and revoke tokens in **Settings → Integrations**. The plaintext is
 shown once; Binnacle stores only its identifier, prefix, and SHA-256 hash. A
 token may have only these read scopes: `server:read`, `resources:read`,
 `metrics:read`, `events:read`, and `incidents:read`.
