@@ -6,6 +6,7 @@ package alerts
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -128,4 +129,25 @@ func DefaultRules() []Rule {
 		{ID: "builtin-docker-down", Family: FamilyDockerDown, Name: "Docker collector down", BuiltIn: true, Enabled: true, Severity: Critical, ScopeType: "global", TriggerDuration: 2 * time.Minute, RecoveryDuration: time.Minute},
 		{ID: "builtin-persistence-failure", Family: FamilyPersistence, Name: "Persistence failure", BuiltIn: true, Enabled: true, Severity: Critical, ScopeType: "global", TriggerDuration: 0, RecoveryDuration: time.Minute},
 	}
+}
+
+// MarshalJSON exposes the rule durations in seconds so clients can display
+// what they are allowed to edit. The Duration fields stay internal.
+func (r Rule) MarshalJSON() ([]byte, error) {
+	type plain Rule
+	return json.Marshal(struct {
+		plain
+		TriggerSeconds  int `json:"triggerSeconds"`
+		RecoverySeconds int `json:"recoverySeconds"`
+		WindowSeconds   int `json:"windowSeconds,omitempty"`
+		CooldownSeconds int `json:"cooldownSeconds,omitempty"`
+		RepeatSeconds   int `json:"repeatSeconds,omitempty"`
+	}{
+		plain:           plain(r),
+		TriggerSeconds:  int(r.TriggerDuration / time.Second),
+		RecoverySeconds: int(r.RecoveryDuration / time.Second),
+		WindowSeconds:   int(r.Window / time.Second),
+		CooldownSeconds: int(r.Cooldown / time.Second),
+		RepeatSeconds:   int(r.Repeat / time.Second),
+	})
 }

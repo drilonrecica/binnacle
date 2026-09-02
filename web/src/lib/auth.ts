@@ -119,12 +119,15 @@ export async function logout(all = false): Promise<void> {
 }
 
 export function safeRedirect(value: string | null): string {
-  if (!value) return '/watch';
+  if (!value) return '/overview';
   try {
     const target = new URL(value, location.origin);
     if (target.origin !== location.origin || !target.pathname.startsWith('/'))
-      return '/watch';
+      return '/overview';
     const allowed = [
+      '/overview',
+      '/host',
+      '/activity',
       '/watch',
       '/resources',
       '/server',
@@ -141,9 +144,9 @@ export function safeRedirect(value: string | null): string {
           target.pathname === path || target.pathname.startsWith(`${path}/`),
       )
     )
-      return '/watch';
+      return '/overview';
     return `${target.pathname}${target.search}${target.hash}`;
   } catch {
-    return '/watch';
+    return '/overview';
   }
 }

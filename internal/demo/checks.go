@@ -81,7 +81,7 @@ func SeedChecksAlerts(ctx context.Context, db *sql.DB, count, resources int, now
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO notification_channels(id,name,kind,enabled,minimum_severity,notify_resolved,config_json,secret_ref,created_at,updated_at)VALUES('demo-channel','Example webhook','webhook',0,'warning',1,'{}','demo.notification.secret',?,?)`, now.Add(-time.Hour).Unix(), now.Add(-time.Hour).Unix())
+		_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO notification_channels(id,name,kind,enabled,minimum_severity,notify_resolved,config_json,secret_ref,created_at,updated_at)VALUES('demo-channel','Example webhook','webhook',1,'warning',1,'{"url":"https://hooks.example.invalid/binnacle"}','demo.notification.secret',?,?)`, now.Add(-time.Hour).Unix(), now.Add(-time.Hour).Unix())
 		if err != nil {
 			return err
 		}

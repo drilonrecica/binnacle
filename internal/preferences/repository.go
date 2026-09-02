@@ -55,7 +55,8 @@ func (r *Repository) Get(ctx context.Context, userID string) (Value, bool, error
 
 func (r *Repository) Put(ctx context.Context, userID string, value Value) (Value, error) {
 	value.SchemaVersion = SchemaVersion
-	value.PinnedResources = append([]string(nil), value.PinnedResources...)
+	value.LandingPage = normalizeLandingPage(value.LandingPage)
+	value.PinnedResources = append([]string{}, value.PinnedResources...)
 	if err := validate(value); err != nil {
 		return Value{}, err
 	}
@@ -74,7 +75,7 @@ func (r *Repository) Put(ctx context.Context, userID string, value Value) (Value
 }
 
 func validate(value Value) error {
-	if value.SchemaVersion != SchemaVersion || !oneOf(value.Theme, "system", "dark", "light") || !oneOf(value.Density, "comfortable", "compact") || !oneOf(value.LandingPage, "watch", "resources", "server", "events", "alerts") || !oneOf(value.ChartRange, "1h", "6h", "24h", "7d", "30d") || len(value.PinnedResources) > 12 {
+	if value.SchemaVersion != SchemaVersion || !oneOf(value.Theme, "system", "dark", "light") || !oneOf(value.Density, "comfortable", "compact") || !oneOf(value.LandingPage, "overview", "resources", "host", "alerts", "activity", "logs", "watch", "server", "events") || !oneOf(value.ChartRange, "1h", "6h", "24h", "7d", "30d") || len(value.PinnedResources) > 12 {
 		return ErrInvalid
 	}
 	seen := make(map[string]bool, len(value.PinnedResources))
@@ -94,4 +95,18 @@ func oneOf(value string, allowed ...string) bool {
 		}
 	}
 	return false
+}
+
+// normalizeLandingPage maps landing pages from releases before the
+// Overview/Host/Activity rename so older clients keep working.
+func normalizeLandingPage(value string) string {
+	switch value {
+	case "watch":
+		return "overview"
+	case "server":
+		return "host"
+	case "events":
+		return "activity"
+	}
+	return value
 }

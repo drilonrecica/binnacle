@@ -1,5 +1,21 @@
 export type Metric =
-  'cpu' | 'memory' | 'network_rx' | 'network_tx' | 'block_read' | 'block_write';
+  | 'cpu'
+  | 'cpu_user'
+  | 'cpu_system'
+  | 'cpu_iowait'
+  | 'cpu_steal'
+  | 'memory'
+  | 'swap'
+  | 'load_1'
+  | 'load_5'
+  | 'load_15'
+  | 'network_rx'
+  | 'network_tx'
+  | 'disk_read'
+  | 'disk_write'
+  | 'disk_iops'
+  | 'block_read'
+  | 'block_write';
 export type HistoryPoint = {
   at: string;
   min: number | null;

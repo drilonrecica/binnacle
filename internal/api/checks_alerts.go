@@ -379,3 +379,9 @@ func (s *Server) EnableAlerts(repo *alerts.Repository, a Authorizer, sessions *a
 		w.WriteHeader(204)
 	}))
 }
+
+// checkView is a check with its latest stored result for list views.
+type checkView struct {
+	checks.Check
+	State *checks.Result `json:"state,omitempty"`
+}

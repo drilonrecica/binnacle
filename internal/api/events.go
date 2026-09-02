@@ -4,6 +4,8 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	authpkg "github.com/drilonrecica/binnacle/internal/auth"
@@ -26,9 +28,10 @@ func (s *Server) EnableEvents(store *storage.Manager, auth Authorizer, protectio
 			WriteError(w, 429, Error{Code: "rate_limited", Message: "Too many event queries. Try again shortly.", Details: map[string]int{"retryAfterSeconds": maxRetry(retry)}})
 			return
 		}
+		q := r.URL.Query()
 		to := time.Now().UTC()
 		from := to.Add(-24 * time.Hour)
-		if raw := r.URL.Query().Get("from"); raw != "" {
+		if raw := q.Get("from"); raw != "" {
 			var e error
 			from, e = time.Parse(time.RFC3339, raw)
 			if e != nil {
@@ -36,7 +39,7 @@ func (s *Server) EnableEvents(store *storage.Manager, auth Authorizer, protectio
 				return
 			}
 		}
-		if raw := r.URL.Query().Get("to"); raw != "" {
+		if raw := q.Get("to"); raw != "" {
 			var e error
 			to, e = time.Parse(time.RFC3339, raw)
 			if e != nil || !from.Before(to) {
@@ -48,7 +51,31 @@ func (s *Server) EnableEvents(store *storage.Manager, auth Authorizer, protectio
 			WriteError(w, 400, Error{Code: "invalid_time_range", Message: "Event queries are limited to 7 days."})
 			return
 		}
-		v, e := store.EventsFor(r.Context(), from, to, 100, r.URL.Query().Get("resource_id"))
+		severity := q.Get("severity")
+		if severity != "" && severity != "info" && severity != "warning" && severity != "critical" {
+			WriteError(w, 400, Error{Code: "invalid_request", Message: "severity must be info, warning, or critical."})
+			return
+		}
+		types := []string{}
+		for _, value := range strings.Split(q.Get("type"), ",") {
+			if value = strings.TrimSpace(value); value != "" {
+				types = append(types, value)
+			}
+		}
+		if len(types) > 32 {
+			WriteError(w, 400, Error{Code: "invalid_request", Message: "At most 32 event types can be requested."})
+			return
+		}
+		limit := 100
+		if raw := q.Get("limit"); raw != "" {
+			value, err := strconv.Atoi(raw)
+			if err != nil || value < 1 || value > 500 {
+				WriteError(w, 400, Error{Code: "invalid_request", Message: "limit must be between 1 and 500."})
+				return
+			}
+			limit = value
+		}
+		v, e := store.QueryEvents(r.Context(), storage.EventQuery{From: from, To: to, ResourceID: q.Get("resource_id"), Severity: severity, Types: types, Limit: limit, BeforeID: q.Get("before")})
 		if e != nil {
 			WriteError(w, 500, Error{Code: "storage_error", Message: "Event history is unavailable."})
 			return

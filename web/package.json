@@ -18,6 +18,8 @@
     "test:landing": "playwright test --config=playwright.landing.config.ts"
   },
   "dependencies": {
+    "@floating-ui/dom": "1.8.0",
+    "@lucide/svelte": "1.39.0",
     "svelte": "^5.0.0",
     "uplot": "^1.6.32"
   },

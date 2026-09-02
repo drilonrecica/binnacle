@@ -1,0 +1,232 @@
+/*
+ * Binnacle design tokens.
+ *
+ * Dark is the default theme; `html[data-theme='light']` switches the palette.
+ * Every color used by a component must come from a semantic token below so
+ * both themes stay complete. Status tokens come in four roles:
+ *   -fg     text on a normal surface (>= 4.5:1 in both themes)
+ *   -bg     tinted background for pills and rows
+ *   -border tinted border for pills and callouts
+ *   -solid  saturated fill for dots, bars, and chart strokes
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Neutral scale (cool navy tint) */
+  --n-0: #ffffff;
+  --n-50: #f5f7f9;
+  --n-100: #eef2f5;
+  --n-200: #dde3e9;
+  --n-300: #c3ccd5;
+  --n-400: #9aa7b4;
+  --n-500: #7b8794;
+  --n-600: #52606e;
+  --n-700: #344252;
+  --n-800: #232d38;
+  --n-850: #1a222c;
+  --n-900: #131a22;
+  --n-950: #0c1117;
+
+  /* Surfaces and text */
+  --bg: var(--n-950);
+  --bg-subtle: #0f151c;
+  --surface: var(--n-900);
+  --surface-2: var(--n-850);
+  --surface-3: var(--n-800);
+  --overlay: rgb(5 9 13 / 0.72);
+  --border: var(--n-800);
+  --border-strong: #2f3b48;
+  --text: #e6ebf0;
+  --text-2: var(--n-400);
+  --text-3: #8b98a5;
+  --text-inverse: var(--n-950);
+
+  /* Brand */
+  --accent: #22c3c7;
+  --accent-hover: #35d3d7;
+  --accent-text: #5fdfe2;
+  --accent-bg: rgb(34 195 199 / 0.12);
+  --accent-border: rgb(34 195 199 / 0.35);
+  --accent-contrast: #05292b;
+  --focus: #5fdfe2;
+  --selection: rgb(34 195 199 / 0.3);
+
+  /* Status */
+  --ok-fg: #5fdc9f;
+  --ok-bg: rgb(62 207 142 / 0.12);
+  --ok-border: rgb(62 207 142 / 0.35);
+  --ok-solid: #3ecf8e;
+
+  --warn-fg: #f7c15a;
+  --warn-bg: rgb(245 184 61 / 0.12);
+  --warn-border: rgb(245 184 61 / 0.4);
+  --warn-solid: #f5b83d;
+
+  --critical-fg: #ff8590;
+  --critical-bg: rgb(240 97 109 / 0.14);
+  --critical-border: rgb(240 97 109 / 0.4);
+  --critical-solid: #f0616d;
+
+  --info-fg: #8dbcff;
+  --info-bg: rgb(106 167 255 / 0.12);
+  --info-border: rgb(106 167 255 / 0.35);
+  --info-solid: #6aa7ff;
+
+  --neutral-fg: #a3aeba;
+  --neutral-bg: rgb(154 167 180 / 0.12);
+  --neutral-border: rgb(154 167 180 / 0.3);
+  --neutral-solid: var(--n-500);
+
+  /* Charts */
+  --chart-1: #2dd4d8;
+  --chart-2: #5cd39b;
+  --chart-3: #f4b942;
+  --chart-4: #a78bfa;
+  --chart-5: #60a5fa;
+  --chart-6: #fb7185;
+  --chart-area: 0.18;
+  --chart-grid: rgb(255 255 255 / 0.06);
+  --chart-axis: #8b98a5;
+  --chart-gap: rgb(245 184 61 / 0.1);
+  --chart-marker: rgb(245 184 61 / 0.8);
+  --chart-cursor: rgb(230 235 240 / 0.35);
+
+  /* Typography */
+  --font-sans:
+    'Geist Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    sans-serif;
+  --font-mono:
+    'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-num: 1.5rem;
+  --leading-tight: 1.25;
+  --leading: 1.5;
+  --tracking-tight: -0.015em;
+  --tracking-label: 0.02em;
+
+  /* Spacing (4px grid) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 16px rgb(0 0 0 / 0.35), 0 0 0 1px rgb(255 255 255 / 0.04);
+  --shadow-lg: 0 16px 48px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.05);
+
+  /* Motion */
+  --motion-fast: 120ms;
+  --motion: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+
+  /* Layout */
+  --sidebar-w: 240px;
+  --sidebar-rail-w: 64px;
+  --topbar-h: 56px;
+  --tabbar-h: 60px;
+  --content-max: 1440px;
+  --row-h: 40px;
+  --control-h: 36px;
+  --control-h-sm: 30px;
+  --pad: var(--space-4);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: var(--n-50);
+  --bg-subtle: var(--n-100);
+  --surface: var(--n-0);
+  --surface-2: var(--n-100);
+  --surface-3: var(--n-200);
+  --overlay: rgb(19 26 34 / 0.45);
+  --border: var(--n-200);
+  --border-strong: var(--n-300);
+  --text: var(--n-900);
+  --text-2: #4a5866;
+  --text-3: #5d6b79;
+  --text-inverse: var(--n-0);
+
+  --accent: #0b7f83;
+  --accent-hover: #096e71;
+  --accent-text: #076e72;
+  --accent-bg: rgb(11 127 131 / 0.1);
+  --accent-border: rgb(11 127 131 / 0.35);
+  --accent-contrast: #ffffff;
+  --focus: #0b7f83;
+  --selection: rgb(11 127 131 / 0.2);
+
+  --ok-fg: #157a4a;
+  --ok-bg: rgb(21 122 74 / 0.1);
+  --ok-border: rgb(21 122 74 / 0.3);
+  --ok-solid: #1f9d63;
+
+  --warn-fg: #8a5a00;
+  --warn-bg: rgb(176 118 0 / 0.12);
+  --warn-border: rgb(176 118 0 / 0.35);
+  --warn-solid: #d99a12;
+
+  --critical-fg: #b3261e;
+  --critical-bg: rgb(179 38 30 / 0.1);
+  --critical-border: rgb(179 38 30 / 0.3);
+  --critical-solid: #d9424a;
+
+  --info-fg: #1b5fc0;
+  --info-bg: rgb(27 95 192 / 0.1);
+  --info-border: rgb(27 95 192 / 0.3);
+  --info-solid: #2f6fd6;
+
+  --neutral-fg: #4a5866;
+  --neutral-bg: rgb(82 96 110 / 0.1);
+  --neutral-border: rgb(82 96 110 / 0.3);
+  --neutral-solid: var(--n-500);
+
+  --chart-1: #0b8a8e;
+  --chart-2: #178a55;
+  --chart-3: #b07600;
+  --chart-4: #6d4fd6;
+  --chart-5: #2563eb;
+  --chart-6: #c8314f;
+  --chart-area: 0.14;
+  --chart-grid: rgb(19 26 34 / 0.07);
+  --chart-axis: var(--n-600);
+  --chart-gap: rgb(176 118 0 / 0.1);
+  --chart-marker: rgb(176 118 0 / 0.8);
+  --chart-cursor: rgb(19 26 34 / 0.35);
+
+  --shadow-sm: 0 1px 2px rgb(19 26 34 / 0.08);
+  --shadow-md: 0 4px 16px rgb(19 26 34 / 0.1), 0 0 0 1px rgb(19 26 34 / 0.04);
+  --shadow-lg: 0 16px 48px rgb(19 26 34 / 0.18), 0 0 0 1px rgb(19 26 34 / 0.05);
+}
+
+:root[data-density='compact'] {
+  --row-h: 32px;
+  --control-h: 32px;
+  --control-h-sm: 26px;
+  --pad: var(--space-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion: 0ms;
+  }
+}

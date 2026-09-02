@@ -12,7 +12,7 @@ year; completed delivery records are retained for 90 days.
 
 ## Channels
 
-Up to 32 channels may be configured under Alerts → Channels. HTTPS webhooks
+Up to 32 channels may be configured under Settings → Notifications. HTTPS webhooks
 support an optional bearer token and HMAC-SHA256 signature. SMTP requires
 STARTTLS or implicit TLS, one sender, and 1–20 recipients.
 
