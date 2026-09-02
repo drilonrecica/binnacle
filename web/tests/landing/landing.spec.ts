@@ -37,9 +37,7 @@ test('field manual assets, links, and accessibility are valid', async ({
     'href',
     'https://github.com/drilonrecica/binnacle/blob/master/docs/operations/install.md',
   );
-  await expect(
-    page.locator('img[src="assets/watch-console.png"]'),
-  ).toBeVisible();
+  await expect(page.locator('img[src="assets/overview.png"]')).toBeVisible();
   await expect(
     page.getByText('No external telemetry', { exact: true }),
   ).toBeVisible();
@@ -65,14 +63,14 @@ test('field manual assets, links, and accessibility are valid', async ({
   expect(results.violations).toEqual([]);
 });
 
-test('landing Watch screenshot matches the tested app baseline', async () => {
+test('landing Overview screenshot matches the tested app baseline', async () => {
   const digest = async (path: string) =>
     createHash('sha256')
       .update(await readFile(path))
       .digest('hex');
-  expect(await digest('../landing/assets/watch-console.png')).toBe(
+  expect(await digest('../landing/assets/overview.png')).toBe(
     await digest(
-      'tests/e2e/watch-visual.spec.ts-snapshots/watch-degraded-chromium-linux.png',
+      'tests/e2e/overview-visual.spec.ts-snapshots/overview-degraded-chromium-linux.png',
     ),
   );
 });

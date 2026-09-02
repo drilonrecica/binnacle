@@ -7,7 +7,21 @@ export interface LiveSnapshot {
   bootIdentity: string;
   host: {
     cpuPct?: number | null;
+    cpuUserPct?: number | null;
+    cpuSystemPct?: number | null;
+    cpuIOWaitPct?: number | null;
+    cpuStealPct?: number | null;
     memoryUsedBytes?: number | null;
+    memoryAvailableBytes?: number | null;
+    swapUsedBytes?: number | null;
+    swapTotalBytes?: number | null;
+    swapPct?: number | null;
+    load5?: number | null;
+    load15?: number | null;
+    diskReadBps?: number | null;
+    diskWriteBps?: number | null;
+    diskReadIops?: number | null;
+    diskWriteIops?: number | null;
     memoryTotalBytes?: number | null;
     memoryPct?: number | null;
     diskUsedBytes?: number | null;
@@ -29,24 +43,54 @@ export interface LiveSnapshot {
     project?: string;
     environment?: string;
     infrastructure?: boolean;
+    rxBps?: number | null;
+    txBps?: number | null;
+    blockReadBps?: number | null;
+    blockWriteBps?: number | null;
+    signalStatus?: string;
     components?: Array<{
       id: string;
       name: string;
       status: string;
       runtimeState?: string;
       healthStatus?: string;
+      cpuHostPct?: number | null;
+      memoryBytes?: number | null;
+      rxBps?: number | null;
+      txBps?: number | null;
+      blockReadBps?: number | null;
+      blockWriteBps?: number | null;
+      pids?: number | null;
     }>;
   }>;
   collectors: Record<
     string,
     { state: CollectorState; reason?: string; freshAt?: string }
   >;
+  filesystems?: FilesystemObservation[];
+}
+
+export interface FilesystemObservation {
+  at?: string;
+  mountKey: string;
+  mountPoint: string;
+  fsType: string;
+  totalBytes?: number | null;
+  usedBytes?: number | null;
+  availableBytes?: number | null;
+  usedPct?: number | null;
+  inodesTotal?: number | null;
+  inodesUsed?: number | null;
+  inodesUsedPct?: number | null;
 }
 export interface LiveEvent {
   id: number;
+  at?: string;
   type: string;
   message: string;
+  severity?: string;
   resourceId?: string;
+  containerInstanceId?: string;
 }
 export type ConnectionState =
   'connecting' | 'connected' | 'disconnected' | 'unauthorized';

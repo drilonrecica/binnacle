@@ -1,247 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-
-const session = {
-  user: { id: 'admin', username: 'admin' },
-  expiresAt: '2026-07-11T13:00:00Z',
-  absoluteExpiresAt: '2026-07-11T14:00:00Z',
-};
-
-const snapshot = {
-  seq: 1,
-  ts: '2026-07-11T12:00:00Z',
-  bootIdentity: 'boot',
-  host: {
-    cpuPct: 10,
-    memoryUsedBytes: 1024,
-    memoryTotalBytes: 2048,
-    diskUsedBytes: 100,
-    diskTotalBytes: 200,
-    load1: 0.1,
-    networkRxBps: 2,
-    networkTxBps: 3,
-  },
-  resources: [
-    {
-      id: 'res1',
-      name: 'web-app',
-      status: 'healthy',
-      cpuHostPct: 5,
-      memoryBytes: 512,
-      category: 'applications',
-      components: [{ id: 'c1', name: 'web-app-1', status: 'healthy' }],
-    },
-    {
-      id: 'infra1',
-      name: 'proxy',
-      status: 'healthy',
-      cpuHostPct: 1,
-      memoryBytes: 128,
-      category: 'infrastructure',
-      infrastructure: true,
-    },
-  ],
-  collectors: { host: { state: 'healthy' }, docker: { state: 'healthy' } },
-};
-
-const liveBody = `event: snapshot\nid: 1\ndata: ${JSON.stringify(snapshot)}\n\n`;
-
-async function mockSetupAvailable(page: Page, available: boolean) {
-  await page.route('**/api/v1/setup', (route) =>
-    route.fulfill({ json: { available } }),
-  );
-}
-
-async function mockAuthSession(page: Page, status: 'authenticated' | 'guest') {
-  await page.route('**/api/v1/auth/session', (route) => {
-    if (status === 'guest') return route.fulfill({ status: 401 });
-    return route.fulfill({ json: session });
-  });
-}
-
-async function mockLive(page: Page) {
-  await page.route('**/api/v1/live', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'text/event-stream',
-      body: liveBody,
-    }),
-  );
-}
-
-async function mockOnboarding(page: Page, completed: boolean) {
-  await page.route('**/api/v1/onboarding', (route) =>
-    route.fulfill({
-      json: {
-        checklistDismissed: true,
-        completedAt: completed ? '2026-07-11T11:00:00Z' : undefined,
-      },
-    }),
-  );
-}
-
-async function mockHistoryApis(page: Page) {
-  await page.route('**/api/v1/metrics?*', (route) =>
-    route.fulfill({
-      json: {
-        scope: 'host',
-        from: '2026-07-11T11:00:00Z',
-        to: '2026-07-11T12:00:00Z',
-        resolution: '10s',
-        series: [
-          {
-            metric: 'cpu',
-            unit: 'percent',
-            points: [
-              {
-                at: '2026-07-11T11:00:00Z',
-                min: 1,
-                avg: 2,
-                max: 3,
-                count: 1,
-              },
-            ],
-          },
-        ],
-        gaps: [],
-      },
-    }),
-  );
-  await page.route('**/api/v1/events?*', (route) =>
-    route.fulfill({ json: [] }),
-  );
-}
-
-async function mockSettings(page: Page) {
-  const values: Record<
-    string,
-    { value: string; source: string; applyMode: string }
-  > = {
-    'collection.host_interval': {
-      value: '10s',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'collection.container_interval': {
-      value: '10s',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'persistence.raw_interval': {
-      value: '10s',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'retention.preset': {
-      value: 'balanced',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'retention.raw': { value: '24h', source: 'Default', applyMode: 'live' },
-    'retention.one_minute': {
-      value: '7d',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'retention.fifteen_minute': {
-      value: '30d',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'retention.one_hour': {
-      value: '365d',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'database.target_budget_bytes': {
-      value: '1073741824',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'sessions.idle_timeout': {
-      value: '15m',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'sessions.absolute_lifetime': {
-      value: '24h',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'http.listen_address': {
-      value: ':8080',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-    'docker.socket_path': {
-      value: '/var/run/docker.sock',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-    'paths.host_proc': {
-      value: '/host/proc',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-    'paths.host_sys': {
-      value: '/host/sys',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-    'paths.data_dir': {
-      value: '/var/lib/binnacle',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-  };
-  await page.route('**/api/v1/settings', (route) =>
-    route.fulfill({
-      json: {
-        revision: 1,
-        values,
-        features: { advancedAuth: false, portability: false },
-      },
-    }),
-  );
-  const preferences = {
-    schemaVersion: 1,
-    theme: 'dark',
-    density: 'comfortable',
-    pinnedResources: [],
-    landingPage: 'watch',
-    chartRange: '24h',
-    updatedAt: '2026-07-11T12:00:00Z',
-  };
-  await page.route('**/api/v1/preferences', (route) =>
-    route.fulfill({ json: { exists: true, preferences } }),
-  );
-  await page.route('**/api/v1/api-tokens', (route) =>
-    route.fulfill({ json: { tokens: [], scopes: ['server:read'] } }),
-  );
-  await page.route('**/api/v1/resources', (route) =>
-    route.fulfill({ json: snapshot.resources }),
-  );
-}
-
-async function mockMonitorHealth(page: Page) {
-  await page.route('**/api/v1/monitor-health', (route) =>
-    route.fulfill({
-      json: {
-        at: '2026-07-11T12:00:00Z',
-        metrics: [
-          {
-            id: 'rss',
-            label: 'Memory',
-            value: 42_000_000,
-            unit: 'bytes',
-            status: 'normal',
-            help: 'RSS',
-          },
-        ],
-      },
-    }),
-  );
-}
+import { mockApp } from './fixtures';
 
 async function scan(page: Page) {
   const results = await new AxeBuilder({ page })
@@ -251,211 +10,206 @@ async function scan(page: Page) {
 }
 
 test('login page has no detectable a11y violations', async ({ page }) => {
-  await mockAuthSession(page, 'guest');
-  await mockSetupAvailable(page, false);
-  await page.route('**/api/v1/auth/methods', (route) =>
-    route.fulfill({
-      json: {
-        mode: 'local',
-        local: true,
-        proxy: false,
-        proxyAvailable: false,
-        mfaAvailable: false,
-      },
-    }),
-  );
+  await mockApp(page, { authenticated: false });
   await page.goto('/login');
-  await expect(page.getByLabel('Authentication or recovery code')).toHaveCount(
-    0,
-  );
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  await expect(page.getByLabel('Authentication code')).toHaveCount(0);
   await scan(page);
 });
 
 test('setup page has no detectable a11y violations', async ({ page }) => {
-  await mockAuthSession(page, 'guest');
+  await mockApp(page, { authenticated: false, setupAvailable: true });
   await page.goto('/setup');
+  await expect(
+    page.getByRole('heading', { name: 'Set up Binnacle' }),
+  ).toBeVisible();
   await scan(page);
 });
 
 test('onboarding page has no detectable a11y violations', async ({ page }) => {
-  await mockAuthSession(page, 'authenticated');
-  await mockOnboarding(page, false);
-  await mockLive(page);
+  await mockApp(page, { onboarded: false });
   await page.goto('/onboarding');
   await expect(
     page.getByRole('navigation', { name: 'Primary navigation' }),
   ).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Before you start' }),
+  ).toBeVisible();
   await scan(page);
 });
 
-test('watch page has no detectable a11y violations', async ({ page }) => {
-  await mockAuthSession(page, 'authenticated');
-  await mockOnboarding(page, true);
-  await mockLive(page);
-  await page.goto('/watch');
+test('overview page has no detectable a11y violations', async ({ page }) => {
+  await mockApp(page);
+  await page.goto('/overview');
+  await expect(page.getByText('api.production')).toBeVisible();
   await scan(page);
 });
 
-test('server page has no detectable a11y violations', async ({ page }) => {
-  await mockAuthSession(page, 'authenticated');
-  await mockOnboarding(page, true);
-  await mockLive(page);
-  await mockHistoryApis(page);
-  await page.goto('/server');
+test('host page has no detectable a11y violations', async ({ page }) => {
+  await mockApp(page);
+  await page.goto('/host');
+  await expect(
+    page.getByRole('heading', { name: 'CPU' }).first(),
+  ).toBeVisible();
+  await scan(page);
+  await page.getByRole('tab', { name: /Filesystems/ }).click();
+  await scan(page);
+  await page.getByRole('tab', { name: 'Processes' }).click();
   await scan(page);
 });
 
-test('resources page has no detectable a11y violations', async ({ page }) => {
-  await mockAuthSession(page, 'authenticated');
-  await mockOnboarding(page, true);
-  await mockLive(page);
-  await page.goto('/resources');
-  await scan(page);
-});
-
-test('resource detail page has no detectable a11y violations', async ({
+test('resources page has no detectable a11y violations', async ({
   page,
-}) => {
-  await mockAuthSession(page, 'authenticated');
-  await mockOnboarding(page, true);
-  await mockLive(page);
-  await mockHistoryApis(page);
+}, testInfo) => {
+  await mockApp(page);
+  await page.goto('/resources');
+  await expect(
+    page.getByRole(
+      testInfo.project.name.includes('mobile') ? 'list' : 'table',
+      {
+        name: 'Resources',
+      },
+    ),
+  ).toBeVisible();
+  await scan(page);
+});
+
+test('resource detail has no detectable a11y violations', async ({ page }) => {
+  await mockApp(page);
   await page.goto('/resources/res1');
+  await expect(
+    page.getByRole('heading', { name: 'api.production', level: 1 }),
+  ).toBeVisible();
+  await scan(page);
+  await page.getByRole('tab', { name: /Containers/ }).click();
+  await scan(page);
+  await page.getByRole('tab', { name: 'Alerts' }).click();
   await scan(page);
 });
 
-test('events page has no detectable a11y violations', async ({ page }) => {
-  await mockAuthSession(page, 'authenticated');
-  await mockOnboarding(page, true);
-  await mockLive(page);
-  await page.goto('/events');
+test('activity page has no detectable a11y violations', async ({ page }) => {
+  await mockApp(page);
+  await page.goto('/activity');
+  await expect(
+    page.getByRole('heading', { name: 'Activity', level: 1 }),
+  ).toBeVisible();
   await scan(page);
 });
 
-test('incidents page has no detectable a11y violations', async ({ page }) => {
-  await mockAuthSession(page, 'authenticated');
-  await mockOnboarding(page, true);
-  await mockLive(page);
-  for (const path of [
-    'incidents',
-    'alerts?*',
-    'alert-rules',
-    'checks',
-    'silences',
-    'notification-channels',
-    'notification-deliveries',
-  ]) {
-    await page.route(`**/api/v1/${path}`, (route) =>
-      route.fulfill({ json: [] }),
-    );
-  }
-  await page.goto('/alerts');
+test('logs page has no detectable a11y violations', async ({ page }) => {
+  await mockApp(page);
+  await page.goto('/logs?resource=res1');
+  await expect(
+    page.getByRole('heading', { name: 'Logs', level: 1 }),
+  ).toBeVisible();
   await scan(page);
 });
 
-test('incident detail has no detectable a11y violations', async ({ page }) => {
-  await mockAuthSession(page, 'authenticated');
-  await mockOnboarding(page, true);
-  await mockLive(page);
-  await page.route('**/api/v1/incidents', (route) =>
+test('alerts tabs have no detectable a11y violations', async ({ page }) => {
+  await mockApp(page);
+  await page.route('**/api/v1/alert-rules', (route) =>
     route.fulfill({
       json: [
         {
-          id: 'inc-1',
-          status: 'open',
-          severity: 'critical',
-          title: 'resource incident on api',
-          targetType: 'resource',
-          targetId: 'api',
-          alertCount: 1,
-          firingAlertCount: 1,
-          openedAt: '2026-07-11T12:00:00Z',
+          id: 'builtin-host-cpu-warning',
+          family: 'host_cpu_warning',
+          name: 'Host CPU warning',
+          builtIn: true,
+          enabled: true,
+          severity: 'warning',
+          scopeType: 'global',
+          threshold: 90,
+          recoveryThreshold: 80,
+          triggerSeconds: 300,
+          recoverySeconds: 120,
+          suppressDuringDeployment: false,
         },
       ],
     }),
   );
+  await page.goto('/alerts');
+  await expect(
+    page.getByRole('heading', { name: 'Alerts', level: 1 }),
+  ).toBeVisible();
+  await scan(page);
+  for (const tab of ['Firing', 'Rules', 'Checks', 'Silences']) {
+    await page.getByRole('tab', { name: new RegExp(tab) }).click();
+    await scan(page);
+  }
+});
+
+test('incident detail has no detectable a11y violations', async ({ page }) => {
+  await mockApp(page);
   await page.route('**/api/v1/incidents/inc-1', (route) =>
     route.fulfill({
       json: {
         id: 'inc-1',
         status: 'open',
         severity: 'critical',
-        title: 'resource incident on api',
+        title: 'resource incident on res1',
         targetType: 'resource',
-        targetId: 'api',
+        targetId: 'res1',
         alertCount: 1,
         firingAlertCount: 1,
         openedAt: '2026-07-11T12:00:00Z',
         alerts: [
           {
             id: 'alert-1',
-            family: 'resource_health',
+            family: 'required_check_failure',
             severity: 'critical',
             status: 'firing',
             message: 'API is unhealthy',
             startedAt: '2026-07-11T12:00:00Z',
+            targetType: 'resource',
+            targetId: 'res1',
           },
         ],
         deliveries: [],
       },
     }),
   );
-  for (const path of [
-    'alerts?*',
-    'alert-rules',
-    'checks',
-    'silences',
-    'notification-channels',
-    'notification-deliveries',
-  ]) {
-    await page.route(`**/api/v1/${path}`, (route) =>
-      route.fulfill({ json: [] }),
-    );
-  }
-  await page.goto('/alerts');
-  await page.getByRole('button', { name: 'View details' }).click();
+  await page.goto('/alerts/incidents/inc-1');
+  await expect(page.getByText('API is unhealthy')).toBeVisible();
   await scan(page);
 });
 
-test('settings page has no detectable a11y violations', async ({ page }) => {
-  await mockAuthSession(page, 'authenticated');
-  await mockOnboarding(page, true);
-  await mockLive(page);
-  await mockSettings(page);
-  await page.route('**/api/v1/auth/methods', (route) =>
-    route.fulfill({
-      json: {
-        mode: 'local',
-        local: true,
-        proxy: false,
-        proxyAvailable: false,
-        mfaAvailable: false,
-      },
-    }),
-  );
-  await page.goto('/settings');
-  await expect(page.getByRole('heading', { name: 'Local MFA' })).toHaveCount(0);
-  await expect(
-    page.getByRole('heading', { name: 'Personal API tokens' }),
-  ).toHaveCount(0);
-  await scan(page);
-});
-
-test('monitor health page has no detectable a11y violations', async ({
+test('settings sections have no detectable a11y violations', async ({
   page,
 }) => {
-  await mockAuthSession(page, 'authenticated');
-  await mockOnboarding(page, true);
-  await mockLive(page);
-  await mockMonitorHealth(page);
-  await page.goto('/settings/monitor-health');
-  await scan(page);
+  await mockApp(page);
+  for (const section of [
+    'general',
+    'data',
+    'access',
+    'notifications',
+    'appearance',
+    'integrations',
+    'system',
+  ]) {
+    await page.goto(`/settings/${section}`);
+    await expect(
+      page.getByRole('heading', { name: 'Settings', level: 1 }),
+    ).toBeVisible();
+    await scan(page);
+  }
+  await expect(page.getByRole('button', { name: 'New token' })).toHaveCount(0);
 });
 
-test('diagnostics page has no detectable a11y violations', async ({ page }) => {
-  await mockAuthSession(page, 'authenticated');
-  await mockOnboarding(page, true);
-  await mockLive(page);
-  await page.goto('/settings/diagnostics');
+test('command palette and dialogs have no detectable a11y violations', async ({
+  page,
+}) => {
+  await mockApp(page);
+  await page.goto('/overview');
+  await page.keyboard.press('Control+k');
+  await expect(
+    page.getByRole('dialog', { name: 'Command palette' }),
+  ).toBeVisible();
+  await scan(page);
+  await page.keyboard.press('Escape');
+  await page.goto('/alerts?tab=checks');
+  await page.getByRole('button', { name: 'New check' }).first().click();
+  await expect(
+    page.getByRole('dialog', { name: 'New health check' }),
+  ).toBeVisible();
   await scan(page);
 });

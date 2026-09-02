@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { preferences, resolveTheme } from './preferences';
+import { normalizeLandingPage, preferences, resolveTheme } from './preferences';
 
 describe('theme resolution', () => {
   it('uses operating-system preference only for system theme', () => {
@@ -17,7 +17,7 @@ describe('preference storage', () => {
       theme: 'dark',
       density: 'comfortable',
       pinnedResources: [],
-      landingPage: 'watch',
+      landingPage: 'overview',
       chartRange: '24h',
     });
   });
@@ -36,7 +36,7 @@ describe('preference storage', () => {
       theme: 'dark',
       density: 'compact',
       pinnedResources: [],
-      landingPage: 'watch',
+      landingPage: 'overview',
       chartRange: '24h',
     });
   });
@@ -54,6 +54,14 @@ describe('preference storage', () => {
       getItem: (key: string) =>
         key === 'binnacle.preferences.v1' ? JSON.stringify(valid) : null,
     } as Storage;
-    expect(preferences(storage)).toEqual(valid);
+    expect(preferences(storage)).toEqual({ ...valid, landingPage: 'activity' });
+  });
+
+  it('migrates retired landing pages to their replacements', () => {
+    expect(normalizeLandingPage('watch')).toBe('overview');
+    expect(normalizeLandingPage('server')).toBe('host');
+    expect(normalizeLandingPage('events')).toBe('activity');
+    expect(normalizeLandingPage('logs')).toBe('logs');
+    expect(normalizeLandingPage('nope')).toBeNull();
   });
 });

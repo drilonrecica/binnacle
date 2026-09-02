@@ -1,22 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { LiveStore } from './lib/live.svelte';
-  import {
-    applyPreferences,
-    loadServerPreferences,
-    preferences,
-  } from './lib/preferences';
-  import { t } from './lib/i18n';
-  import Watch from './lib/Watch.svelte';
-  import Server from './lib/Server.svelte';
-  import Resources from './lib/Resources.svelte';
-  import Events from './lib/Events.svelte';
-  import Logs from './lib/Logs.svelte';
-  import Alerts from './lib/Alerts.svelte';
-  import ResourceDetail from './lib/ResourceDetail.svelte';
-  import Settings from './lib/Settings.svelte';
-  import Login from './lib/Login.svelte';
-  import SessionControls from './lib/SessionControls.svelte';
+  import { liveSeries } from './lib/live-series.svelte';
+  import { fetchMetrics } from './lib/api/metrics';
+  import { prefs } from './lib/preferences.svelte';
+  import { interceptLinks, router } from './lib/router.svelte';
+  import { routeDefinition } from './lib/router';
+  import { pageTitle } from './lib/shell/navigation';
+  import { shell } from './lib/shell/shell-state.svelte';
+  import AppShell from './lib/shell/AppShell.svelte';
   import {
     authMethods,
     bootstrapExternalSession,
@@ -24,77 +16,57 @@
     type SessionInfo,
   } from './lib/auth';
   import { onboardingState, setupAvailable } from './lib/onboarding';
-  import Setup from './lib/Setup.svelte';
-  import Onboarding from './lib/Onboarding.svelte';
-  import Diagnostics from './lib/Diagnostics.svelte';
-  import MonitorHealth from './lib/MonitorHealth.svelte';
-  import ConnectionNotice from './lib/ConnectionNotice.svelte';
+  import Overview from './lib/pages/Overview.svelte';
+  import Host from './lib/pages/Host.svelte';
+  import Resources from './lib/pages/Resources.svelte';
+  import Activity from './lib/pages/Activity.svelte';
+  import Logs from './lib/pages/Logs.svelte';
+  import Alerts from './lib/pages/Alerts.svelte';
+  import Incident from './lib/pages/Incident.svelte';
+  import ResourceDetail from './lib/pages/ResourceDetail.svelte';
+  import Settings from './lib/pages/Settings.svelte';
+  import Login from './lib/pages/Login.svelte';
+  import Setup from './lib/pages/Setup.svelte';
+  import Onboarding from './lib/pages/Onboarding.svelte';
 
   const live = new LiveStore();
-  const navigation = [
-    { route: 'watch', label: 'Watch' },
-    { route: 'resources', label: 'Resources' },
-    { route: 'server', label: 'Server' },
-    { route: 'events', label: 'Events' },
-    { route: 'logs', label: 'Logs' },
-    { route: 'alerts', label: 'Alerts' },
-    { route: 'settings', label: 'Settings' },
-  ] as const;
-  const protectedRoutes = new Set([
-    ...navigation.map((item) => item.route),
-    'onboarding',
-  ]);
-  const publicRoutes = new Set(['login', 'setup']);
 
   let loading = $state(true);
-  let allowed = $state(false);
-  let route = $state('watch');
-  let resourceID = $state('');
-  let inspectID = $state('');
   let session = $state<SessionInfo | null>(null);
 
-  function readLocation() {
-    const parts = location.pathname.split('/').filter(Boolean);
-    route = parts[0] || 'watch';
-    resourceID = parts[1] || '';
-    inspectID =
-      route === 'watch'
-        ? new URLSearchParams(location.search).get('inspect')?.trim() || ''
-        : '';
+  const allowed = $derived(session !== null);
+  const definition = $derived(
+    router.match ? routeDefinition(router.match.name) : null,
+  );
+
+  $effect(() => {
+    if (live.snapshot) {
+      liveSeries.push(live.snapshot);
+      void liveSeries.ensureHostSeeded(
+        (metrics, from, to) => fetchMetrics('host', metrics, from, to),
+        live.snapshot.host.memoryTotalBytes ?? null,
+      );
+    }
+  });
+
+  function startSession(value: SessionInfo) {
+    session = value;
+    live.connect();
+    shell.startIncidentPolling();
   }
 
-  function navigate(path: string, replace = false) {
-    if (replace) history.replaceState({}, '', path);
-    else history.pushState({}, '', path);
-    readLocation();
+  function endSession() {
+    live.close();
+    shell.stopIncidentPolling();
+    session = null;
   }
 
-  function navigateFromLink(event: MouseEvent, path: string) {
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return;
-    event.preventDefault();
-    navigate(path);
-  }
-
-  function inspect(resource: string | null) {
-    navigate(
-      resource ? `/watch?inspect=${encodeURIComponent(resource)}` : '/watch',
-    );
-  }
-
-  readLocation();
   onMount(() => {
     const startedAtRoot = location.pathname === '/';
-    const preference = preferences();
-    applyPreferences(preference);
-    const onPopState = () => readLocation();
-    addEventListener('popstate', onPopState);
+    prefs.bootstrap();
+    router.install();
+    const stopLinks = interceptLinks();
+
     void currentSession()
       .catch(() => null)
       .then(async (value) => {
@@ -111,55 +83,54 @@
         return null;
       })
       .then((value) => {
-        session = value;
-        allowed = value !== null;
         loading = false;
-        if (allowed) {
-          if (
-            !protectedRoutes.has(route as (typeof navigation)[number]['route'])
-          ) {
-            navigate('/watch', true);
+        if (value) {
+          startSession(value);
+          if (!router.match || definition?.public) {
+            router.navigate('/overview', { replace: true });
           }
-          void loadServerPreferences()
+          void prefs
+            .load()
             .then((saved) => {
-              if (startedAtRoot) navigate(`/${saved.landingPage}`, true);
+              if (startedAtRoot)
+                router.navigate(`/${saved.landingPage}`, { replace: true });
             })
             .catch(() => {
               /* The local mirror remains a usable fallback. */
             });
-          void onboardingState().then((onboarding) => {
-            if (!onboarding.completedAt && route !== 'onboarding') {
-              navigate('/onboarding', true);
-            }
-          });
-          live.connect();
-        } else if (!publicRoutes.has(route)) {
+          void onboardingState()
+            .then((onboarding) => {
+              if (!onboarding.completedAt && router.name !== 'onboarding') {
+                router.navigate('/onboarding', { replace: true });
+              }
+            })
+            .catch(() => {
+              /* Onboarding state is advisory; the dashboard still works. */
+            });
+        } else if (!definition?.public) {
           void setupAvailable().then((available) => {
-            navigate(available ? '/setup' : '/login', true);
+            router.navigate(available ? '/setup' : '/login', { replace: true });
           });
         }
       });
+
     return () => {
-      removeEventListener('popstate', onPopState);
-      live.close();
+      stopLinks();
+      endSession();
     };
   });
 
   function authenticated(path: string) {
     void currentSession().then((value) => {
       if (!value) return;
-      session = value;
-      allowed = true;
-      navigate(path, true);
-      live.connect();
+      startSession(value);
+      router.navigate(path, { replace: true });
     });
   }
 
   function signedOut() {
-    live.close();
-    session = null;
-    allowed = false;
-    navigate('/login', true);
+    endSession();
+    router.navigate('/login', { replace: true });
   }
 
   function setupClaimed() {
@@ -167,91 +138,53 @@
   }
 
   function onboardingComplete() {
-    navigate('/watch', true);
+    router.navigate('/overview', { replace: true });
   }
+
+  const title = $derived(pageTitle(router.name));
 </script>
 
-<svelte:head
-  ><title>Binnacle — {route === 'watch' ? 'Watch' : route}</title></svelte:head
->
-<a class="skip" href="#content">{t('shell.skip')}</a>
+<svelte:head><title>Binnacle — {title}</title></svelte:head>
+
+<a class="skip-link" href="#content">Skip to content</a>
 {#if loading}
   <main class="access-state" aria-busy="true">
     <img src="/brand/binnacle-mark-dark.png" alt="" />
-    <p>{t('shell.access')}</p>
+    <p>Checking access…</p>
   </main>
 {:else if !allowed}
   <main id="content" class="public-shell">
-    {#if route === 'setup'}<Setup onclaimed={setupClaimed} />
+    {#if router.name === 'setup'}<Setup onclaimed={setupClaimed} />
     {:else}<Login onauthenticated={authenticated} />{/if}
   </main>
-{:else if route === 'onboarding'}
+{:else if router.name === 'onboarding'}
   <main id="content" class="public-shell onboarding-shell">
     <Onboarding oncomplete={onboardingComplete} />
   </main>
-{:else}
-  <div class="console-shell">
-    <header class="console-header">
-      <a
-        class="app-brand"
-        href="/watch"
-        onclick={(event) => navigateFromLink(event, '/watch')}
-      >
-        <img
-          class="brand-logo-dark"
-          src="/brand/binnacle-mark-dark.png"
-          alt=""
-        />
-        <img class="brand-logo-light" src="/brand/binnacle-mark.png" alt="" />
-        <span>Binnacle</span>
-      </a>
-      <div class="console-state" data-state={live.state}>
-        <span class="state-signal" aria-hidden="true"></span>
-        <strong
-          >{live.state === 'connected'
-            ? 'LIVE'
-            : live.state.toUpperCase()}</strong
-        >
-        {#if live.snapshot}
-          <span class="snapshot-time"
-            >sample <time datetime={live.snapshot.ts}
-              >{new Date(live.snapshot.ts).toLocaleTimeString()}</time
-            ></span
-          >
-        {/if}
-      </div>
-      {#if session}<SessionControls {session} onlogout={signedOut} />{/if}
-    </header>
-
-    <main id="content" class:watch-main={route === 'watch'}>
-      <ConnectionNotice {live} />
-      {#if route === 'watch'}<Watch {live} {inspectID} oninspect={inspect} />
-      {:else if route === 'resources' && resourceID}<ResourceDetail
-          {live}
-          id={resourceID}
-        />
-      {:else if route === 'resources'}<Resources {live} />
-      {:else if route === 'server'}<Server {live} />
-      {:else if route === 'events'}<Events {live} />
-      {:else if route === 'logs'}<Logs />
-      {:else if route === 'alerts'}<Alerts />
-      {:else if route === 'settings' && resourceID === 'monitor-health'}<MonitorHealth
-        />
-      {:else if route === 'settings' && resourceID === 'diagnostics'}<Diagnostics
-        />
-      {:else if route === 'settings'}<Settings />{/if}
-    </main>
-
-    <nav class="command-deck" aria-label="Primary navigation">
-      {#each navigation as item, index (item.route)}
-        <a
-          href={`/${item.route}`}
-          aria-current={route === item.route ? 'page' : undefined}
-          onclick={(event) => navigateFromLink(event, `/${item.route}`)}
-          ><span class="command-number" aria-hidden="true">0{index + 1}</span
-          >{item.label}</a
-        >
-      {/each}
-    </nav>
-  </div>
+{:else if session}
+  <AppShell {session} {live} onlogout={signedOut}>
+    {#if router.name === 'overview'}
+      <Overview {live} />
+    {:else if router.name === 'resource'}
+      <ResourceDetail {live} id={router.params.id} />
+    {:else if router.name === 'resources'}
+      <Resources {live} />
+    {:else if router.name === 'host'}
+      <Host {live} />
+    {:else if router.name === 'activity'}
+      <Activity {live} />
+    {:else if router.name === 'logs'}
+      <Logs {live} />
+    {:else if router.name === 'incident'}
+      <Incident {live} id={router.params.id} />
+    {:else if router.name === 'alerts'}
+      <Alerts {live} />
+    {:else if router.name === 'settings'}
+      <Settings
+        {live}
+        section={router.params.section}
+        onsignedout={signedOut}
+      />
+    {/if}
+  </AppShell>
 {/if}

@@ -1,9 +1,11 @@
-import { authenticatedMutation } from './auth';
+import { api } from './api/client';
 
 export type Theme = 'system' | 'dark' | 'light';
 export type Density = 'comfortable' | 'compact';
 export type LandingPage =
-  'watch' | 'resources' | 'server' | 'events' | 'alerts';
+  'overview' | 'resources' | 'host' | 'alerts' | 'activity' | 'logs';
+/** Values written by releases before the Overview/Host/Activity rename. */
+type LegacyLandingPage = 'watch' | 'server' | 'events';
 export type ChartRange = '1h' | '6h' | '24h' | '7d' | '30d';
 
 export interface UserPreferences {
@@ -16,18 +18,40 @@ export interface UserPreferences {
   updatedAt?: string;
 }
 
+export const landingPages: LandingPage[] = [
+  'overview',
+  'resources',
+  'host',
+  'alerts',
+  'activity',
+  'logs',
+];
+export const chartRanges: ChartRange[] = ['1h', '6h', '24h', '7d', '30d'];
+
 const themeKey = 'binnacle.theme';
 const densityKey = 'binnacle.density';
 const mirrorKey = 'binnacle.preferences.v1';
 
-const defaults: UserPreferences = {
+export const defaultPreferences: UserPreferences = {
   schemaVersion: 1,
   theme: 'dark',
   density: 'comfortable',
   pinnedResources: [],
-  landingPage: 'watch',
+  landingPage: 'overview',
   chartRange: '24h',
 };
+
+const legacyLanding: Record<LegacyLandingPage, LandingPage> = {
+  watch: 'overview',
+  server: 'host',
+  events: 'activity',
+};
+
+export function normalizeLandingPage(value: unknown): LandingPage | null {
+  if (typeof value !== 'string') return null;
+  if ((landingPages as string[]).includes(value)) return value as LandingPage;
+  return legacyLanding[value as LegacyLandingPage] ?? null;
+}
 
 export function resolveTheme(
   theme: Theme,
@@ -39,82 +63,92 @@ export function resolveTheme(
 export function preferences(storage: Storage = localStorage): UserPreferences {
   try {
     const mirror = JSON.parse(storage.getItem(mirrorKey) ?? 'null') as unknown;
-    if (validPreferences(mirror)) return mirror;
+    if (validPreferences(mirror)) return normalizePreferences(mirror);
   } catch {
     // Fall through to the legacy keys for the one-time server migration.
   }
   const theme = storage.getItem(themeKey);
   const density = storage.getItem(densityKey);
   return {
-    ...defaults,
+    ...defaultPreferences,
     theme:
       theme === 'dark' || theme === 'light' || theme === 'system'
         ? theme
-        : defaults.theme,
+        : defaultPreferences.theme,
     density:
       density === 'compact' || density === 'comfortable'
         ? density
-        : defaults.density,
+        : defaultPreferences.density,
   };
 }
 
+/** Applies the theme and density to the document and mirrors locally. */
 export function applyPreferences(
   value: UserPreferences,
   storage: Storage = localStorage,
 ) {
-  storage.setItem(themeKey, value.theme);
-  storage.setItem(densityKey, value.density);
-  storage.setItem(mirrorKey, JSON.stringify(value));
-  document.documentElement.dataset.theme = resolveTheme(value.theme);
-  document.documentElement.dataset.density = value.density;
+  const normalized = normalizePreferences(value);
+  storage.setItem(themeKey, normalized.theme);
+  storage.setItem(densityKey, normalized.density);
+  storage.setItem(mirrorKey, JSON.stringify(normalized));
+  document.documentElement.dataset.theme = resolveTheme(normalized.theme);
+  document.documentElement.dataset.density = normalized.density;
   window.dispatchEvent(
-    new CustomEvent('binnacle:preferences', { detail: value }),
+    new CustomEvent('binnacle:preferences', { detail: normalized }),
   );
+  return normalized;
 }
 
 export async function loadServerPreferences(): Promise<UserPreferences> {
-  const response = await fetch('/api/v1/preferences', {
-    credentials: 'same-origin',
-  });
-  if (!response.ok) throw new Error('Preferences could not be loaded.');
-  const body = (await response.json()) as {
+  const body = await api.get<{
     exists: boolean;
     preferences?: UserPreferences;
-  };
+  }>('/api/v1/preferences', { fallback: 'Preferences could not be loaded.' });
   const value =
-    body.exists && validPreferences(body.preferences)
-      ? body.preferences
+    body.exists &&
+    validPreferences({
+      ...body.preferences,
+      pinnedResources: body.preferences?.pinnedResources ?? [],
+    })
+      ? normalizePreferences(body.preferences as UserPreferences)
       : await saveServerPreferences(preferences());
-  applyPreferences(value);
-  return value;
+  return applyPreferences(value);
 }
 
 export async function saveServerPreferences(
   value: UserPreferences,
 ): Promise<UserPreferences> {
   if (!validPreferences(value)) throw new Error('Preferences are invalid.');
-  const saved = await authenticatedMutation<UserPreferences>(
+  const saved = await api.put<UserPreferences>(
     '/api/v1/preferences',
-    'PUT',
-    value,
+    normalizePreferences(value),
+    { fallback: 'Preferences could not be saved.' },
   );
-  if (!saved || !validPreferences(saved))
+  const normalized = saved
+    ? { ...saved, pinnedResources: saved.pinnedResources ?? [] }
+    : null;
+  if (!normalized || !validPreferences(normalized))
     throw new Error('Preferences could not be saved.');
-  applyPreferences(saved);
-  return saved;
+  return applyPreferences(normalized);
 }
 
-function validPreferences(value: unknown): value is UserPreferences {
+export function normalizePreferences(value: UserPreferences): UserPreferences {
+  return {
+    ...value,
+    pinnedResources: value.pinnedResources ?? [],
+    landingPage: normalizeLandingPage(value.landingPage) ?? 'overview',
+  };
+}
+
+export function validPreferences(value: unknown): value is UserPreferences {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<UserPreferences>;
   return (
     candidate.schemaVersion === 1 &&
     ['system', 'dark', 'light'].includes(candidate.theme ?? '') &&
     ['comfortable', 'compact'].includes(candidate.density ?? '') &&
-    ['watch', 'resources', 'server', 'events', 'alerts'].includes(
-      candidate.landingPage ?? '',
-    ) &&
-    ['1h', '6h', '24h', '7d', '30d'].includes(candidate.chartRange ?? '') &&
+    normalizeLandingPage(candidate.landingPage) !== null &&
+    (chartRanges as string[]).includes(candidate.chartRange ?? '') &&
     Array.isArray(candidate.pinnedResources) &&
     candidate.pinnedResources.length <= 12 &&
     new Set(candidate.pinnedResources).size ===
