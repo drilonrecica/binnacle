@@ -1,308 +1,171 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { mockApp, snapshot } from './fixtures';
 
-const session = {
-  user: { id: 'admin', username: 'admin' },
-  expiresAt: '2026-07-11T13:00:00Z',
-  absoluteExpiresAt: '2026-07-11T14:00:00Z',
-};
+test('renders the application shell with the primary navigation', async ({
+  page,
+}) => {
+  await mockApp(page);
+  await page.goto('/overview');
 
-async function mockAuthSession(page: Page) {
-  await page.route('**/api/v1/auth/session', (route) =>
-    route.fulfill({ json: session }),
-  );
-}
-
-async function mockOnboarding(page: Page) {
-  await page.route('**/api/v1/onboarding', (route) =>
-    route.fulfill({
-      json: {
-        checklistDismissed: true,
-        completedAt: '2026-07-11T11:00:00Z',
-      },
-    }),
-  );
-}
-
-async function mockSettings(page: Page, portability = false) {
-  const values: Record<
-    string,
-    { value: string; source: string; applyMode: string }
-  > = {
-    'collection.host_interval': {
-      value: '10s',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'collection.container_interval': {
-      value: '10s',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'persistence.raw_interval': {
-      value: '10s',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'retention.preset': {
-      value: 'balanced',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'retention.raw': { value: '24h', source: 'Default', applyMode: 'live' },
-    'retention.one_minute': {
-      value: '7d',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'retention.fifteen_minute': {
-      value: '30d',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'retention.one_hour': {
-      value: '365d',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'database.target_budget_bytes': {
-      value: '1073741824',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'sessions.idle_timeout': {
-      value: '15m',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'sessions.absolute_lifetime': {
-      value: '24h',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'http.listen_address': {
-      value: ':8080',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-    'docker.socket_path': {
-      value: '/var/run/docker.sock',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-    'paths.host_proc': {
-      value: '/host/proc',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-    'paths.host_sys': {
-      value: '/host/sys',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-    'paths.data_dir': {
-      value: '/var/lib/binnacle',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-  };
-  await page.route('**/api/v1/settings', (route) =>
-    route.fulfill({
-      json: {
-        revision: 1,
-        values,
-        features: { advancedAuth: false, portability },
-      },
-    }),
-  );
-  await mockPortabilitySettings(page);
-}
-
-async function mockPortabilitySettings(page: Page) {
-  const preferences = {
-    schemaVersion: 1,
-    theme: 'dark',
-    density: 'comfortable',
-    pinnedResources: [],
-    landingPage: 'watch',
-    chartRange: '24h',
-    updatedAt: '2026-07-11T12:00:00Z',
-  };
-  await page.route('**/api/v1/preferences', (route) =>
-    route.fulfill({ json: { exists: true, preferences } }),
-  );
-  await page.route('**/api/v1/api-tokens', (route) =>
-    route.fulfill({
-      json: {
-        tokens: [],
-        scopes: [
-          'server:read',
-          'resources:read',
-          'metrics:read',
-          'events:read',
-          'incidents:read',
-        ],
-      },
-    }),
-  );
-  await page.route('**/api/v1/resources', (route) =>
-    route.fulfill({
-      json: [{ id: 'res1', name: 'web-app', status: 'healthy' }],
-    }),
-  );
-}
-
-test('renders the Binnacle application shell', async ({ page }) => {
-  await mockAuthSession(page);
-  await mockOnboarding(page);
-  await page.route('**/api/v1/session', (route) =>
-    route.fulfill({ status: 204 }),
-  );
-  await page.route('**/api/v1/live', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
-  );
-  await page.goto('/watch');
-
-  await expect(page).toHaveTitle('Binnacle — Watch');
-  await expect(page.getByRole('link', { name: 'Binnacle' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Watch' })).toBeVisible();
-});
-
-test('sorts resources and explains starting health', async ({ page }) => {
-  await mockAuthSession(page);
-  await mockOnboarding(page);
-  await page.route('**/api/v1/session', (route) =>
-    route.fulfill({ status: 204 }),
-  );
-  await page.route('**/api/v1/live', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'text/event-stream',
-      body: `event: snapshot\nid: 1\ndata: {"seq":1,"ts":"2026-07-11T12:00:00Z","bootIdentity":"boot","host":{},"resources":[{"id":"res_beta","name":"Beta","status":"unknown","context":"api.example.com","cpuHostPct":20,"memoryBytes":2048,"lastSeenAt":"2026-07-11T12:00:00Z","components":[{"id":"123456789012","name":"beta-1","status":"unknown","runtimeState":"running","healthStatus":"starting"}]},{"id":"res_alpha","name":"Alpha","status":"healthy","context":"production","cpuHostPct":10,"memoryBytes":1024,"lastSeenAt":"2026-07-11T12:00:00Z","components":[]}],"collectors":{}}\n\n`,
-    }),
-  );
-  await page.goto('/resources');
-
-  const rows = page.locator('tbody tr');
-  await expect(rows.nth(0)).toContainText('Alpha');
-  await expect(rows.nth(1)).toContainText('starting');
-  await page.getByLabel('Sort by').selectOption('cpu');
-  await expect(rows.nth(0)).toContainText('Beta');
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        localStorage.getItem('binnacle.resources.sort.active'),
-      ),
-    )
-    .toContain('"field":"cpu"');
-  await page.getByRole('button', { name: 'Sort ascending' }).click();
-  await expect(rows.nth(0)).toContainText('Alpha');
-
-  await page.getByRole('link', { name: 'Beta', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Beta' })).toContainText(
-    'starting',
-  );
-  await page.getByText('Technical metadata').click();
+  await expect(page).toHaveTitle('Binnacle — Overview');
   await expect(
-    page.getByText(/runtime: running; health: starting/),
+    page.getByRole('heading', { name: 'Overview', level: 1 }),
   ).toBeVisible();
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/resources');
-  await expect(page.getByLabel('Sort by')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Sort/ })).toBeVisible();
+  const nav = page.getByRole('navigation', { name: 'Primary navigation' });
+  for (const label of ['Overview', 'Resources', 'Alerts', 'Activity']) {
+    await expect(nav.getByRole('link', { name: label })).toBeVisible();
+  }
+  await expect(
+    page.getByRole('heading', { name: 'Host headroom' }),
+  ).toBeAttached();
+  await expect(page.getByText('api.production')).toBeVisible();
 });
 
-test('creates a health check from the Alerts console', async ({ page }) => {
-  await mockAuthSession(page);
-  await mockOnboarding(page);
-  await page.route('**/api/v1/live', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
+test('legacy and unknown routes redirect to their replacements', async ({
+  page,
+}) => {
+  await mockApp(page);
+  await page.goto('/watch');
+  await expect(page).toHaveURL(/\/overview$/);
+  await page.goto('/server');
+  await expect(page).toHaveURL(/\/host$/);
+  await page.goto('/events');
+  await expect(page).toHaveURL(/\/activity$/);
+  await page.goto('/watch?inspect=res1');
+  await expect(page).toHaveURL(/\/resources\/res1$/);
+  await page.goto('/not-a-real-view');
+  await expect(page).toHaveURL(/\/overview$/);
+});
+
+test('resources list filters, sorts, and opens detail with containers', async ({
+  page,
+}, testInfo) => {
+  const mobile = testInfo.project.name.includes('mobile');
+  await mockApp(page);
+  await page.goto('/resources');
+
+  const table = page.getByRole(mobile ? 'list' : 'table', {
+    name: 'Resources',
+  });
+  await expect(table).toBeVisible();
+  await expect(page.getByText('binnacle / production')).toBeVisible();
+  await expect(page.getByText('Infrastructure')).toBeVisible();
+
+  if (!mobile) {
+    await page.getByRole('button', { name: 'CPU' }).click();
+    await expect(
+      page.getByRole('columnheader', { name: 'CPU' }),
+    ).toHaveAttribute('aria-sort', 'descending');
+    await expect
+      .poll(() =>
+        page.evaluate(() => localStorage.getItem('binnacle.resources.sort.v2')),
+      )
+      .toContain('"key":"cpu"');
+  }
+
+  await page.getByLabel('Filter resources').fill('worker');
+  await expect(page.getByText('api.production')).toHaveCount(0);
+  await expect(page.getByText('Starting')).toBeVisible();
+
+  await page.getByRole('link', { name: 'worker.production' }).click();
+  await expect(page).toHaveURL(/\/resources\/res_beta$/);
+  await expect(
+    page.getByRole('heading', { name: 'worker.production', level: 1 }),
+  ).toBeVisible();
+  await page.getByRole('tab', { name: /Containers/ }).click();
+  await expect(page.getByRole('table', { name: 'Containers' })).toContainText(
+    'worker-1',
   );
-  await page.route('**/api/v1/alerts?*', (route) =>
-    route.fulfill({ json: [] }),
+  await expect(page.getByRole('table', { name: 'Containers' })).toContainText(
+    /starting/i,
   );
-  await page.route('**/api/v1/alert-rules', (route) =>
-    route.fulfill({ json: [] }),
-  );
-  await page.route('**/api/v1/silences', (route) =>
-    route.fulfill({ json: [] }),
-  );
-  let created = false;
+});
+
+test('creates a health check from the Alerts checks tab', async ({ page }) => {
+  await mockApp(page);
+  let body: Record<string, unknown> | null = null;
   await page.route('**/api/v1/checks', async (route) => {
     if (route.request().method() === 'POST') {
-      created = true;
-      return route.fulfill({ status: 201, json: { id: 'check' } });
+      body = route.request().postDataJSON();
+      return route.fulfill({
+        status: 201,
+        json: { id: 'check', name: 'Public health', interval: 30e9 },
+      });
     }
     return route.fulfill({ json: [] });
   });
-  await page.goto('/alerts');
+  await page.goto('/alerts?tab=checks');
   await expect(
-    page.getByRole('heading', { name: 'Alerts', exact: true }),
+    page.getByRole('heading', { name: 'Alerts', level: 1 }),
   ).toBeVisible();
-  await page.getByRole('tab', { name: 'checks' }).click();
-  await page.getByLabel('Resource ID').fill('res_demo_1');
-  await page.getByLabel('Name').fill('Public health');
-  await page.getByLabel('HTTP/HTTPS URL').fill('https://example.com/health');
-  await page.getByRole('button', { name: 'Create check' }).click();
-  await expect.poll(() => created).toBe(true);
+  await page.getByRole('button', { name: 'New check' }).first().click();
+  const dialog = page.getByRole('dialog', { name: 'New health check' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('combobox', { name: 'Resource' }).fill('api');
+  await dialog.getByRole('option', { name: /api\.production/ }).click();
+  await dialog.getByLabel('Name').fill('Public health');
+  await dialog.getByLabel('URL').fill('https://example.com/health');
+  await dialog.getByRole('button', { name: 'Create check' }).click();
+  await expect.poll(() => body).not.toBeNull();
+  expect(body).toMatchObject({
+    resourceId: 'res1',
+    name: 'Public health',
+    url: 'https://example.com/health',
+    intervalSeconds: 30,
+    required: true,
+  });
 });
 
-test('shows incidents and manages notification delivery workflows', async ({
+test('shows incidents and manages notification channels and deliveries', async ({
   page,
 }) => {
-  await mockAuthSession(page);
-  await mockOnboarding(page);
-  await page.route('**/api/v1/live', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
+  await mockApp(page);
+  const incident = {
+    id: 'inc-1',
+    status: 'open',
+    severity: 'critical',
+    title: 'resource incident on res1',
+    targetType: 'resource',
+    targetId: 'res1',
+    alertCount: 2,
+    firingAlertCount: 1,
+    openedAt: '2026-07-11T12:00:00Z',
+  };
+  await page.route('**/api/v1/incidents?*', (route) =>
+    route.fulfill({ json: [incident] }),
   );
   await page.route('**/api/v1/incidents', (route) =>
-    route.fulfill({
-      json: [
-        {
-          id: 'inc-1',
-          status: 'open',
-          severity: 'critical',
-          title: 'resource incident on api',
-          targetType: 'resource',
-          targetId: 'api',
-          alertCount: 2,
-          firingAlertCount: 1,
-          openedAt: '2026-07-11T12:00:00Z',
-        },
-      ],
-    }),
+    route.fulfill({ json: [incident] }),
   );
   await page.route('**/api/v1/incidents/inc-1', (route) =>
     route.fulfill({
       json: {
-        id: 'inc-1',
-        status: 'open',
-        severity: 'critical',
-        title: 'resource incident on api',
-        targetType: 'resource',
-        targetId: 'api',
-        alertCount: 2,
-        firingAlertCount: 1,
-        openedAt: '2026-07-11T12:00:00Z',
+        ...incident,
         alerts: [
           {
             id: 'alert-1',
-            family: 'resource_health',
+            family: 'required_check_failure',
             severity: 'critical',
             status: 'firing',
             message: 'API is unhealthy',
             startedAt: '2026-07-11T12:00:00Z',
+            targetType: 'resource',
+            targetId: 'res1',
           },
         ],
-        deliveries: [{ id: 'delivery-1', status: 'succeeded' }],
+        deliveries: [
+          {
+            id: 'delivery-1',
+            channelId: 'channel-existing',
+            eventType: 'opened',
+            status: 'succeeded',
+            attemptCount: 1,
+            updatedAt: '2026-07-11T12:01:00Z',
+          },
+        ],
       },
     }),
   );
-  for (const path of ['alerts?*', 'alert-rules', 'checks', 'silences']) {
-    await page.route(`**/api/v1/${path}`, (route) =>
-      route.fulfill({ json: [] }),
-    );
-  }
   let channelCreated = false;
   let smtpCreated = false;
   let channelTested = false;
@@ -310,30 +173,24 @@ test('shows incidents and manages notification delivery workflows', async ({
     '**/api/v1/notification-channels/channel-existing/test',
     (route) => {
       channelTested = true;
-      return route.fulfill({
-        status: 202,
-        json: { deliveryId: 'test-delivery' },
-      });
+      return route.fulfill({ status: 202, json: { deliveryId: 'test' } });
     },
   );
   await page.route('**/api/v1/notification-channels', async (route) => {
     if (route.request().method() === 'POST') {
-      const body = route.request().postDataJSON() as {
-        kind?: string;
-        url?: string;
-        host?: string;
-        sender?: string;
-        recipients?: string[];
-        tlsMode?: string;
-      };
-      channelCreated = body.url === 'https://hooks.example.com/incidents';
-      smtpCreated =
-        body.kind === 'smtp' &&
-        body.host === 'smtp.example.com:465' &&
-        body.sender === 'binnacle@example.com' &&
-        body.recipients?.[0] === 'ops@example.com' &&
-        body.tlsMode === 'implicit';
-      return route.fulfill({ status: 201, json: { id: 'channel-1' } });
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      if (body.kind === 'webhook')
+        channelCreated = body.url === 'https://hooks.example.com/incidents';
+      if (body.kind === 'smtp')
+        smtpCreated =
+          body.host === 'smtp.example.com:465' &&
+          body.sender === 'binnacle@example.com' &&
+          (body.recipients as string[])?.[0] === 'ops@example.com' &&
+          body.tlsMode === 'implicit';
+      return route.fulfill({
+        status: 201,
+        json: { id: 'channel-1', name: body.name, kind: body.kind, config: {} },
+      });
     }
     return route.fulfill({
       json: [
@@ -343,118 +200,88 @@ test('shows incidents and manages notification delivery workflows', async ({
           kind: 'webhook',
           enabled: true,
           minimumSeverity: 'warning',
+          notifyResolved: true,
+          config: { url: 'https://hooks.example.com/existing' },
           secretConfigured: true,
         },
       ],
     });
   });
   let retried = false;
-  await page.route('**/api/v1/notification-deliveries', (route) =>
+  await page.route('**/api/v1/notification-deliveries?*', (route) =>
     route.fulfill({
       json: [
         {
-          id: 'delivery-1',
-          channelId: 'channel-1',
+          id: 'delivery-2',
+          channelId: 'channel-existing',
           eventType: 'opened',
           status: 'permanent_failure',
           attemptCount: 7,
           failureCode: 'http_400',
+          updatedAt: '2026-07-11T12:00:00Z',
         },
       ],
     }),
   );
   await page.route(
-    '**/api/v1/notification-deliveries/delivery-1/retry',
+    '**/api/v1/notification-deliveries/delivery-2/retry',
     (route) => {
       retried = true;
-      return route.fulfill({ status: 202, json: { deliveryId: 'delivery-1' } });
+      return route.fulfill({ status: 202, json: { deliveryId: 'delivery-2' } });
     },
   );
 
   await page.goto('/alerts');
-  await expect(page.getByRole('tab', { name: 'incidents' })).toHaveAttribute(
+  await expect(page.getByRole('tab', { name: /Incidents/ })).toHaveAttribute(
     'aria-selected',
     'true',
   );
-  await expect(page.getByText('resource incident on api')).toBeVisible();
-  await page.getByRole('button', { name: 'View details' }).click();
+  await page.getByRole('link', { name: 'Incident on api.production' }).click();
+  await expect(page).toHaveURL(/\/alerts\/incidents\/inc-1$/);
   await expect(page.getByText('API is unhealthy')).toBeVisible();
-  await expect(page.getByText('1 related notification delivery')).toBeVisible();
-  await page.getByRole('button', { name: 'Close details' }).click();
+  await expect(page.getByText('Existing webhook')).toBeVisible();
 
-  await page.getByRole('tab', { name: 'channels' }).click();
-  await page.getByRole('button', { name: 'Test', exact: true }).click();
+  await page.goto('/settings/notifications');
+  await page.getByRole('button', { name: 'Channel actions' }).click();
+  await page.getByRole('menuitem', { name: 'Send test' }).click();
   await expect.poll(() => channelTested).toBe(true);
-  await page.getByLabel('Name').fill('Operations webhook');
-  await page
-    .getByLabel('HTTPS URL')
-    .fill('https://hooks.example.com/incidents');
-  await page.getByRole('button', { name: 'Create channel' }).click();
-  await expect.poll(() => channelCreated).toBe(true);
-  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('');
 
-  await page.getByLabel('Type').selectOption('smtp');
-  await page.getByLabel('Name', { exact: true }).fill('Operations email');
-  await page.getByLabel('SMTP host:port').fill('smtp.example.com:465');
-  await page.getByLabel('Sender').fill('binnacle@example.com');
-  await page.getByLabel('Recipients (comma-separated)').fill('ops@example.com');
-  await page.getByLabel('TLS').selectOption('implicit');
-  await page.getByRole('button', { name: 'Create channel' }).click();
+  await page.getByRole('button', { name: 'New channel' }).click();
+  let dialog = page.getByRole('dialog', { name: 'New notification channel' });
+  await dialog.getByLabel('Name').fill('Operations webhook');
+  await dialog
+    .getByLabel('Webhook URL')
+    .fill('https://hooks.example.com/incidents');
+  await dialog.getByRole('button', { name: 'Create channel' }).click();
+  await expect.poll(() => channelCreated).toBe(true);
+
+  await page.getByRole('button', { name: 'New channel' }).click();
+  dialog = page.getByRole('dialog', { name: 'New notification channel' });
+  await dialog.getByLabel('Name').fill('Operations email');
+  await dialog.getByLabel('Type').selectOption('smtp');
+  await dialog.getByLabel('SMTP host and port').fill('smtp.example.com:465');
+  await dialog.getByLabel('TLS').selectOption('implicit');
+  await dialog.getByLabel('Sender').fill('binnacle@example.com');
+  await dialog.getByLabel('Recipients').fill('ops@example.com');
+  await dialog.getByRole('button', { name: 'Create channel' }).click();
   await expect.poll(() => smtpCreated).toBe(true);
 
-  await page.getByRole('tab', { name: 'deliveries' }).click();
-  await expect(page.getByText('http_400')).toBeVisible();
+  await expect(page.getByText('Failed')).toBeVisible();
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect.poll(() => retried).toBe(true);
 });
 
-test('removed and unknown routes fall back to Watch', async ({ page }) => {
-  await mockAuthSession(page);
-  await mockOnboarding(page);
-  await page.route('**/api/v1/live', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
-  );
-  await page.goto('/overview');
-  await expect(page).toHaveURL(/\/watch$/);
-  await expect(page.getByRole('link', { name: 'Checks' })).toHaveCount(0);
-  await page.goto('/not-a-real-view');
-  await expect(page).toHaveURL(/\/watch$/);
-});
-
-test('switches every historical range without hiding gaps', async ({
-  page,
-}) => {
-  await mockAuthSession(page);
-  await mockOnboarding(page);
-  await page.route('**/api/v1/live', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'text/event-stream',
-      body: `event: snapshot\nid: 1\ndata: {"seq":1,"ts":"2026-07-11T12:00:00Z","bootIdentity":"boot","host":{"cpuPct":10,"memoryUsedBytes":1024,"load1":0.1,"networkRxBps":2,"networkTxBps":3},"resources":[],"collectors":{}}\n\n`,
-    }),
-  );
-  await page.route('**/api/v1/events?*', (route) =>
-    route.fulfill({
-      json: [
-        {
-          ts: '2026-07-11T11:30:00Z',
-          type: 'deployment',
-          summary: 'Deployment',
-        },
-      ],
-    }),
-  );
+test('host charts switch ranges and surface data gaps', async ({ page }) => {
+  await mockApp(page);
+  const requests: string[] = [];
   await page.route('**/api/v1/metrics?*', (route) => {
-    const query = new URL(route.request().url()).searchParams;
-    const span =
-      new Date(query.get('to')!).getTime() -
-      new Date(query.get('from')!).getTime();
+    requests.push(route.request().url());
     return route.fulfill({
       json: {
         scope: 'host',
         from: '2026-07-11T11:00:00Z',
         to: '2026-07-11T12:00:00Z',
-        resolution: span > 10 * 24 * 60 * 60 * 1000 ? '1h' : '10s',
+        resolution: '1m',
         series: [
           {
             metric: 'cpu',
@@ -466,200 +293,186 @@ test('switches every historical range without hiding gaps', async ({
         ],
         gaps: [
           {
-            from: '2026-07-11T11:10:00Z',
-            to: '2026-07-11T11:20:00Z',
+            from: '2026-07-11T11:05:00Z',
+            to: '2026-07-11T11:25:00Z',
             reason: 'collector_unavailable',
           },
         ],
       },
     });
   });
-  await page.goto('/');
-  await page.getByRole('link', { name: 'Server', exact: true }).click();
+  await page.goto('/host');
   await expect(
-    page.getByRole('heading', { name: 'Historical telemetry' }),
+    page.getByRole('heading', { name: 'Host', level: 1 }),
   ).toBeVisible();
-  for (const range of ['1h', '6h', '24h', '7d', '30d'])
-    await page.getByRole('button', { name: range, exact: true }).click();
-  await expect(page.getByText('Resolution: 1h.')).toBeVisible();
-  await expect(page.getByText('1 explicit data gap.')).toBeVisible();
-  await expect(page.getByText('1 event annotation')).toBeVisible();
-  await page.getByText('1 data gap', { exact: true }).click();
-  await expect(page.getByText(/collector unavailable/)).toBeVisible();
-  const inspector = page.getByRole('button', {
-    name: 'CPU (host-normalized %) chart inspection',
-  });
-  await inspector.focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(inspector).toContainText('Selected point');
+  await expect(page.getByText('1 gap')).toBeVisible();
+  const before = requests.length;
+  await page.getByRole('button', { name: '6h', exact: true }).click();
+  await expect.poll(() => requests.length).toBeGreaterThan(before);
+  await expect(page).toHaveURL(/range=6h/);
+
   await page.getByRole('button', { name: 'Custom' }).click();
-  await page
-    .getByRole('textbox', { name: 'From', exact: true })
-    .fill('2026-07-11T12:00');
-  await page
-    .getByRole('textbox', { name: 'To', exact: true })
-    .fill('2026-07-10T12:00');
-  await page.getByRole('button', { name: 'Apply range' }).click();
-  await expect(page.getByRole('alert')).toContainText(
-    'end time after the start',
-  );
-  await page.setViewportSize({ width: 390, height: 844 });
-  const box = await page
-    .getByRole('heading', { name: 'Historical telemetry' })
-    .boundingBox();
-  expect(box?.width).toBeLessThanOrEqual(390);
+  const popover = page.getByRole('dialog', { name: 'Custom time range' });
+  await popover.getByLabel('From').fill('2026-07-11T10:00');
+  await popover.getByLabel('To').fill('2026-07-11T12:00');
+  await popover.getByRole('button', { name: 'Apply range' }).click();
+  await expect(page).toHaveURL(/range=custom/);
 });
 
-test('requires typed confirmation for history deletion', async ({ page }) => {
-  await mockAuthSession(page);
-  await mockOnboarding(page);
-  await mockSettings(page);
-  await page.route('**/api/v1/live', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
-  );
+test('deletes history with a typed confirmation and shows job progress', async ({
+  page,
+}) => {
+  await mockApp(page);
   await page.route('**/api/v1/history/deletion-previews', (route) =>
     route.fulfill({
       json: {
-        token: 'preview',
-        confirmation: 'RESET ALL HISTORY',
-        totalRows: 42,
-        expiresAt: '2026-07-11T13:00:00Z',
+        token: 'preview-token',
+        confirmation: 'DELETE ALL HISTORY',
+        totalRows: 9000,
+        expiresAt: '2026-07-11T12:10:00Z',
       },
     }),
   );
-  await page.route('**/api/v1/history/deletion-jobs', (route) =>
-    route.fulfill({
-      status: 202,
-      json: { id: 'del_test', state: 'queued', totalRows: 42, deletedRows: 0 },
-    }),
-  );
-  await page.route('**/api/v1/history/deletion-jobs/del_test', (route) =>
-    route.fulfill({
-      json: {
-        id: 'del_test',
-        state: 'completed',
-        totalRows: 42,
-        deletedRows: 42,
-      },
-    }),
-  );
-  await page.goto('/');
-  await page.getByRole('link', { name: 'Settings', exact: true }).click();
-  await page.getByLabel('Scope').selectOption('all');
-  await page.getByRole('button', { name: 'Preview deletion' }).click();
-  const remove = page.getByRole('button', { name: 'Delete history' });
-  await expect(remove).toBeDisabled();
-  await page.getByLabel('Confirmation').fill('RESET ALL HISTORY');
-  await remove.click();
-  await expect(
-    page.getByText('completed: 42 of 42 rows deleted.'),
-  ).toBeVisible();
-});
-
-test('creates a scoped API token and persists personalization', async ({
-  page,
-}) => {
-  await mockAuthSession(page);
-  await mockOnboarding(page);
-  await mockSettings(page, true);
-  await page.route('**/api/v1/live', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
-  );
-  let savedLanding = '';
-  await page.route('**/api/v1/preferences', async (route) => {
-    if (route.request().method() !== 'PUT') return route.fallback();
-    const value = route.request().postDataJSON() as { landingPage: string };
-    savedLanding = value.landingPage;
-    return route.fulfill({ json: value });
-  });
-  await page.route('**/api/v1/api-tokens', async (route) => {
-    if (route.request().method() !== 'POST') return route.fallback();
+  let started = false;
+  await page.route('**/api/v1/history/deletion-jobs', (route) => {
+    started =
+      route.request().postDataJSON()?.confirmation === 'DELETE ALL HISTORY';
     return route.fulfill({
-      status: 201,
+      status: 202,
       json: {
-        token: {
-          id: 'tok_1',
-          name: 'reporter',
-          prefix: 'bnk_example',
-          scopes: ['server:read'],
-          createdAt: '2026-07-11T12:00:00Z',
-        },
-        plaintext: 'bnk_example_plaintext',
+        id: 'job-1',
+        kind: 'all',
+        state: 'running',
+        totalRows: 9000,
+        deletedRows: 412,
       },
     });
   });
-  await page.goto('/settings');
-  await page.getByLabel('Default landing page').selectOption('events');
-  await expect.poll(() => savedLanding).toBe('events');
-  await page.getByLabel('Resource', { exact: true }).selectOption('res1');
-  await page.getByRole('button', { name: 'Pin', exact: true }).click();
-  await expect(page.getByText('web-app')).toBeVisible();
-  await page.getByLabel('Name', { exact: true }).fill('reporter');
-  await page.getByRole('button', { name: 'Create token' }).click();
-  await expect(page.getByText('bnk_example_plaintext')).toBeVisible();
+  await page.route('**/api/v1/history/deletion-jobs/job-1', (route) =>
+    route.fulfill({
+      json: {
+        id: 'job-1',
+        kind: 'all',
+        state: 'completed',
+        totalRows: 9000,
+        deletedRows: 9000,
+      },
+    }),
+  );
+  await page.goto('/settings/data');
+  await page.getByRole('radio', { name: /Everything/ }).check();
+  await page.getByRole('button', { name: 'Preview deletion' }).click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Delete history permanently?',
+  });
+  await expect(dialog).toContainText('9,000 rows');
+  await expect(
+    dialog.getByRole('button', { name: 'Delete history' }),
+  ).toBeDisabled();
+  await dialog.getByRole('textbox').fill('DELETE ALL HISTORY');
+  await dialog.getByRole('button', { name: 'Delete history' }).click();
+  await expect.poll(() => started).toBe(true);
+  await expect(page.getByText('Deletion complete')).toBeVisible();
 });
 
-test('hides unqualified access and portability controls by default on mobile', async ({
+test('creates a scoped API token and pins a resource when portability is on', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await mockAuthSession(page);
-  await mockOnboarding(page);
-  await mockSettings(page);
-  await page.route('**/api/v1/live', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
-  );
-  await page.route('**/api/v1/auth/methods', (route) =>
-    route.fulfill({
+  await mockApp(page, { portability: true });
+  let tokenBody: Record<string, unknown> | null = null;
+  await page.route('**/api/v1/api-tokens', async (route) => {
+    if (route.request().method() === 'POST') {
+      tokenBody = route.request().postDataJSON();
+      return route.fulfill({
+        status: 201,
+        json: {
+          token: {
+            id: 'tok',
+            name: 'Prometheus',
+            prefix: 'bnk_abc',
+            scopes: ['metrics:read'],
+            createdAt: '2026-07-11T12:00:00Z',
+          },
+          plaintext: 'bnk_abc_secret',
+        },
+      });
+    }
+    return route.fulfill({
+      json: { tokens: [], scopes: ['server:read', 'metrics:read'] },
+    });
+  });
+  await page.goto('/settings/integrations');
+  await page.getByRole('button', { name: 'New token' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New API token' });
+  await dialog.getByLabel('Name').fill('Prometheus');
+  await dialog.getByLabel('Host metrics').uncheck();
+  await dialog.getByLabel('History and Prometheus').check();
+  await dialog.getByRole('button', { name: 'Create token' }).click();
+  await expect(page.getByText('bnk_abc_secret')).toBeVisible();
+  expect(tokenBody).toMatchObject({
+    name: 'Prometheus',
+    scopes: ['metrics:read'],
+  });
+
+  let pinned: string[] | null = null;
+  await page.route('**/api/v1/preferences', (route) => {
+    if (route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON();
+      pinned = body.pinnedResources;
+      return route.fulfill({ json: body });
+    }
+    return route.fulfill({
       json: {
-        mode: 'local',
-        local: true,
-        proxy: false,
-        proxyAvailable: false,
-        mfaAvailable: false,
+        exists: true,
+        preferences: {
+          schemaVersion: 1,
+          theme: 'dark',
+          density: 'comfortable',
+          pinnedResources: [],
+          landingPage: 'overview',
+          chartRange: '24h',
+        },
       },
-    }),
-  );
-  await page.route('**/api/v1/integrations/coolify', (route) =>
-    route.fulfill({
-      json: {
-        enabled: false,
-        tokenConfigured: false,
-        environmentAuthoritative: false,
-        collector: { state: 'disabled', resources: 0 },
-      },
-    }),
-  );
-  await page.goto('/settings');
-  await expect(page.getByRole('heading', { name: 'Local MFA' })).toHaveCount(0);
+    });
+  });
+  await page.goto('/settings/appearance');
+  await page
+    .getByRole('combobox', { name: 'Resource to pin' })
+    .fill('postgres');
+  await page.getByRole('option', { name: /postgres\.internal/ }).click();
+  await page.getByRole('button', { name: 'Pin', exact: true }).click();
+  await expect.poll(() => pinned).toEqual(['infra1']);
+});
+
+test('gated features explain themselves and the mobile shell uses a tab bar', async ({
+  page,
+}, testInfo) => {
+  await mockApp(page);
+  await page.goto('/settings/integrations');
+  await expect(page.getByText('Disabled at deployment').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New token' })).toHaveCount(0);
+
+  if (!testInfo.project.name.includes('mobile')) {
+    // Touch-device projects already run at phone size; resizing an emulated
+    // device after load makes Chromium's hit-testing disagree with layout.
+    await page.setViewportSize({ width: 390, height: 844 });
+  }
+  await page.goto('/overview');
+  const nav = page.getByRole('navigation', { name: 'Primary navigation' });
+  await expect(nav.getByRole('button', { name: 'More' })).toBeVisible();
+  await nav.getByRole('button', { name: 'More' }).click();
+  await expect(page.getByRole('dialog', { name: 'More' })).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Personal API tokens' }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole('heading', { name: 'Coolify enrichment' }),
+    page
+      .getByRole('dialog', { name: 'More' })
+      .getByRole('link', { name: 'Settings' }),
   ).toBeVisible();
 });
 
-test('restores the MFA enrollment workflow when advanced authentication is enabled', async ({
+test('enrolls two-factor authentication when advanced auth is enabled', async ({
   page,
 }) => {
-  await mockAuthSession(page);
-  await mockOnboarding(page);
-  await mockSettings(page);
-  await page.route('**/api/v1/live', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }),
-  );
-  await page.route('**/api/v1/auth/methods', (route) =>
-    route.fulfill({
-      json: {
-        mode: 'local',
-        local: true,
-        proxy: false,
-        proxyAvailable: false,
-        mfaAvailable: true,
-      },
-    }),
-  );
+  await mockApp(page, { advancedAuth: true });
   await page.route('**/api/v1/auth/mfa', (route) =>
     route.fulfill({ json: { enabled: false } }),
   );
@@ -667,27 +480,40 @@ test('restores the MFA enrollment workflow when advanced authentication is enabl
     route.fulfill({
       json: {
         seed: 'JBSWY3DPEHPK3PXP',
-        uri: 'otpauth://totp/Binnacle%3Aadmin?secret=JBSWY3DPEHPK3PXP',
-        expiresAt: '2026-07-11T13:00:00Z',
+        uri: 'otpauth://totp/Binnacle:admin?secret=JBSWY3DPEHPK3PXP',
+        expiresAt: '2026-07-11T12:10:00Z',
       },
     }),
   );
-  await page.route('**/api/v1/integrations/coolify', (route) =>
-    route.fulfill({
-      json: {
-        enabled: false,
-        tokenConfigured: false,
-        environmentAuthoritative: false,
-        collector: { state: 'disabled', resources: 0 },
-      },
-    }),
+  await page.route('**/api/v1/auth/mfa/confirm', (route) =>
+    route.fulfill({ json: { recoveryCodes: ['aaaa-bbbb', 'cccc-dddd'] } }),
   );
-  await page.goto('/settings');
-  await page
-    .getByLabel('Current password')
-    .fill('correct horse battery staple');
-  await page.getByRole('button', { name: 'Set up MFA' }).click();
+  await page.goto('/settings/access');
+  await page.getByRole('button', { name: 'Set up two-factor' }).click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Set up two-factor authentication',
+  });
+  await dialog.getByLabel('Password').fill('correct horse battery staple');
+  await dialog.getByRole('button', { name: 'Continue' }).click();
   await expect(
-    page.getByText('JBSWY3DPEHPK3PXP', { exact: true }),
+    dialog.getByText('JBSWY3DPEHPK3PXP', { exact: true }),
+  ).toBeVisible();
+  await dialog.getByLabel('Code from your app').fill('123456');
+  await dialog.getByRole('button', { name: 'Enable' }).click();
+  await expect(page.getByText('aaaa-bbbb')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy all' })).toBeVisible();
+});
+
+test('the command palette jumps to a resource', async ({ page }) => {
+  await mockApp(page);
+  await page.goto('/overview');
+  await page.keyboard.press('Control+k');
+  const palette = page.getByRole('dialog', { name: 'Command palette' });
+  await expect(palette).toBeVisible();
+  await palette.getByRole('combobox').fill('postgres');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/resources\/infra1$/);
+  await expect(
+    page.getByRole('heading', { name: snapshot.resources[2].name, level: 1 }),
   ).toBeVisible();
 });

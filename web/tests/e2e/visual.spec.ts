@@ -1,329 +1,114 @@
 import { expect, test, type Page } from '@playwright/test';
-
-const session = {
-  user: { id: 'admin', username: 'admin' },
-  expiresAt: '2026-07-11T13:00:00Z',
-  absoluteExpiresAt: '2026-07-11T14:00:00Z',
-};
-
-async function mockBrowserSession(page: Page) {
-  await page.route('**/api/v1/auth/session', (route) =>
-    route.fulfill({ json: session }),
-  );
-  await page.route('**/api/v1/onboarding', (route) =>
-    route.fulfill({
-      json: {
-        checklistDismissed: true,
-        completedAt: '2026-07-11T11:00:00Z',
-      },
-    }),
-  );
-}
-
-const snapshot = {
-  seq: 1,
-  ts: '2026-07-11T12:00:00Z',
-  bootIdentity: 'boot',
-  host: {
-    cpuPct: 10,
-    memoryUsedBytes: 1024,
-    memoryTotalBytes: 2048,
-    diskUsedBytes: 100,
-    diskTotalBytes: 200,
-    load1: 0.1,
-    networkRxBps: 2,
-    networkTxBps: 3,
-  },
-  resources: [
-    {
-      id: 'res1',
-      name: 'web-app',
-      status: 'healthy',
-      cpuHostPct: 5,
-      memoryBytes: 512,
-      category: 'applications',
-      components: [{ id: 'c1', name: 'web-app-1', status: 'healthy' }],
-    },
-    {
-      id: 'infra1',
-      name: 'proxy',
-      status: 'healthy',
-      cpuHostPct: 1,
-      memoryBytes: 128,
-      category: 'infrastructure',
-      infrastructure: true,
-    },
-  ],
-  collectors: { host: { state: 'healthy' }, docker: { state: 'healthy' } },
-};
-
-const liveBody = `event: snapshot\nid: 1\ndata: ${JSON.stringify(snapshot)}\n\n`;
-
-async function mockLive(page: Page) {
-  await page.route('**/api/v1/live', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'text/event-stream',
-      body: liveBody,
-    }),
-  );
-}
-
-async function mockHistoryApis(page: Page) {
-  await page.route('**/api/v1/metrics?*', (route) =>
-    route.fulfill({
-      json: {
-        scope: 'host',
-        from: '2026-07-11T11:00:00Z',
-        to: '2026-07-11T12:00:00Z',
-        resolution: '10s',
-        series: [
-          {
-            metric: 'cpu',
-            unit: 'percent',
-            points: [
-              {
-                at: '2026-07-11T11:00:00Z',
-                min: 1,
-                avg: 2,
-                max: 3,
-                count: 1,
-              },
-            ],
-          },
-        ],
-        gaps: [],
-      },
-    }),
-  );
-  await page.route('**/api/v1/events?*', (route) =>
-    route.fulfill({ json: [] }),
-  );
-}
-
-async function mockSettings(page: Page) {
-  const values: Record<
-    string,
-    { value: string; source: string; applyMode: string }
-  > = {
-    'collection.host_interval': {
-      value: '10s',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'collection.container_interval': {
-      value: '10s',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'persistence.raw_interval': {
-      value: '10s',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'retention.preset': {
-      value: 'balanced',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'retention.raw': { value: '24h', source: 'Default', applyMode: 'live' },
-    'retention.one_minute': {
-      value: '7d',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'retention.fifteen_minute': {
-      value: '30d',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'retention.one_hour': {
-      value: '365d',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'database.target_budget_bytes': {
-      value: '1073741824',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'sessions.idle_timeout': {
-      value: '15m',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'sessions.absolute_lifetime': {
-      value: '24h',
-      source: 'Default',
-      applyMode: 'live',
-    },
-    'http.listen_address': {
-      value: ':8080',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-    'docker.socket_path': {
-      value: '/var/run/docker.sock',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-    'paths.host_proc': {
-      value: '/host/proc',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-    'paths.host_sys': {
-      value: '/host/sys',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-    'paths.data_dir': {
-      value: '/var/lib/binnacle',
-      source: 'Default',
-      applyMode: 'restart_required',
-    },
-  };
-  await page.route('**/api/v1/settings', (route) =>
-    route.fulfill({
-      json: {
-        revision: 1,
-        values,
-        features: { advancedAuth: false, portability: false },
-      },
-    }),
-  );
-  const preferences = {
-    schemaVersion: 1,
-    theme: 'dark',
-    density: 'comfortable',
-    pinnedResources: [],
-    landingPage: 'watch',
-    chartRange: '24h',
-    updatedAt: '2026-07-11T12:00:00Z',
-  };
-  await page.route('**/api/v1/preferences', (route) =>
-    route.fulfill({ json: { exists: true, preferences } }),
-  );
-  await page.route('**/api/v1/api-tokens', (route) =>
-    route.fulfill({ json: { tokens: [], scopes: ['server:read'] } }),
-  );
-  await page.route('**/api/v1/resources', (route) =>
-    route.fulfill({ json: snapshot.resources }),
-  );
-}
-
-async function expectedTheme(page: Page) {
-  return page.evaluate(() => document.documentElement.dataset.theme ?? '');
-}
+import { mockApp } from './fixtures';
 
 async function viewportWidth(page: Page) {
   return page.viewportSize()?.width ?? 0;
 }
 
-test('watch renders host instruments and the resource roster', async ({
+test('overview renders the headroom row and the grouped resource table', async ({
   page,
-}) => {
-  await mockBrowserSession(page);
-  await mockLive(page);
-  await page.goto('/watch');
-  await expect(page.getByRole('heading', { name: 'Watch' })).toBeVisible();
-  await expect(page.getByRole('navigation')).toBeVisible();
-  const brandMark = page.locator('.app-brand img:visible');
-  await expect(brandMark).toBeVisible();
+}, testInfo) => {
+  const mobile = testInfo.project.name.includes('mobile');
+  await mockApp(page);
+  await page.goto('/overview');
+  await expect(
+    page.getByRole('heading', { name: 'Overview', level: 1 }),
+  ).toBeVisible();
+  const mark = page.locator('img[src*="binnacle-mark"]:visible').first();
+  await expect(mark).toBeVisible();
   expect(
-    await brandMark.evaluate((image) => image.naturalWidth),
+    await mark.evaluate((image) => (image as HTMLImageElement).naturalWidth),
   ).toBeGreaterThan(0);
   await expect(
-    page.getByRole('link', { name: 'Server', exact: true }),
+    page.getByRole('progressbar', { name: 'CPU utilization' }),
   ).toBeVisible();
-  const box = await page.locator('.host-band').boundingBox();
+  const resources = page.getByRole(mobile ? 'list' : 'table', {
+    name: 'Resources',
+  });
+  await expect(resources).toBeVisible();
+  await expect(page.getByText('binnacle / production')).toBeVisible();
+  const box = await resources.boundingBox();
   expect(box?.width).toBeLessThanOrEqual(await viewportWidth(page));
 });
 
-test('login renders the dark Binnacle access gate', async ({ page }) => {
-  await page.route('**/api/v1/auth/session', (route) =>
-    route.fulfill({ status: 401 }),
-  );
-  await page.route('**/api/v1/setup', (route) =>
-    route.fulfill({ json: { available: false } }),
-  );
+test('login renders the branded sign-in card', async ({ page }) => {
+  await mockApp(page, { authenticated: false });
   await page.goto('/login');
-  const mark = page.locator('.access-brand img');
-  await expect(mark).toBeVisible();
-  expect(await mark.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  const mark = page.locator('img[src*="binnacle-mark"]:visible').first();
+  expect(
+    await mark.evaluate((image) => (image as HTMLImageElement).naturalWidth),
+  ).toBeGreaterThan(0);
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
 });
 
-test('server renders telemetry and historical charts', async ({ page }) => {
-  await mockBrowserSession(page);
-  await mockLive(page);
-  await mockHistoryApis(page);
-  await page.goto('/server');
+test('host renders stat tiles and historical charts', async ({ page }) => {
+  await mockApp(page);
+  await page.goto('/host');
   await expect(
-    page.getByRole('heading', { name: 'Instrumentation sheet' }),
+    page.getByRole('heading', { name: 'Host', level: 1 }),
   ).toBeVisible();
-  await expect(page.getByText('CPU / CURRENT', { exact: true })).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Historical telemetry' }),
+    page.getByRole('progressbar', { name: 'CPU utilization' }),
   ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Load average' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: /Inspect CPU/ }),
+  ).toBeAttached();
 });
 
-test('resource inspector opens from watch and links to the full record', async ({
-  page,
-}) => {
-  await mockBrowserSession(page);
-  await mockLive(page);
-  await mockHistoryApis(page);
-  await page.goto('/watch');
-  const link = page.locator('.resource-roster tbody a').first();
-  await expect(link).toBeVisible();
-  const name = (await link.textContent()) ?? 'Resource';
-  await link.click();
-  await expect(page).toHaveURL(/\/watch\?inspect=res1/);
-  await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+test('overview rows link to the resource detail page', async ({ page }) => {
+  await mockApp(page);
+  await page.goto('/overview');
+  await page.getByRole('link', { name: 'api.production' }).click();
+  await expect(page).toHaveURL(/\/resources\/res1$/);
   await expect(
-    page.getByRole('link', { name: 'Open full record' }),
+    page.getByRole('heading', { name: 'api.production', level: 1 }),
   ).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open logs' })).toBeVisible();
   await page.goBack();
-  await expect(page).toHaveURL(/\/watch$/);
+  await expect(page).toHaveURL(/\/overview$/);
 });
 
-test('events page renders', async ({ page }) => {
-  await mockBrowserSession(page);
-  await mockLive(page);
-  await mockHistoryApis(page);
-  await page.goto('/events');
+test('activity and settings render their sections', async ({ page }) => {
+  await mockApp(page);
+  await page.goto('/activity');
   await expect(
-    page.getByRole('heading', { name: 'Event logbook' }),
+    page.getByRole('heading', { name: 'Activity', level: 1 }),
   ).toBeVisible();
-});
-
-test('settings page renders all sections', async ({ page }) => {
-  await mockBrowserSession(page);
-  await mockLive(page);
-  await mockSettings(page);
   await page.goto('/settings');
-  await expect(page.getByRole('heading', { name: 'Collection' })).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Retention & storage' }),
+    page.getByRole('heading', { name: 'Collection', exact: true }),
   ).toBeVisible();
+  await page.goto('/settings/data');
   await expect(
-    page.getByRole('heading', { name: 'Authentication' }),
+    page.getByRole('heading', { name: 'Retention', exact: true }),
+  ).toBeVisible();
+  await page.goto('/settings/access');
+  await expect(
+    page.getByRole('heading', { name: 'Sessions', exact: true }),
   ).toBeVisible();
 });
 
-test('first-time users receive the dark signature theme', async ({ page }) => {
-  await mockBrowserSession(page);
-  await mockLive(page);
-  await page.goto('/watch');
-  const theme = await expectedTheme(page);
-  expect(theme).toBe('dark');
+test('first-time users receive the dark theme', async ({ page }) => {
+  await mockApp(page);
+  await page.goto('/overview');
+  expect(
+    await page.evaluate(() => document.documentElement.dataset.theme),
+  ).toBe('dark');
 });
 
 test('mobile layout keeps content inside the viewport', async ({ page }) => {
-  await mockBrowserSession(page);
-  await mockLive(page);
-  await page.goto('/watch');
-  const heading = page.getByRole('heading', { name: 'Watch' });
+  await mockApp(page);
+  await page.goto('/overview');
+  const width = await viewportWidth(page);
+  const scrollWidth = await page.evaluate(
+    () => document.documentElement.scrollWidth,
+  );
+  expect(scrollWidth).toBeLessThanOrEqual(width);
+  const heading = page.getByRole('heading', { name: 'Overview', level: 1 });
   const box = await heading.boundingBox();
-  expect(box?.width).toBeLessThanOrEqual(await viewportWidth(page));
+  expect(box?.width).toBeLessThanOrEqual(width);
 });
