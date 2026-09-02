@@ -3,8 +3,9 @@ package demo
 
 import (
 	"context"
-	"github.com/drilonrecica/binnacle/internal/metrics"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/metrics"
 )
 
 type Component struct {
@@ -22,7 +23,9 @@ func (c *Component) Start(ctx context.Context) error {
 		t := time.NewTicker(c.Interval)
 		defer t.Stop()
 		for {
-			c.Engine.Publish(c.Generator.Snapshot(tick), c.Generator.Events(tick)...)
+			now := c.Generator.clock.Now().UTC()
+			c.Engine.PublishFilesystems(c.Generator.FilesystemsAt(tick, now))
+			c.Engine.Publish(c.Generator.SnapshotAt(tick, now), c.Generator.Events(tick)...)
 			tick++
 			select {
 			case <-ctx.Done():
