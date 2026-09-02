@@ -9,6 +9,9 @@ RELEASE_RECORD_DIR="${RELEASE_RECORD_DIR:-release-record}"
 mkdir -p "$RELEASE_RECORD_DIR"
 
 VERSION="${VERSION:-v0.6.0}"
+# Pull request refs look like "2/merge"; keep the version usable as a file name
+# and an image tag.
+VERSION="${VERSION//\//-}"
 COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 SHORT_COMMIT="$(git -C "$ROOT_DIR" rev-parse --short HEAD)"
 DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
