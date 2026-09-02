@@ -175,6 +175,7 @@ type Snapshot struct {
 	Host         HostObservation            `json:"host"`
 	Resources    []ResourceSnapshot         `json:"resources"`
 	Collectors   map[string]CollectorHealth `json:"collectors"`
+	Filesystems  []FilesystemObservation    `json:"filesystems,omitempty"`
 }
 type FilesystemObservation struct {
 	At                time.Time `json:"at"`

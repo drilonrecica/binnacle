@@ -2,8 +2,9 @@
 package api
 
 import (
-	"github.com/drilonrecica/binnacle/internal/metrics"
 	"net/http"
+
+	"github.com/drilonrecica/binnacle/internal/metrics"
 )
 
 func (s *Server) EnableCurrent(engine *metrics.Engine, auth Authorizer) {
@@ -28,4 +29,13 @@ func (s *Server) EnableCurrent(engine *metrics.Engine, auth Authorizer) {
 		}{snap.At.UTC().Format("2006-01-02T15:04:05Z07:00"), snap.BootIdentity, snap.Host})
 	}))
 	s.Handle("/api/v1/collector-health", guard(func(w http.ResponseWriter, r *http.Request) { WriteJSON(w, 200, engine.Snapshot().Collectors) }))
+	// Per-mount filesystem usage drives the filesystem and inode alert
+	// families; exposing it keeps the Host page consistent with alerting.
+	s.Handle("/api/v1/filesystems", guard(func(w http.ResponseWriter, r *http.Request) {
+		values := engine.Snapshot().Filesystems
+		if values == nil {
+			values = []metrics.FilesystemObservation{}
+		}
+		WriteJSON(w, 200, values)
+	}))
 }

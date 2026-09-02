@@ -17,7 +17,11 @@ type SnapshotDecorator interface {
 }
 
 func (s *Server) EnableResources(engine *metrics.Engine, auth Authorizer, store *storage.Manager, protection *authpkg.Protection, decorators ...SnapshotDecorator) {
-	s.Handle("/api/v1/resources", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			WriteError(w, http.StatusMethodNotAllowed, Error{Code: "method_not_allowed", Message: "Only GET is supported."})
+			return
+		}
 		if !requireAuth(w, r, auth) {
 			return
 		}
@@ -41,6 +45,10 @@ func (s *Server) EnableResources(engine *metrics.Engine, auth Authorizer, store 
 		}
 		if r.URL.Path != "/api/v1/resources" {
 			id := strings.TrimPrefix(r.URL.Path, "/api/v1/resources/")
+			if id == "" || strings.Contains(id, "/") {
+				WriteError(w, 404, Error{Code: "not_found", Message: "Resource not found."})
+				return
+			}
 			for _, v := range snap.Resources {
 				if string(v.ID) == id {
 					WriteJSON(w, 200, v)
@@ -55,5 +63,8 @@ func (s *Server) EnableResources(engine *metrics.Engine, auth Authorizer, store 
 			return
 		}
 		WriteJSON(w, 200, snap.Resources)
-	}))
+	})
+	s.Handle("/api/v1/resources", handler)
+	// The trailing-slash pattern is what makes `/api/v1/resources/{id}` reachable.
+	s.Handle("/api/v1/resources/", handler)
 }

@@ -54,7 +54,7 @@ func Handler() http.Handler {
 }
 func uiRoute(name string) bool {
 	switch name {
-	case "watch", "resources", "server", "events", "settings", "login", "setup", "onboarding":
+	case "overview", "resources", "host", "alerts", "activity", "logs", "settings", "watch", "server", "events", "login", "setup", "onboarding":
 		return true
 	}
 	return false
