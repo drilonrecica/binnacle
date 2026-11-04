@@ -94,3 +94,9 @@ Thumbs.db
 !.vscode/extensions.json
 !.vscode/settings.json
 !.vscode/tasks.json
+
+# igris implementation workspace and security scan reports (private)
+/imp-docs/
+/igris.toml
+/.igris/
+/CLAUDE-SECURITY-*/
