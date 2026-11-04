@@ -56,6 +56,6 @@ require `BINNACLE_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS=true` and a restart.
 | `BINNACLE_NOTIFICATIONS_DELIVERY_TIMEOUT` | `15s` |
 | `BINNACLE_NOTIFICATIONS_REMINDER_INTERVAL` | `2h` |
 
-Monitor Health exposes queue depth, permanent failures, overflow deferrals,
+Binnacle health (Settings → System) exposes queue depth, permanent failures, overflow deferrals,
 and the last successful delivery. APIs, logs, and diagnostics never expose
 destinations, credentials, recipients, decrypted secrets, or message bodies.

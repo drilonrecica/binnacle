@@ -6,12 +6,13 @@ PNPM ?= pnpm
 DOCKER ?= docker
 BINNACLE_BIN ?= bin/binnacle
 VERSION ?= dev
+GO_LICENSES_VERSION ?= v2.0.1
 LDFLAGS ?= -s -w -X main.version=$(VERSION)
 GO_SOURCE_FILES := $(shell find cmd internal -type f -name '*.go' -print)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev dev-demo dev-host test check build web-build image image-multi format-check go-test web-test web-check go-vet benchmark benchmark-matrix
+.PHONY: help dev dev-demo dev-host test check build web-build image image-multi vuln licenses sbom scan format-check go-test web-test web-check go-vet benchmark benchmark-matrix
 
 help: ## Show the supported local development commands.
 
@@ -21,8 +22,10 @@ dev: build ## Start the demo development environment (backend + Vite dev server)
 
 	@echo "Starting Binnacle demo backend and Vite dev server..."
 	@export BINNACLE_SETUP_TOKEN=$$(openssl rand -hex 32); \
-	BINNACLE_LISTEN_ADDRESS=127.0.0.1:8080 BINNACLE_DATA_DIR=$$(mktemp -d) $(BINNACLE_BIN) --demo &
-	@BINNACLE_PID=$$!; trap 'kill $$BINNACLE_PID 2>/dev/null || true' EXIT; $(PNPM) --dir web dev
+	BINNACLE_LISTEN_ADDRESS=127.0.0.1:8080 BINNACLE_DATA_DIR=$$(mktemp -d) $(BINNACLE_BIN) --demo & \
+	BINNACLE_PID=$$!; \
+	trap 'kill $$BINNACLE_PID 2>/dev/null || true' EXIT INT TERM; \
+	$(PNPM) --dir web dev
 
 dev-demo: build ## Run the deterministic demo environment with a fresh temporary database.
 
@@ -63,7 +66,7 @@ vuln: ## Run dependency vulnerability scans (requires govulncheck and pnpm).
 
 licenses: ## Check Go dependency licenses (requires go-licenses v2).
 
-	$(GO) run github.com/google/go-licenses/v2@latest check ./... --allowed_licenses=MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0,ISC,MPL-2.0,AGPL-3.0
+	$(GO) run github.com/google/go-licenses/v2@$(GO_LICENSES_VERSION) check ./... --allowed_licenses=MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0,ISC,MPL-2.0,AGPL-3.0
 
 sbom: ## Generate an SPDX SBOM for the container image (requires syft).
 
@@ -91,7 +94,7 @@ format-check: ## Check Go and frontend formatting without modifying source.
 
 go-test: web-build ## Run all Go tests.
 
-	$(GO) test ./...
+	$(GO) test -race ./...
 
 web-test: ## Run frontend unit tests.
 

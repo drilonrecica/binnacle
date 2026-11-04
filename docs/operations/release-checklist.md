@@ -59,7 +59,7 @@ authorize enabling them by default.
 Attach the following to the release record:
 
 1. `release-record/build.log`
-2. `release-record/v0.3.0-<short-sha>.md`
+2. `release-record/<version>-<short-sha>.md`
 3. `benchmark-report.json`
 4. Container image digest (`docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/drilonrecica/binnacle:local`)
 5. E2E and visual regression reports when run

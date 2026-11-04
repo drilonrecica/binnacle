@@ -8,7 +8,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 RELEASE_RECORD_DIR="${RELEASE_RECORD_DIR:-release-record}"
 mkdir -p "$RELEASE_RECORD_DIR"
 
-VERSION="${VERSION:-v0.6.0}"
+VERSION="${VERSION:-$(git -C "$ROOT_DIR" describe --tags --abbrev=0 2>/dev/null || echo dev)}"
 # Pull request refs look like "2/merge"; keep the version usable as a file name
 # and an image tag.
 VERSION="${VERSION//\//-}"
@@ -90,8 +90,8 @@ record ""
 # 1. Local CI-quality check.
 run_check "make check" make check
 
-# Checks and alerts security/lifecycle qualification.
-run_check "security, access, and integration race tests" go test -race ./internal/auth ./internal/coolify ./internal/checks ./internal/alerts ./internal/notifications ./internal/outbound ./internal/api ./internal/diagnostics ./internal/dockerapi ./internal/demo ./internal/preferences ./internal/storage
+# Race detector across every package, including engine and collectors.
+run_check "race tests (all packages)" go test -race ./...
 
 # 2. License and security policy presence.
 if [[ -s "$ROOT_DIR/LICENSE" && -s "$ROOT_DIR/SECURITY.md" ]]; then
