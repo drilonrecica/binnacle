@@ -136,6 +136,7 @@ var visible = func() map[string]ApplyMode {
 	result := map[string]ApplyMode{
 		"paths.data_dir": ApplyRestart, "http.listen_address": ApplyRestart,
 		"docker.socket_path": ApplyRestart, "paths.host_proc": ApplyRestart, "paths.host_sys": ApplyRestart,
+		"paths.host_root": ApplyRestart,
 	}
 	for key, mode := range editable {
 		result[key] = mode

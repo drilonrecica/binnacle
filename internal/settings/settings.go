@@ -40,6 +40,7 @@ type Paths struct {
 	RuntimeDir              string `toml:"runtime_dir"`
 	HostProc                string `toml:"host_proc"`
 	HostSys                 string `toml:"host_sys"`
+	HostRoot                string `toml:"host_root"`
 	HostPasswd              string `toml:"host_passwd"`
 	MasterKey               string `toml:"master_key"`
 	MasterKeyFile           string `toml:"master_key_file"`
@@ -127,7 +128,7 @@ type Prometheus struct {
 
 func Defaults() Config {
 	return Config{
-		Paths: Paths{DataDir: "/var/lib/binnacle", HostProc: "/proc", HostSys: "/sys", HostPasswd: "/host/etc/passwd"}, HTTP: HTTP{ListenAddress: ":8080"}, Auth: Auth{Mode: "local", IdentityHeader: "X-Forwarded-User"},
+		Paths: Paths{DataDir: "/var/lib/binnacle", HostProc: "/proc", HostSys: "/sys", HostRoot: "/", HostPasswd: "/host/etc/passwd"}, HTTP: HTTP{ListenAddress: ":8080"}, Auth: Auth{Mode: "local", IdentityHeader: "X-Forwarded-User"},
 		Collection: Collection{HostInterval: 2 * time.Second, ContainerInterval: 2 * time.Second, MinimumInterval: time.Second}, Live: Live{SSEInterval: 2 * time.Second}, Persistence: Persistence{RawInterval: 10 * time.Second, QueueBatchLimit: 60},
 		Retention: Retention{Preset: "balanced", Raw: 48 * time.Hour, OneMinute: 30 * 24 * time.Hour, FifteenMinute: 365 * 24 * time.Hour, OneHour: 0}, Database: Database{TargetBudgetBytes: 1073741824, WarningRatio: .80, CriticalRatio: .95, EmergencyPauseRatio: .98}, Charts: Charts{MaxPointsPerSeries: 1000}, Docker: Docker{SocketPath: "/var/run/docker.sock", MaxConcurrency: 4}, Checks: Checks{MaxConcurrency: 8}, Notifications: Notifications{MaxConcurrency: 4, QueueCapacity: 1000, DeliveryTimeout: 15 * time.Second, ReminderInterval: 2 * time.Hour}, Logs: Logs{MaxResponseBytes: 1048576, MaxLines: 5000}, Sessions: Sessions{IdleTimeout: 12 * time.Hour, AbsoluteLifetime: 720 * time.Hour},
 	}
@@ -154,7 +155,7 @@ func (c *Config) Normalize() {
 }
 func (c Config) Validate() error {
 	c.Normalize()
-	for name, path := range map[string]string{"data_dir": c.Paths.DataDir, "database_path": c.Paths.DatabasePath, "runtime_dir": c.Paths.RuntimeDir, "host_proc": c.Paths.HostProc, "host_sys": c.Paths.HostSys, "host_passwd": c.Paths.HostPasswd, "docker.socket_path": c.Docker.SocketPath} {
+	for name, path := range map[string]string{"data_dir": c.Paths.DataDir, "database_path": c.Paths.DatabasePath, "runtime_dir": c.Paths.RuntimeDir, "host_proc": c.Paths.HostProc, "host_sys": c.Paths.HostSys, "host_root": c.Paths.HostRoot, "host_passwd": c.Paths.HostPasswd, "docker.socket_path": c.Docker.SocketPath} {
 		if path == "" || !filepath.IsAbs(path) {
 			return fmt.Errorf("%s must be an absolute path", name)
 		}
@@ -242,7 +243,7 @@ func (c Config) Validate() error {
 // UIOverridable reports whether a key can be changed without a deployment change.
 func UIOverridable(key string) bool {
 	switch key {
-	case "paths.data_dir", "paths.database_path", "paths.runtime_dir", "paths.master_key", "paths.master_key_file", "http.listen_address", "http.trusted_proxy_cidrs", "http.public_url", "docker.socket_path", "paths.host_proc", "paths.host_sys", "paths.host_passwd", "coolify.url", "coolify.api_token_file", "coolify.allow_insecure_http", "coolify.allow_private_targets", "checks.allow_private_targets", "auth.mode", "auth.proxy_cidrs", "auth.identity_header", "auth.allowed_subject", "features.advanced_auth", "features.portability", "prometheus.enabled", "notifications.allow_private_targets", "notifications.max_concurrency", "notifications.queue_capacity", "notifications.delivery_timeout", "notifications.reminder_interval":
+	case "paths.data_dir", "paths.database_path", "paths.runtime_dir", "paths.master_key", "paths.master_key_file", "http.listen_address", "http.trusted_proxy_cidrs", "http.public_url", "docker.socket_path", "paths.host_proc", "paths.host_sys", "paths.host_root", "paths.host_passwd", "coolify.url", "coolify.api_token_file", "coolify.allow_insecure_http", "coolify.allow_private_targets", "checks.allow_private_targets", "auth.mode", "auth.proxy_cidrs", "auth.identity_header", "auth.allowed_subject", "features.advanced_auth", "features.portability", "prometheus.enabled", "notifications.allow_private_targets", "notifications.max_concurrency", "notifications.queue_capacity", "notifications.delivery_timeout", "notifications.reminder_interval":
 		return false
 	}
 	return true

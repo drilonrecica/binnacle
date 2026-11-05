@@ -1,0 +1,16 @@
+22 29 0:21 / /sys rw,nosuid,nodev,noexec,relatime shared:7 - sysfs sysfs rw
+23 29 0:22 / /proc rw,nosuid,nodev,noexec,relatime shared:13 - proc proc rw
+24 29 0:5 / /dev rw,nosuid,relatime shared:2 - devtmpfs udev rw,size=4008564k,nr_inodes=1002141,mode=755,inode64
+25 24 0:23 / /dev/pts rw,nosuid,noexec,relatime shared:3 - devpts devpts rw,gid=5,mode=620,ptmxmode=000
+26 29 0:24 / /run rw,nosuid,nodev,noexec,relatime shared:5 - tmpfs tmpfs rw,size=804844k,mode=755,inode64
+29 1 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+30 22 0:6 / /sys/kernel/security rw,nosuid,nodev,noexec,relatime shared:8 - securityfs securityfs rw
+31 24 0:26 / /dev/shm rw,nosuid,nodev shared:4 - tmpfs tmpfs rw,inode64
+34 22 0:29 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime shared:9 - cgroup2 cgroup2 rw,nsdelegate,memory_recursiveprot
+58 29 7:0 / /snap/core22/1612 ro,nodev,relatime shared:31 - squashfs /dev/loop0 ro,errors=continue,threads=single
+61 29 8:15 / /boot/efi rw,relatime shared:34 - vfat /dev/sda15 rw,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro
+62 29 8:16 / /mnt/backup\040disk rw,relatime shared:35 - xfs /dev/sdb rw,attr2,inode64,logbufs=8,logbsize=32k,noquota
+63 29 0:30 / /tmp rw,nosuid,nodev shared:36 - tmpfs tmpfs rw,size=2048000k,inode64
+412 29 8:1 /var/lib/docker /srv/docker-bind rw,relatime shared:1 - ext4 /dev/sda1 rw,discard,errors=remount-ro
+480 29 0:52 / /var/lib/docker/overlay2/3f1c0c9a0b6e/merged rw,relatime - overlay overlay rw,lowerdir=/var/lib/docker/overlay2/l/ABC:/var/lib/docker/overlay2/l/DEF,upperdir=/var/lib/docker/overlay2/3f1c0c9a0b6e/diff,workdir=/var/lib/docker/overlay2/3f1c0c9a0b6e/work,nouserxattr
+501 26 0:4 net:[4026532585] /run/docker/netns/0a1b2c3d4e5f rw shared:244 - nsfs nsfs rw

@@ -47,6 +47,11 @@ image: ghcr.io/drilonrecica/binnacle:stable
    authentication ranges must also be replaced with stable exact `/32` or
    `/128` peers; broader ranges now fail startup.
 
+   Add the read-only host root mount `- /:/host/root:ro,rslave` and
+   `BINNACLE_HOST_ROOT: /host/root` to the `binnacle` service. Without it,
+   host filesystem metrics and disk-full alerts are unavailable and the
+   `host` collector reports `host root not mounted`.
+
 2. Stop Binnacle and copy the closed SQLite database. This ensures the WAL is
    checkpointed before the backup:
 

@@ -98,6 +98,7 @@
     'docker.socket_path',
     'paths.host_proc',
     'paths.host_sys',
+    'paths.host_root',
   ];
   const deploymentLabels: Record<string, string> = {
     'http.listen_address': 'Listen address',
@@ -105,6 +106,7 @@
     'docker.socket_path': 'Docker socket',
     'paths.host_proc': 'Host /proc',
     'paths.host_sys': 'Host /sys',
+    'paths.host_root': 'Host root',
   };
 </script>
 

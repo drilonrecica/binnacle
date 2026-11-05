@@ -63,7 +63,8 @@ is deleted once the administrator exists.
 5. Copy `SERVICE_HEX_64_BINNACLE` from the stack environment, open the URL, and complete onboarding.
 
 The Coolify template mounts the host `/proc`, `/sys`, `/etc/passwd`,
-`/etc/os-release`, and the Docker socket. It runs `read_only: true` with
+`/etc/os-release`, the host root read-only at `/host/root`, and the Docker
+socket. It runs `read_only: true` with
 `no-new-privileges` and a 128 MiB memory limit.
 
 ### Password hashing and the memory limit
@@ -235,6 +236,7 @@ Key variables you may need to set at deployment time:
 - `BINNACLE_DATA_DIR` — defaults to `/var/lib/binnacle`.
 - `BINNACLE_HOST_PROC` — defaults to `/host/proc`.
 - `BINNACLE_HOST_SYS` — defaults to `/host/sys`.
+- `BINNACLE_HOST_ROOT` — the host's `/` mounted read-only (`/:/host/root:ro,rslave`); defaults to `/host/root` in the packaged manifests and `/` for a standalone binary. Binnacle only calls `statfs(2)` under it to measure host filesystems and never opens a file there. When it is set but not mounted, filesystem metrics are unavailable and the `host` collector reports degraded; every other metric keeps working.
 - `BINNACLE_HOST_PASSWD` — defaults to `/host/etc/passwd` for process username resolution.
 - `BINNACLE_LOGS_MAX_LINES` — bounded log response ceiling; defaults to `5000`.
 - `BINNACLE_LOGS_MAX_RESPONSE_BYTES` — bounded log byte ceiling; defaults to `1048576`.

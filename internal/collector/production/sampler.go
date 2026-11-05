@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -32,10 +33,13 @@ type MetadataCache interface {
 }
 
 type Sampler struct {
-	Engine               *metrics.Engine
-	Docker               dockerapi.Client
-	Cache                MetadataCache
-	HostProc             string
+	Engine   *metrics.Engine
+	Docker   dockerapi.Client
+	Cache    MetadataCache
+	HostProc string
+	// HostRoot is the read-only bind mount of the host's "/" under which
+	// filesystems are measured with statfs; "/" for a standalone binary.
+	HostRoot             string
 	DataDir              string
 	Interval             func() time.Duration
 	MaxDockerConcurrency int
@@ -57,6 +61,9 @@ type Sampler struct {
 	hostFailures      int
 	dockerFailures    int
 	LastDurationNanos atomic.Int64
+	// statfs and mountPoint replace unix.Statfs and isMountPoint in tests.
+	statfs     func(string, *unix.Statfs_t) error
+	mountPoint func(string) bool
 }
 type dockerSample struct {
 	value dockerapi.Stats
@@ -124,7 +131,7 @@ func (s *Sampler) collect(ctx context.Context, pending []metrics.Event) {
 	started := time.Now()
 	defer func() { s.LastDurationNanos.Store(time.Since(started).Nanoseconds()) }()
 	now := time.Now().UTC()
-	host, filesystems, boot, hostErr := s.collectHost(now)
+	host, filesystems, boot, fsReason, hostErr := s.collectHost(now)
 	if len(filesystems) > 0 {
 		s.Engine.PublishFilesystems(filesystems)
 	}
@@ -135,6 +142,11 @@ func (s *Sampler) collect(ctx context.Context, pending []metrics.Event) {
 	} else {
 		s.hostFailures = 0
 		collectors["host"] = health("host", 0, nil, now)
+		if fsReason != "" {
+			h := collectors["host"]
+			h.State, h.Reason = metrics.CollectorDegraded, fsReason
+			collectors["host"] = h
+		}
 	}
 	resourceValues, dockerErr := s.collectDocker(ctx, now, host.MemoryTotalBytes)
 	if dockerErr != nil {
@@ -184,47 +196,49 @@ func (s *Sampler) CollectionDuration() time.Duration {
 	return time.Duration(s.LastDurationNanos.Load())
 }
 
-func (s *Sampler) collectHost(now time.Time) (metrics.HostObservation, []metrics.FilesystemObservation, string, error) {
+func (s *Sampler) collectHost(now time.Time) (metrics.HostObservation, []metrics.FilesystemObservation, string, string, error) {
 	read := func(name string) ([]byte, error) { return os.ReadFile(filepath.Join(s.HostProc, name)) }
 	statRaw, err := read("stat")
 	if err != nil {
-		return metrics.HostObservation{}, nil, "", err
+		return metrics.HostObservation{}, nil, "", "", err
 	}
 	stats, err := hostcollector.ParseProcStat(string(statRaw))
 	if err != nil {
-		return metrics.HostObservation{}, nil, "", err
+		return metrics.HostObservation{}, nil, "", "", err
 	}
 	memRaw, err := read("meminfo")
 	if err != nil {
-		return metrics.HostObservation{}, nil, "", err
+		return metrics.HostObservation{}, nil, "", "", err
 	}
 	memory, err := hostcollector.ParseMeminfo(string(memRaw))
 	if err != nil {
-		return metrics.HostObservation{}, nil, "", err
+		return metrics.HostObservation{}, nil, "", "", err
 	}
 	loadRaw, err := read("loadavg")
 	if err != nil {
-		return metrics.HostObservation{}, nil, "", err
+		return metrics.HostObservation{}, nil, "", "", err
 	}
 	load, err := hostcollector.ParseLoadavgFull(string(loadRaw))
 	if err != nil {
-		return metrics.HostObservation{}, nil, "", err
+		return metrics.HostObservation{}, nil, "", "", err
 	}
 	uptimeRaw, err := read("uptime")
 	if err != nil {
-		return metrics.HostObservation{}, nil, "", err
+		return metrics.HostObservation{}, nil, "", "", err
 	}
 	uptime, err := hostcollector.ParseUptime(string(uptimeRaw))
 	if err != nil {
-		return metrics.HostObservation{}, nil, "", err
+		return metrics.HostObservation{}, nil, "", "", err
 	}
-	networkRaw, err := read("net/dev")
+	// PID 1 of the host's procfs is in the host network namespace; net/dev
+	// without it resolves through the reader's own PID (COL-2).
+	networkRaw, err := read("1/net/dev")
 	if err != nil {
-		return metrics.HostObservation{}, nil, "", err
+		return metrics.HostObservation{}, nil, "", "", err
 	}
 	networks, err := hostcollector.ParseNetDev(string(networkRaw))
 	if err != nil {
-		return metrics.HostObservation{}, nil, "", err
+		return metrics.HostObservation{}, nil, "", "", err
 	}
 	network := hostcollector.AggregateNetwork(networks)
 
@@ -301,8 +315,8 @@ func (s *Sampler) collectHost(now time.Time) (metrics.HostObservation, []metrics
 		UptimeSeconds: &uptime,
 	}
 
-	fsystems, fsErr := s.collectFilesystems(now)
-	if fsErr == nil && len(fsystems) > 0 {
+	fsystems, fsReason := s.collectFilesystems(now)
+	if len(fsystems) > 0 {
 		var totalBytes, usedBytes int64
 		for _, fs := range fsystems {
 			if fs.TotalBytes != nil {
@@ -316,7 +330,7 @@ func (s *Sampler) collectHost(now time.Time) (metrics.HostObservation, []metrics
 	}
 
 	bootRaw, _ := read("sys/kernel/random/boot_id")
-	return observation, fsystems, strings.TrimSpace(string(bootRaw)), nil
+	return observation, fsystems, strings.TrimSpace(string(bootRaw)), fsReason, nil
 }
 
 func deltaInt64(current, previous uint64) *int64 {
@@ -327,49 +341,122 @@ func deltaInt64(current, previous uint64) *int64 {
 	return &v
 }
 
-func (s *Sampler) collectFilesystems(now time.Time) ([]metrics.FilesystemObservation, error) {
-	mountsRaw, err := os.ReadFile(filepath.Join(s.HostProc, "self/mountinfo"))
+// selfMountinfo lists the reader's own mounts; it is used only to confirm
+// that HostRoot is a mount point, never as a source of host filesystems.
+const selfMountinfo = "/proc/self/mountinfo"
+
+// collectFilesystems reads the host mount namespace from <HostProc>/1/mountinfo
+// and measures each retained mount with statfs(<HostRoot>/<target>). The
+// returned reason is non-empty when filesystem metrics are partial or missing;
+// the other host metrics are unaffected (ADR 022 §6).
+func (s *Sampler) collectFilesystems(now time.Time) ([]metrics.FilesystemObservation, string) {
+	statfs := s.statfs
+	if statfs == nil {
+		statfs = unix.Statfs
+	}
+	hostRoot := s.HostRoot
+	if hostRoot == "" {
+		hostRoot = "/"
+	}
+	mountPoint := s.mountPoint
+	if mountPoint == nil {
+		mountPoint = isMountPoint
+	}
+	if !mountPoint(hostRoot) {
+		return nil, "host root not mounted; filesystem metrics unavailable"
+	}
+	raw, err := os.ReadFile(filepath.Join(s.HostProc, "1", "mountinfo"))
 	if err != nil {
-		mountsRaw, err = os.ReadFile(filepath.Join(s.HostProc, "mounts"))
-		if err != nil {
-			return nil, err
+		return nil, "host mounts unavailable: " + err.Error()
+	}
+	mounts, err := hostcollector.ParseMountinfo(string(raw))
+	if err != nil {
+		return nil, "host mounts unavailable: " + err.Error()
+	}
+	dataDevice := ""
+	if s.DataDir != "" {
+		var st unix.Stat_t
+		if unix.Stat(s.DataDir, &st) == nil {
+			dev := uint64(st.Dev) // Dev is uint32 on some architectures
+			dataDevice = fmt.Sprintf("%d:%d", unix.Major(dev), unix.Minor(dev))
 		}
 	}
-	mounts := hostcollector.ParseMounts(string(mountsRaw), s.DataDir)
-	out := make([]metrics.FilesystemObservation, 0, len(mounts))
-	seen := map[string]bool{}
-	for _, m := range mounts {
-		key := m.Source + "|" + m.Target
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
+	selected := hostcollector.SelectFilesystems(mounts, dataDevice)
+	out := make([]metrics.FilesystemObservation, 0, len(selected)+1)
+	skipped, firstSkipped := 0, ""
+	haveData := false
+	for _, m := range selected {
 		var fs unix.Statfs_t
-		if unix.Statfs(m.Target, &fs) != nil {
+		if err := statfs(filepath.Join(hostRoot, m.Target), &fs); err != nil {
+			skipped++
+			if firstSkipped == "" {
+				firstSkipped = m.Target + ": " + err.Error()
+			}
 			continue
 		}
-		total := int64(fs.Blocks) * int64(fs.Bsize)
-		available := int64(fs.Bavail) * int64(fs.Bsize)
-		free := int64(fs.Bfree) * int64(fs.Bsize)
-		used := total - free
-		var usedPct *float64
-		if total > 0 {
-			v := float64(used) * 100 / float64(total)
-			usedPct = &v
-		}
-		var totalInodes, usedInodes *int64
-		if fs.Files > 0 {
-			ti := int64(fs.Files)
-			ui := int64(fs.Files - fs.Ffree)
-			totalInodes, usedInodes = &ti, &ui
-		}
-		out = append(out, metrics.FilesystemObservation{
-			At: now, MountKey: key, MountPoint: m.Target, FSType: m.FSType,
-			TotalBytes: &total, UsedBytes: &used, AvailableBytes: &available, UsedPercent: usedPct,
-			InodesTotal: totalInodes, InodesUsed: usedInodes,
-		})
+		haveData = haveData || m.Device() == dataDevice
+		out = append(out, filesystemObservation(now, m.Source+"|"+m.Target, m.Target, m.FSType, fs))
 	}
-	return out, nil
+	// The data directory's filesystem is always reported: the storage budget's
+	// free-disk floor depends on it, even when the host namespace does not
+	// show it (a standalone binary on a private mount, for example).
+	if !haveData && dataDevice != "" {
+		var fs unix.Statfs_t
+		if statfs(s.DataDir, &fs) == nil {
+			out = append(out, filesystemObservation(now, "data|"+s.DataDir, s.DataDir, "", fs))
+		}
+	}
+	if skipped > 0 {
+		return out, fmt.Sprintf("%d of %d filesystems skipped: %s", skipped, len(selected), firstSkipped)
+	}
+	return out, ""
+}
+
+func filesystemObservation(now time.Time, key, target, fsType string, fs unix.Statfs_t) metrics.FilesystemObservation {
+	total := int64(fs.Blocks) * int64(fs.Bsize)
+	available := int64(fs.Bavail) * int64(fs.Bsize)
+	free := int64(fs.Bfree) * int64(fs.Bsize)
+	used := total - free
+	var usedPct *float64
+	if total > 0 {
+		v := float64(used) * 100 / float64(total)
+		usedPct = &v
+	}
+	var totalInodes, usedInodes *int64
+	if fs.Files > 0 {
+		ti := int64(fs.Files)
+		ui := int64(fs.Files - fs.Ffree)
+		totalInodes, usedInodes = &ti, &ui
+	}
+	return metrics.FilesystemObservation{
+		At: now, MountKey: key, MountPoint: target, FSType: fsType,
+		TotalBytes: &total, UsedBytes: &used, AvailableBytes: &available, UsedPercent: usedPct,
+		InodesTotal: totalInodes, InodesUsed: usedInodes,
+	}
+}
+
+// isMountPoint reports whether path is a mount point: "/" always is, any other
+// path is when the reader's own mountinfo lists it or its device differs from
+// its parent's.
+func isMountPoint(path string) bool {
+	path = filepath.Clean(path)
+	if path == "/" {
+		return true
+	}
+	if raw, err := os.ReadFile(selfMountinfo); err == nil {
+		if mounts, err := hostcollector.ParseMountinfo(string(raw)); err == nil {
+			for _, m := range mounts {
+				if m.Target == path {
+					return true
+				}
+			}
+		}
+	}
+	var st, parent unix.Stat_t
+	if unix.Stat(path, &st) != nil || unix.Stat(filepath.Dir(path), &parent) != nil {
+		return false
+	}
+	return st.Dev != parent.Dev
 }
 
 type resourceGroup struct {
