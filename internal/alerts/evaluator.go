@@ -208,6 +208,13 @@ func (e *Evaluator) evaluateFilesystems(ctx context.Context, rules []Rule, files
 			if effectiveRule(rules, rule.Family, "filesystem", fs.MountKey).ID != rule.ID {
 				continue
 			}
+			if rule.Family == FamilyFilesystemFull {
+				value, failing, recovered := fullWithin(fs.Trend, *rule.Threshold, *rule.RecoveryThreshold)
+				if err := e.evaluate(ctx, rule, "filesystem", fs.MountKey, value, failing, recovered, now); err != nil {
+					errs = append(errs, fmt.Errorf("%s %s: %w", rule.Family, fs.MountKey, err))
+				}
+				continue
+			}
 			var value *float64
 			switch rule.Family {
 			case FamilyFilesystemWarning, FamilyFilesystemCritical:
@@ -225,6 +232,33 @@ func (e *Evaluator) evaluateFilesystems(ctx context.Context, rules []Rule, files
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// MinFullConfidence is the estimate confidence at or above which the
+// filesystem-full family may fire.
+const MinFullConfidence = 0.6
+
+// fullWithin evaluates the filesystem-full family against one estimate. It
+// fails when the filesystem is filling, would be full in fewer than threshold
+// days, and the estimate's confidence is at least MinFullConfidence. It
+// recovers when the filesystem stops filling or the projection reaches
+// recovery days, never fewer than threshold days: more days is healthier, so
+// a recovery below the threshold would let one estimate both fail and
+// recover and the alert would flap. An unknown or low-confidence estimate neither fails nor
+// recovers, so a firing alert holds until the estimate is trustworthy again.
+// The observed value is the projection in days, 0 when there is none.
+func fullWithin(t metrics.Trend, threshold, recovery float64) (value float64, failing, recovered bool) {
+	switch t.State {
+	case metrics.TrendSteady, metrics.TrendShrinking:
+		return 0, false, true
+	case metrics.TrendFilling:
+		if t.DaysToFull == nil {
+			return 0, false, false
+		}
+		days := *t.DaysToFull
+		return days, days < threshold && t.Confidence >= MinFullConfidence, days >= math.Max(recovery, threshold)
+	}
+	return 0, false, false
 }
 
 func effectiveRule(rules []Rule, family, targetType, target string) Rule {

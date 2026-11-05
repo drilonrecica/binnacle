@@ -133,6 +133,7 @@ var editable = map[string]ApplyMode{
 	"retention.fifteen_minute": ApplyLive, "retention.one_hour": ApplyLive,
 	"database.target_budget_bytes": ApplyLive,
 	"sessions.idle_timeout":        ApplyLive, "sessions.absolute_lifetime": ApplyLive,
+	"estimator.window_hours": ApplyLive,
 }
 var visible = func() map[string]ApplyMode {
 	result := map[string]ApplyMode{

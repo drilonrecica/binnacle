@@ -27,6 +27,7 @@ import (
 	"github.com/drilonrecica/binnacle/internal/demo"
 	"github.com/drilonrecica/binnacle/internal/diagnostics"
 	"github.com/drilonrecica/binnacle/internal/dockerapi"
+	"github.com/drilonrecica/binnacle/internal/estimator"
 	"github.com/drilonrecica/binnacle/internal/metrics"
 	"github.com/drilonrecica/binnacle/internal/notifications"
 	"github.com/drilonrecica/binnacle/internal/onboarding"
@@ -96,10 +97,15 @@ func main() {
 	preferenceRepository := preferences.NewRepository(nil)
 	checker := diagnostics.OnboardingChecker{HostProc: config.Paths.HostProc, HostSys: config.Paths.HostSys, DataDir: config.Paths.DataDir}
 	onboardingService := onboarding.New(nil, checker)
+	// The estimator recomputes time-to-full trends every five minutes; a
+	// window change wakes it so the new window shows without the wait.
+	trendEstimator := &estimator.Estimator{Engine: engine, Source: store, Logger: log}
 	settingsService := settings.NewService(settings.NewStore(nil), config, effectiveSettings, func(updated settings.Config) {
 		sessions.SetConfig(auth.SessionConfig{IdleTimeout: updated.Sessions.IdleTimeout, AbsoluteLifetime: updated.Sessions.AbsoluteLifetime})
 		store.SetRetention(storage.RetentionCutoffs{Raw: updated.Retention.Raw, OneMinute: updated.Retention.OneMinute, FifteenMinute: updated.Retention.FifteenMinute, OneHour: updated.Retention.OneHour})
+		trendEstimator.Wake()
 	})
+	trendEstimator.WindowHours = func() int { return settingsService.Current().Estimator.WindowHours }
 	onboardingService.SetRetentionSettings(settingsService)
 	checkRepository := checks.NewRepository(nil)
 	alertRepository := alerts.NewRepository(nil)
@@ -231,6 +237,7 @@ func main() {
 	if !*demoMode && !config.Demo {
 		application.Add(checkScheduler)
 	}
+	application.Add(trendEstimator)
 	application.Add(alertEvaluator)
 	application.Add(notificationWorker)
 

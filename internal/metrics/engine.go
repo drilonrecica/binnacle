@@ -25,6 +25,64 @@ type Engine struct {
 	eventsDropped uint64
 	// window accumulates the ticks published since the last PersistenceBatch.
 	window window
+	// trends holds the latest time-to-full estimates (SPEC §P3-12), set by
+	// the estimator every few minutes and attached to every snapshot.
+	trends trendSet
+}
+
+// trendSet is one estimator run: the memory estimate and one per mount key.
+type trendSet struct {
+	set         bool
+	windowHours int
+	memory      Trend
+	filesystems map[string]Trend
+}
+
+// filesystem returns the estimate of mountKey, unknown when the estimator has
+// none for it (a new mount, or before the first run).
+func (t trendSet) filesystem(mountKey string) Trend {
+	if v, ok := t.filesystems[mountKey]; ok {
+		return v
+	}
+	return UnknownTrend(t.window())
+}
+
+func (t trendSet) memoryTrend() Trend {
+	if t.set {
+		return t.memory
+	}
+	return UnknownTrend(t.window())
+}
+
+func (t trendSet) window() int {
+	if t.windowHours > 0 {
+		return t.windowHours
+	}
+	return DefaultTrendWindowHours
+}
+
+// withTrends returns a copy of obs carrying the current estimates.
+func (t trendSet) withTrends(obs []FilesystemObservation) []FilesystemObservation {
+	out := append([]FilesystemObservation(nil), obs...)
+	for i := range out {
+		out[i].Trend = t.filesystem(out[i].MountKey)
+	}
+	return out
+}
+
+// SetTrends replaces the time-to-full estimates attached to snapshots. The
+// estimator calls it after each run; filesystems is keyed by mount key.
+func (e *Engine) SetTrends(windowHours int, memory Trend, filesystems map[string]Trend) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	copied := make(map[string]Trend, len(filesystems))
+	for k, v := range filesystems {
+		copied[k] = v
+	}
+	e.trends = trendSet{set: true, windowHours: windowHours, memory: memory, filesystems: copied}
+	e.filesystems = e.trends.withTrends(e.filesystems)
+	e.snapshot.Filesystems = append([]FilesystemObservation(nil), e.filesystems...)
+	e.snapshot.Host.MemoryTrend = e.trends.memoryTrend()
 }
 
 // PersistenceBatch returns the persistence window ending now and starts the
@@ -100,6 +158,7 @@ func (e *Engine) Publish(snapshot Snapshot, events ...Event) {
 		snapshot.At = time.Now().UTC()
 	}
 	snapshot.At = snapshot.At.UTC()
+	snapshot.Host.MemoryTrend = e.trends.memoryTrend()
 	snapshot.Resources = append([]ResourceSnapshot(nil), snapshot.Resources...)
 	snapshot.Collectors = copyCollectors(snapshot.Collectors)
 	snapshot.Filesystems = append([]FilesystemObservation(nil), e.filesystems...)
@@ -159,8 +218,8 @@ func (e *Engine) Subscribe() *Subscription {
 func (e *Engine) PublishFilesystems(obs []FilesystemObservation) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.filesystems = append([]FilesystemObservation(nil), obs...)
-	e.snapshot.Filesystems = append([]FilesystemObservation(nil), obs...)
+	e.filesystems = e.trends.withTrends(obs)
+	e.snapshot.Filesystems = append([]FilesystemObservation(nil), e.filesystems...)
 }
 func (e *Engine) Snapshot() Snapshot { e.mu.RLock(); defer e.mu.RUnlock(); return clone(e.snapshot) }
 

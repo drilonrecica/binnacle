@@ -69,6 +69,7 @@
     if (rule.threshold == null) return null;
     if (info.unit === 'events')
       return `${rule.threshold} in ${formatSeconds(rule.windowSeconds)}`;
+    if (info.unit === 'days') return `full within ${rule.threshold} days`;
     const recovery =
       rule.recoveryThreshold != null &&
       rule.recoveryThreshold !== rule.threshold

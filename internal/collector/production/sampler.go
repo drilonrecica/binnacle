@@ -143,6 +143,9 @@ type Sampler struct {
 	// resubscribed; the docker collector reason says so.
 	eventsDisconnected atomic.Bool
 	eventsDropped      atomic.Int64
+	// dockerRoot is the Docker data root inferred from named volumes by the
+	// Docker loop and read by the host loop to give filesystems their role.
+	dockerRoot atomic.Value
 
 	// eventsBackoff overrides the resubscription backoff bounds in tests:
 	// minimum, cap and the open duration after which it resets.
@@ -796,6 +799,11 @@ func (s *Sampler) collectFilesystems(now time.Time) ([]metrics.FilesystemObserva
 		}
 	}
 	selected := hostcollector.SelectFilesystems(mounts, dataDevice)
+	dockerRoot, _ := s.dockerRoot.Load().(string)
+	if dockerRoot == "" {
+		dockerRoot = defaultDockerRoot
+	}
+	dockerDevice := deviceHolding(mounts, dockerRoot)
 	out := make([]metrics.FilesystemObservation, 0, len(selected)+1)
 	skipped, firstSkipped := 0, ""
 	haveData := false
@@ -809,7 +817,9 @@ func (s *Sampler) collectFilesystems(now time.Time) ([]metrics.FilesystemObserva
 			continue
 		}
 		haveData = haveData || m.Device() == dataDevice
-		out = append(out, filesystemObservation(now, m.Source+"|"+m.Target, m.Target, m.FSType, fs))
+		observation := filesystemObservation(now, m.Source+"|"+m.Target, m.Target, m.FSType, fs)
+		observation.Role = filesystemRole(m.Target, m.Device(), dockerDevice, dataDevice)
+		out = append(out, observation)
 	}
 	// The data directory's filesystem is always reported: the storage budget's
 	// free-disk floor depends on it, even when the host namespace does not
@@ -817,7 +827,9 @@ func (s *Sampler) collectFilesystems(now time.Time) ([]metrics.FilesystemObserva
 	if !haveData && dataDevice != "" {
 		var fs unix.Statfs_t
 		if statfs(s.DataDir, &fs) == nil {
-			out = append(out, filesystemObservation(now, "data|"+s.DataDir, s.DataDir, "", fs))
+			observation := filesystemObservation(now, "data|"+s.DataDir, s.DataDir, "", fs)
+			observation.Role = metrics.FilesystemData
+			out = append(out, observation)
 		}
 	}
 	if skipped > 0 {
@@ -933,6 +945,9 @@ func (s *Sampler) collectDocker(ctx context.Context, tick time.Time, hostTotal *
 		} else {
 			toInspect = append(toInspect, container.ID)
 		}
+	}
+	if root := dockerRootFromInspects(inspects); root != "" {
+		s.dockerRoot.Store(root)
 	}
 	listed := make(map[string]dockerapi.Container, len(containers))
 	for _, container := range containers {

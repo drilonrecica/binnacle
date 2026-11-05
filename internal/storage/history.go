@@ -509,3 +509,60 @@ func (m *Manager) HostCPU(ctx context.Context, from, to time.Time, limit int) ([
 	}
 	return r.Series[0].Points, nil
 }
+
+// UsageSample is one bucket of a usage history: the mean time, used amount
+// and capacity of the samples in it. Capacity is zero when unknown.
+type UsageSample struct {
+	At       time.Time
+	Used     float64
+	Capacity float64
+}
+
+// usageBucket is the bucket width of usage histories. At the longest
+// estimator window (168 h) a series has at most 673 buckets.
+const usageBucket = 15 * time.Minute
+
+// maxUsageBuckets bounds one usage query: a week of buckets plus the
+// partial ones at either end.
+const maxUsageBuckets = int(7*24*time.Hour/usageBucket) + 2
+
+// Usage queries for the time-to-full estimator (SPEC §P3-12). Both average
+// into fixed buckets so the estimator reads hundreds of rows, not tens of
+// thousands. The filesystem query searches the (host_id, mount_key, ts)
+// primary key; the memory query the host_rollups_1m ts key. Capacity is
+// used plus available bytes: the space an unprivileged writer can fill,
+// which on ext4 excludes the blocks reserved for root.
+const (
+	filesystemUsageSQL = `SELECT AVG(ts),AVG(used_bytes),COALESCE(AVG(used_bytes+available_bytes),0) FROM filesystem_samples_1m WHERE host_id=? AND mount_key=? AND ts>=? AND ts<=? AND used_bytes IS NOT NULL GROUP BY ts/? ORDER BY 1 LIMIT ?`
+	memoryUsageSQL     = `SELECT AVG(ts),AVG(memory_avg),0 FROM host_rollups_1m WHERE ts>=? AND ts<=? AND memory_avg IS NOT NULL GROUP BY ts/? ORDER BY 1 LIMIT ?`
+)
+
+// FilesystemUsage returns the used-bytes history of one mount between from
+// and to in 15-minute buckets.
+func (m *Manager) FilesystemUsage(ctx context.Context, mountKey string, from, to time.Time) ([]UsageSample, error) {
+	return m.usage(ctx, filesystemUsageSQL, hostID, mountKey, from.UnixMilli(), to.UnixMilli(), usageBucket.Milliseconds(), maxUsageBuckets)
+}
+
+// MemoryUsage returns the host's used-memory history between from and to in
+// 15-minute buckets, read from the 1-minute rollups. Capacity is zero: the
+// rollups do not keep the memory total.
+func (m *Manager) MemoryUsage(ctx context.Context, from, to time.Time) ([]UsageSample, error) {
+	return m.usage(ctx, memoryUsageSQL, from.UnixMilli(), to.UnixMilli(), usageBucket.Milliseconds(), maxUsageBuckets)
+}
+
+func (m *Manager) usage(ctx context.Context, query string, args ...any) ([]UsageSample, error) {
+	rows, err := m.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []UsageSample{}
+	for rows.Next() {
+		var at, used, capacity float64
+		if err = rows.Scan(&at, &used, &capacity); err != nil {
+			return nil, err
+		}
+		out = append(out, UsageSample{At: time.UnixMilli(int64(at)).UTC(), Used: used, Capacity: capacity})
+	}
+	return out, rows.Err()
+}

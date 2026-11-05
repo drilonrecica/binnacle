@@ -20,13 +20,20 @@ func (s *Server) EnableCurrent(engine *metrics.Engine, auth Authorizer) {
 			next(w, r)
 		}
 	}
+	// The server view carries the filesystems too, each with its role and
+	// time-to-full trend, beside the host's memory trend (SPEC §P3-12).
 	s.Handle("/api/v1/server", guard(func(w http.ResponseWriter, r *http.Request) {
 		snap := engine.Snapshot()
+		filesystems := snap.Filesystems
+		if filesystems == nil {
+			filesystems = []metrics.FilesystemObservation{}
+		}
 		WriteJSON(w, 200, struct {
-			At   string                  `json:"at"`
-			Boot metrics.BootIdentity    `json:"bootIdentity"`
-			Host metrics.HostObservation `json:"host"`
-		}{snap.At.UTC().Format("2006-01-02T15:04:05Z07:00"), snap.BootIdentity, snap.Host})
+			At          string                          `json:"at"`
+			Boot        metrics.BootIdentity            `json:"bootIdentity"`
+			Host        metrics.HostObservation         `json:"host"`
+			Filesystems []metrics.FilesystemObservation `json:"filesystems"`
+		}{snap.At.UTC().Format("2006-01-02T15:04:05Z07:00"), snap.BootIdentity, snap.Host, filesystems})
 	}))
 	s.Handle("/api/v1/collector-health", guard(func(w http.ResponseWriter, r *http.Request) { WriteJSON(w, 200, engine.Snapshot().Collectors) }))
 	// Per-mount filesystem usage drives the filesystem and inode alert

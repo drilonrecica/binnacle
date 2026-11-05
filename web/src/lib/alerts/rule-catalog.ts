@@ -4,7 +4,7 @@ export interface RuleInfo {
   title: string;
   description: string;
   /** Unit for the threshold, when the family has one. */
-  unit?: '%' | 'events';
+  unit?: '%' | 'events' | 'days';
   scope: string;
   editable: Array<
     | 'threshold'
@@ -95,6 +95,14 @@ export const ruleCatalog: Record<string, RuleInfo> = {
       'recoverySeconds',
       'severity',
     ],
+  },
+  filesystem_full_within_days: {
+    title: 'Filesystem full soon',
+    description:
+      'A filesystem is projected to fill within the threshold, from the trend of its recent usage. Fires only on a confident estimate.',
+    unit: 'days',
+    scope: 'Every mount',
+    editable: ['threshold', 'triggerSeconds', 'recoverySeconds', 'severity'],
   },
   restart_storm: {
     title: 'Restart storm',

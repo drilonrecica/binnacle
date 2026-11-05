@@ -101,6 +101,9 @@ type HostObservation struct {
 	DiskUsedBytes        *int64    `json:"diskUsedBytes"`
 	DiskTotalBytes       *int64    `json:"diskTotalBytes"`
 	UptimeSeconds        *float64  `json:"uptimeSeconds"`
+	// MemoryTrend is the time-to-full estimate of used memory; the engine
+	// attaches it, collectors leave it zero.
+	MemoryTrend Trend `json:"memoryTrend"`
 }
 type ContainerObservation struct {
 	ID             ContainerID    `json:"id"`
@@ -199,7 +202,22 @@ type FilesystemObservation struct {
 	InodesTotal       *int64    `json:"inodesTotal"`
 	InodesUsed        *int64    `json:"inodesUsed"`
 	InodesUsedPercent *float64  `json:"inodesUsedPct"`
+	// Role is FilesystemRoot, FilesystemDocker, FilesystemData or
+	// FilesystemOther; the host collector sets it.
+	Role string `json:"role"`
+	// Trend is the time-to-full estimate of used bytes; the engine attaches
+	// it, collectors leave it zero.
+	Trend Trend `json:"trend"`
 }
+
+// Filesystem roles. A mount that matches several takes the first in this
+// order: root, docker, data, other.
+const (
+	FilesystemRoot   = "root"
+	FilesystemDocker = "docker"
+	FilesystemData   = "data"
+	FilesystemOther  = "other"
+)
 
 // PersistenceBatch is one persistence window. Snapshot carries the window
 // aggregate of every tick published since the previous batch (means for rates

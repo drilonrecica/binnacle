@@ -31,6 +31,7 @@ type Config struct {
 	Features      Features      `toml:"features"`
 	Prometheus    Prometheus    `toml:"prometheus"`
 	Sessions      Sessions      `toml:"sessions"`
+	Estimator     Estimator     `toml:"estimator"`
 	Demo          bool          `toml:"demo"`
 }
 type Paths struct {
@@ -101,6 +102,12 @@ type Sessions struct {
 	IdleTimeout      time.Duration `toml:"idle_timeout"`
 	AbsoluteLifetime time.Duration `toml:"absolute_lifetime"`
 }
+
+// Estimator configures the time-to-full estimates (SPEC §P3-12).
+type Estimator struct {
+	// WindowHours is the history the linear fit covers, 6 to 168 hours.
+	WindowHours int `toml:"window_hours"`
+}
 type Coolify struct {
 	URL               string `toml:"url"`
 	APIToken          string `toml:"-"`
@@ -129,6 +136,7 @@ func Defaults() Config {
 		Paths: Paths{DataDir: "/var/lib/binnacle", HostProc: "/proc", HostSys: "/sys", HostRoot: "/", HostPasswd: "/host/etc/passwd"}, HTTP: HTTP{ListenAddress: ":8080"}, Auth: Auth{Mode: "local", IdentityHeader: "X-Forwarded-User"},
 		Collection: Collection{HostInterval: 2 * time.Second, ContainerInterval: 2 * time.Second, MinimumInterval: time.Second}, Live: Live{SSEInterval: 2 * time.Second, MaxClients: 8}, Persistence: Persistence{RawInterval: 10 * time.Second, QueueBatchLimit: 60},
 		Retention: Retention{Preset: "balanced", Raw: 48 * time.Hour, OneMinute: 30 * 24 * time.Hour, FifteenMinute: 365 * 24 * time.Hour, OneHour: 0}, Database: Database{TargetBudgetBytes: 1073741824}, Docker: Docker{SocketPath: "/var/run/docker.sock", MaxConcurrency: 4}, Checks: Checks{MaxConcurrency: 8}, Notifications: Notifications{MaxConcurrency: 4, QueueCapacity: 1000, DeliveryTimeout: 15 * time.Second, ReminderInterval: 2 * time.Hour}, Logs: Logs{MaxResponseBytes: 1048576, MaxLines: 5000}, Sessions: Sessions{IdleTimeout: 12 * time.Hour, AbsoluteLifetime: 720 * time.Hour},
+		Estimator: Estimator{WindowHours: 24},
 	}
 }
 func RetentionPreset(name string) (Retention, bool) {
@@ -228,6 +236,9 @@ func (c Config) Validate() error {
 	}
 	if c.Notifications.MaxConcurrency < 1 || c.Notifications.MaxConcurrency > 32 || c.Notifications.QueueCapacity < 1 || c.Notifications.QueueCapacity > 10000 || c.Notifications.DeliveryTimeout < time.Second || c.Notifications.DeliveryTimeout > time.Minute || c.Notifications.ReminderInterval < time.Minute || c.Notifications.ReminderInterval > 24*time.Hour {
 		return fmt.Errorf("notification limits are outside supported bounds")
+	}
+	if c.Estimator.WindowHours < 6 || c.Estimator.WindowHours > 168 {
+		return fmt.Errorf("estimator.window_hours must be between 6 and 168")
 	}
 	if c.Retention.Preset != "minimal" && c.Retention.Preset != "balanced" && c.Retention.Preset != "long-term" && c.Retention.Preset != "advanced" {
 		return fmt.Errorf("retention.preset must be minimal, balanced, long-term, or advanced")

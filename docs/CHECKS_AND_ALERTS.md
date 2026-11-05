@@ -9,3 +9,18 @@ Checks are skipped while their resource is paused or archived. The worker count 
 Container state comes from the Docker container list on every collection tick, so a stopped or exited container is shown as down within one tick even if Docker events are lost. Docker events (stop, die, kill, pause, health changes) update the state between ticks; a health change such as `health_status: unhealthy` takes effect without waiting for the next inspect. When the events stream drops, Binnacle resubscribes with exponential backoff (1 s doubling to 60 s), reports `events disconnected` on the Docker collector meanwhile, and re-inspects every container after reconnecting. Each Docker event is recorded against the resource of its container, which the restart-storm and OOM-loop rules count per resource within their window.
 
 Resolved alerts are retained for one year. Expired silences are retained for 90 days. Alert evaluation continues during a silence or deployment grace period, so a persistent failure fires when suppression ends. Each alert family is evaluated on its own every ten seconds: an error in one family (for example a failed query) is logged and the other families are still evaluated.
+
+## Time-to-full estimates
+
+Binnacle estimates when each filesystem and host memory will run out. Every five minutes it fits a least-squares line to the used bytes of the last 24 hours (`estimator.window_hours`, 6 to 168, environment `BINNACLE_ESTIMATOR_WINDOW_HOURS`, editable live in Settings) and reports one of:
+
+- `steady`: the line changes usage by less than 1 % of capacity over the window;
+- `shrinking`: usage is going down;
+- `filling`: usage is going up; `daysToFull` and `fullAt` give when it reaches capacity at that rate;
+- `unknown`: there are fewer than three hours of history, or no capacity is known. The interface says "not enough history".
+
+Each estimate carries a `confidence` from 0 to 1: one minus the root-mean-square distance of the history from the line, divided by the larger of the projected change and 1 % of capacity. A clean, steady rate scores near 1; a volume that swings more than it grows scores near 0. Filesystem history comes from the per-mount samples (kept for the raw retention period, 48 hours by default) and memory history from the 1-minute rollups, both averaged into 15-minute buckets. Filesystem capacity is used plus available bytes, so the blocks ext4 reserves for root do not count as free. Estimates are computed in the background and attached to the live snapshot, `/api/v1/server` (`host.memoryTrend` and `filesystems[].trend`) and `/api/v1/filesystems`; a request never triggers a computation.
+
+Every filesystem also has a `role`: `root` (mounted at `/`), `docker` (holds the Docker data root), `data` (holds Binnacle's data directory) or `other`, with that precedence when one disk has several. The Docker data root is inferred from the containers' named volumes, whose host path is `<data-root>/volumes/<name>/_data`. Without a named volume, the default `/var/lib/docker` is assumed. Binnacle does not ask the daemon (`GET /info`), because the socket proxy does not allow that path (ADR 022, ADR 026).
+
+The built-in rule **Filesystem full within days** (`filesystem_full_within_days`, warning) fires when a filesystem is filling, would be full in fewer days than its threshold (default 7), and the estimate's confidence is at least 0.6. It must hold for 15 minutes. It recovers when the filesystem stops filling or the projection reaches the recovery threshold (never fewer days than the threshold), and holds while the estimate is unknown or not confident. Like the other filesystem rules, a rule scoped to one mount replaces the global rule for that mount.

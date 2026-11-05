@@ -227,17 +227,17 @@ func (g *Generator) SnapshotAt(step uint64, now time.Time) metrics.Snapshot {
 // the Host page have realistic data in demo mode.
 func (g *Generator) FilesystemsAt(step uint64, now time.Time) []metrics.FilesystemObservation {
 	now = now.UTC()
-	mount := func(key, point, fsType string, total, used, inodesTotal, inodesUsed int64) metrics.FilesystemObservation {
+	mount := func(key, point, fsType, role string, total, used, inodesTotal, inodesUsed int64) metrics.FilesystemObservation {
 		available := total - used
 		usedPct := float64(used) / float64(total) * 100
 		inodesPct := float64(inodesUsed) / float64(inodesTotal) * 100
-		return metrics.FilesystemObservation{At: now, MountKey: key, MountPoint: point, FSType: fsType, TotalBytes: &total, UsedBytes: &used, AvailableBytes: &available, UsedPercent: &usedPct, InodesTotal: &inodesTotal, InodesUsed: &inodesUsed, InodesUsedPercent: &inodesPct}
+		return metrics.FilesystemObservation{At: now, MountKey: key, MountPoint: point, FSType: fsType, TotalBytes: &total, UsedBytes: &used, AvailableBytes: &available, UsedPercent: &usedPct, InodesTotal: &inodesTotal, InodesUsed: &inodesUsed, InodesUsedPercent: &inodesPct, Role: role}
 	}
 	drift := int64(step%86_400) * int64(3<<10)
 	return []metrics.FilesystemObservation{
-		mount("root", "/", "ext4", 80<<30, 42<<30+drift, 5_242_880, 812_331),
-		mount("docker", "/var/lib/docker", "xfs", 200<<30, 163<<30+drift*4, 104_857_600, 9_812_331),
-		mount("boot", "/boot", "vfat", 1<<30, 302<<20, 0+65_536, 402),
+		mount("root", "/", "ext4", metrics.FilesystemRoot, 80<<30, 42<<30+drift, 5_242_880, 812_331),
+		mount("docker", "/var/lib/docker", "xfs", metrics.FilesystemDocker, 200<<30, 163<<30+drift*4, 104_857_600, 9_812_331),
+		mount("boot", "/boot", "vfat", metrics.FilesystemOther, 1<<30, 302<<20, 0+65_536, 402),
 	}
 }
 

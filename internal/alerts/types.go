@@ -34,12 +34,15 @@ const (
 	FamilyFilesystemCritical = "filesystem_critical"
 	FamilyInodeWarning       = "inode_warning"
 	FamilyInodeCritical      = "inode_critical"
-	FamilyRestartStorm       = "restart_storm"
-	FamilyOOMLoop            = "oom_loop"
-	FamilyRequiredCheck      = "required_check_failure"
-	FamilyOptionalCheck      = "optional_check_failure"
-	FamilyDockerDown         = "docker_collector_down"
-	FamilyPersistence        = "persistence_failure"
+	// FamilyFilesystemFull fires when a filesystem's time-to-full estimate
+	// is under the threshold in days (SPEC §P3-12).
+	FamilyFilesystemFull = "filesystem_full_within_days"
+	FamilyRestartStorm   = "restart_storm"
+	FamilyOOMLoop        = "oom_loop"
+	FamilyRequiredCheck  = "required_check_failure"
+	FamilyOptionalCheck  = "optional_check_failure"
+	FamilyDockerDown     = "docker_collector_down"
+	FamilyPersistence    = "persistence_failure"
 )
 
 type Rule struct {
@@ -122,6 +125,7 @@ func DefaultRules() []Rule {
 		{ID: "builtin-filesystem-critical", Family: FamilyFilesystemCritical, Name: "Filesystem critical", BuiltIn: true, Enabled: true, Severity: Critical, ScopeType: "global", Threshold: ptr(95), RecoveryThreshold: ptr(90), TriggerDuration: 2 * time.Minute, RecoveryDuration: 2 * time.Minute},
 		{ID: "builtin-inode-warning", Family: FamilyInodeWarning, Name: "Inode warning", BuiltIn: true, Enabled: true, Severity: Warning, ScopeType: "global", Threshold: ptr(80), RecoveryThreshold: ptr(80), TriggerDuration: 5 * time.Minute, RecoveryDuration: 2 * time.Minute},
 		{ID: "builtin-inode-critical", Family: FamilyInodeCritical, Name: "Inode critical", BuiltIn: true, Enabled: true, Severity: Critical, ScopeType: "global", Threshold: ptr(95), RecoveryThreshold: ptr(90), TriggerDuration: 2 * time.Minute, RecoveryDuration: 2 * time.Minute},
+		{ID: "builtin-filesystem-full", Family: FamilyFilesystemFull, Name: "Filesystem full within days", BuiltIn: true, Enabled: true, Severity: Warning, ScopeType: "global", Threshold: ptr(7), RecoveryThreshold: ptr(7), TriggerDuration: 15 * time.Minute, RecoveryDuration: 15 * time.Minute},
 		{ID: "builtin-restart-storm", Family: FamilyRestartStorm, Name: "Restart storm", BuiltIn: true, Enabled: true, Severity: Warning, ScopeType: "global", Threshold: ptr(3), TriggerDuration: 0, RecoveryDuration: 10 * time.Minute, Window: 10 * time.Minute, SuppressDuringDeployment: true},
 		{ID: "builtin-oom-loop", Family: FamilyOOMLoop, Name: "OOM loop", BuiltIn: true, Enabled: true, Severity: Critical, ScopeType: "global", Threshold: ptr(2), TriggerDuration: 0, RecoveryDuration: 10 * time.Minute, Window: 10 * time.Minute},
 		{ID: "builtin-required-check", Family: FamilyRequiredCheck, Name: "Required check failure", BuiltIn: true, Enabled: true, Severity: Critical, ScopeType: "global", TriggerDuration: 2 * time.Minute, RecoveryDuration: 2 * time.Minute, SuppressDuringDeployment: true},

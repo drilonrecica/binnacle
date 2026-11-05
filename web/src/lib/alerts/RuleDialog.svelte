@@ -127,12 +127,16 @@
           <Field
             label={info.unit === 'events'
               ? 'Events in window'
-              : 'Trigger above'}
+              : info.unit === 'days'
+                ? 'Full within'
+                : 'Trigger above'}
             hint={info.unit === '%'
               ? 'Percent'
               : info.unit === 'events'
                 ? `Within ${Math.round((rule.windowSeconds ?? 600) / 60)} minutes`
-                : undefined}
+                : info.unit === 'days'
+                  ? 'Days, at an estimate confidence of 0.6 or more'
+                  : undefined}
           >
             {#snippet children({ id, describedBy })}
               <Input

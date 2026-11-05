@@ -87,6 +87,8 @@ func planCases(t *testing.T) []planCase {
 	return append(cases,
 		planCase{"event feed", feed, feedArgs, "events", []string{"USING INDEX events_ts (ts>? AND ts<?)"}},
 		planCase{"resource event feed", forResource, forResourceArgs, "events", []string{"USING INDEX events_resource_ts (resource_id=? AND ts>? AND ts<?)"}},
+		planCase{"filesystem usage", filesystemUsageSQL, []any{hostID, "root", from6h.UnixMilli(), to.UnixMilli(), int64(900_000), maxUsageBuckets}, "filesystem_samples_1m", []string{"USING INDEX sqlite_autoindex_filesystem_samples_1m_1 (host_id=? AND mount_key=? AND ts>? AND ts<?)"}},
+		planCase{"memory usage", memoryUsageSQL, []any{from6h.UnixMilli(), to.UnixMilli(), int64(900_000), maxUsageBuckets}, "host_rollups_1m", []string{"USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)"}},
 		planCase{"gap events", gapEventsSQL, []any{from.UnixMilli(), to.UnixMilli()}, "events", []string{"USING INDEX events_ts (ts>? AND ts<?)"}},
 		planCase{"gap collector states", gapCollectorStatesSQL, []any{"host", to.UnixMilli(), "host", from.UnixMilli()}, "collector_state_events", []string{"USING INDEX collector_state_events_collector_ts (collector_name=? AND ts>? AND ts<?)", "USING COVERING INDEX collector_state_events_collector_ts (collector_name=? AND ts>? AND ts<?)"}},
 		planCase{"gap resource activity", "WITH gaps(idx,until) AS (VALUES (?,?),(?,?))" + gapResourceActivitySQL, []any{0, from.UnixMilli(), 1, to.UnixMilli(), "res_a", "res_a"}, "resource_samples_10s", []string{"USING COVERING INDEX sqlite_autoindex_resource_samples_10s_1 (resource_id=? AND ts<?)"}},
