@@ -206,6 +206,13 @@ def summarize(samples: list[dict[str, Any]]) -> dict[str, Any]:
         if isinstance(first, (int, float)) and isinstance(last, (int, float)) and t1 and t0 and t1 > t0:
             cpu_run = (float(last) - float(first)) / (t1 - t0) * 100.0
 
+    # Committed SQLite write transactions per second over the sampled run
+    # (STO-4), from the monotonic write_transactions counter.
+    write_tps: float | None = None
+    counted = [(s["at"], s["metrics"]["write_transactions"]) for s in samples if isinstance(s.get("metrics", {}).get("write_transactions"), (int, float))]
+    if len(counted) >= 2 and counted[-1][0] > counted[0][0]:
+        write_tps = (float(counted[-1][1]) - float(counted[0][1])) / (counted[-1][0] - counted[0][0])
+
     return {
         "process": {
             "cpu_percent": agg(proc("cpu_percent")),
@@ -219,6 +226,7 @@ def summarize(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "goroutines": agg(vals("goroutines")),
         "database_bytes": agg(vals("database")),
         "wal_bytes": agg(vals("wal")),
+        "write_transactions_per_second": write_tps,
         "samples": len(samples),
     }
 

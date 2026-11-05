@@ -253,3 +253,65 @@ func TestHealthExposesPoolBounds(t *testing.T) {
 		t.Fatalf("health=%+v", health)
 	}
 }
+
+// STO-4: WriteTransactions counts commits that changed rows, not reads,
+// read-only transactions, no-op writes or rollbacks.
+func TestWriteTransactionsCountsOnlyRowChangingCommits(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	m := New(filepath.Join(dir, "binnacle.db"), filepath.Join(dir, "run"))
+	if err := m.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	count := func(name string, want uint64, run func() error) {
+		t.Helper()
+		before := WriteTransactions()
+		if err := run(); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got := WriteTransactions() - before; got != want {
+			t.Fatalf("%s counted %d, want %d", name, got, want)
+		}
+	}
+	var n int
+	count("reader query", 0, func() error { return m.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM hosts").Scan(&n) })
+	count("read-only writer transaction", 0, func() error {
+		tx, err := m.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM hosts").Scan(&n); err != nil {
+			return err
+		}
+		return tx.Commit()
+	})
+	count("no-op update", 0, func() error {
+		_, err := m.db.ExecContext(ctx, "UPDATE hosts SET name='x' WHERE id='missing'")
+		return err
+	})
+	count("rolled back insert", 0, func() error {
+		tx, err := m.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO hosts(id,identity_hash,name,updated_at) VALUES('a','a','a','now')"); err != nil {
+			return err
+		}
+		return tx.Rollback()
+	})
+	count("autocommit insert", 1, func() error { return m.UpsertHost(ctx, "host", "identity", "Server") })
+	count("two-statement transaction", 1, func() error {
+		tx, err := m.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, "UPDATE hosts SET name='a' WHERE id='host'"); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, "UPDATE hosts SET name='b' WHERE id='host'"); err != nil {
+			return err
+		}
+		return tx.Commit()
+	})
+}

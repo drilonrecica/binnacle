@@ -331,6 +331,21 @@ func (e *Evaluator) correlateDeployments(ctx context.Context, now time.Time) err
 	rows.Close()
 	for resource, deployment := range deployments {
 		at := time.UnixMilli(deployment.ms).UTC()
+		// The same deployment is correlated on every tick for ten minutes;
+		// write the grace period only when it differs from the stored one,
+		// and never recreate one that already ended (Cleanup removes those).
+		if !at.Add(5 * time.Minute).After(now) {
+			continue
+		}
+		var starts, ends int64
+		var confidence string
+		err = e.Repo.db.QueryRowContext(ctx, `SELECT starts_at,ends_at,confidence FROM deployment_grace_periods WHERE resource_id=?`, resource).Scan(&starts, &ends, &confidence)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if err == nil && starts == at.Unix() && ends == at.Add(5*time.Minute).Unix() && confidence == deployment.confidence {
+			continue
+		}
 		if _, err = e.Repo.db.ExecContext(ctx, `INSERT INTO deployment_grace_periods(resource_id,starts_at,ends_at,confidence)VALUES(?,?,?,?) ON CONFLICT(resource_id) DO UPDATE SET starts_at=excluded.starts_at,ends_at=excluded.ends_at,confidence=excluded.confidence`, resource, at.Unix(), at.Add(5*time.Minute).Unix(), deployment.confidence); err != nil {
 			return err
 		}
@@ -345,14 +360,15 @@ func (e *Evaluator) evaluate(ctx context.Context, rule Rule, targetType, target 
 	}
 	defer tx.Rollback()
 	state := State{Phase: Healthy, Since: now}
-	var phase string
+	var phase, storedRule string
 	var since int64
 	var notified, cooldown sql.NullInt64
-	err = tx.QueryRowContext(ctx, `SELECT phase,phase_since,last_notified_at,cooldown_until FROM alert_evaluation_state WHERE dedup_key=?`, key).Scan(&phase, &since, &notified, &cooldown)
+	err = tx.QueryRowContext(ctx, `SELECT rule_id,phase,phase_since,last_notified_at,cooldown_until FROM alert_evaluation_state WHERE dedup_key=?`, key).Scan(&storedRule, &phase, &since, &notified, &cooldown)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	if err == nil {
+	stored := err == nil
+	if stored {
 		state.Phase = Phase(phase)
 		state.Since = time.Unix(since, 0).UTC()
 		if notified.Valid {
@@ -369,6 +385,17 @@ func (e *Evaluator) evaluate(ctx context.Context, rule Rule, targetType, target 
 		return err
 	}
 	tr := Advance(now, state, failing, recovered, suppressed, rule)
+	if !stateChanged(stored, storedRule, state, rule.ID, tr.State) {
+		// STO-4: an unchanged phase is not rewritten every tick. Nothing
+		// reads last_evaluated_at or observed_value back; a firing alert's
+		// latest value is kept on its alerts row below.
+		if state.Phase == Firing || state.Phase == Recovering {
+			if _, err = tx.ExecContext(ctx, `UPDATE alerts SET last_observed_at=?,observed_value=? WHERE dedup_key=? AND status='firing'`, now.Unix(), value, key); err != nil {
+				return err
+			}
+		}
+		return tx.Commit()
+	}
 	details, _ := json.Marshal(map[string]any{"observed": value})
 	_, err = tx.ExecContext(ctx, `INSERT INTO alert_evaluation_state(dedup_key,rule_id,target_type,target_id,phase,phase_since,last_evaluated_at,last_notified_at,cooldown_until,observed_value,details_json)VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(dedup_key) DO UPDATE SET rule_id=excluded.rule_id,phase=excluded.phase,phase_since=excluded.phase_since,last_evaluated_at=excluded.last_evaluated_at,last_notified_at=excluded.last_notified_at,cooldown_until=excluded.cooldown_until,observed_value=excluded.observed_value,details_json=excluded.details_json`, key, rule.ID, targetType, target, tr.State.Phase, tr.State.Since.Unix(), now.Unix(), timePtr(tr.State.LastNotifiedAt), timePtr(tr.State.CooldownUntil), value, string(details))
 	if err != nil {
@@ -407,6 +434,25 @@ func (e *Evaluator) evaluate(ctx context.Context, rule Rule, targetType, target 
 	}
 	return tx.Commit()
 }
+
+// stateChanged reports whether an evaluation must write the state row: the
+// row is missing and the target is no longer healthy, the effective rule
+// changed, or the transition moved the phase or its timestamps. A missing row
+// reads as healthy everywhere, so a healthy target never gets one.
+func stateChanged(stored bool, storedRule string, previous State, ruleID string, next State) bool {
+	if !stored {
+		return next.Phase != Healthy || next.LastNotifiedAt != nil || next.CooldownUntil != nil
+	}
+	return storedRule != ruleID || previous.Phase != next.Phase || !previous.Since.Equal(next.Since) || !sameTime(previous.LastNotifiedAt, next.LastNotifiedAt) || !sameTime(previous.CooldownUntil, next.CooldownUntil)
+}
+
+func sameTime(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Equal(*b)
+}
+
 func suppressedTx(ctx context.Context, tx *sql.Tx, rule Rule, target string, now time.Time) (bool, error) {
 	var n int
 	err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM silences s WHERE s.starts_at<=? AND s.ends_at>? AND ((s.scope_type='server') OR (s.scope_type='resource' AND s.scope_id=?) OR (s.scope_type='rule' AND s.scope_id=?) OR (s.scope_type='project' AND EXISTS(SELECT 1 FROM resources r WHERE r.id=? AND r.project_name=s.scope_id)))`, now.Unix(), now.Unix(), target, rule.ID, target).Scan(&n)

@@ -27,6 +27,7 @@ with a configurable number of synthetic containers and collects:
 | CPU | `/proc/<pid>/stat` | Process CPU time over the run |
 | SQLite write latency | `/api/v1/monitor-health` | Persistence latency |
 | Queue depth / dropped batches | `/api/v1/monitor-health` | Persistence pressure |
+| Write transactions per second | `write_transactions` in `/api/v1/monitor-health` | SQLite write amplification |
 | Go heap / goroutines | `/api/v1/monitor-health` | Go runtime pressure |
 | Database size | Filesystem + monitor endpoint | On-disk growth |
 | SSE bandwidth | `/api/v1/live` | Idle live-stream data rate |
@@ -44,6 +45,16 @@ release machine with the exact binary version:
 - CPU `< 0.5%` of one core
 - SQLite write p95 `< 50 ms`
 - Idle SSE `< 10 KB/s`
+- Write transactions `< 1` per second at steady state
+
+`write_transactions` counts committed transactions that changed at least one
+row; reads, read-only transactions and no-op statements are not counted. The
+harness divides its change over the sampled run by the elapsed time. The
+STO-4 changes (session activity written once a minute, unchanged alert phases
+and container instances not rewritten) took the 30-container demo run from
+4.1 to 0.36 write transactions per second. Demo mode does not run the Docker
+collector, whose host and resource inventory is now written only on change or
+once a minute in one transaction; that path is covered by its unit tests.
 
 ## Reproducibility
 

@@ -18,7 +18,14 @@ func HostIdentity(machineID, installationID string) string {
 	return hex.EncodeToString(s[:])
 }
 func (m *Manager) UpsertHost(ctx context.Context, id, identity, name string) error {
-	_, e := m.db.ExecContext(ctx, "INSERT INTO hosts(id,identity_hash,name,updated_at) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,updated_at=excluded.updated_at", id, identity, name, time.Now().UTC().Format(time.RFC3339Nano))
+	if m.db == nil {
+		return fmt.Errorf("storage is not open")
+	}
+	return upsertHost(ctx, m.db, id, identity, name, time.Now())
+}
+
+func upsertHost(ctx context.Context, q querier, id, identity, name string, at time.Time) error {
+	_, e := q.ExecContext(ctx, "INSERT INTO hosts(id,identity_hash,name,updated_at) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,updated_at=excluded.updated_at", id, identity, name, at.UTC().Format(time.RFC3339Nano))
 	return e
 }
 func (m *Manager) OpenBoot(ctx context.Context, hostID, boot string) error {

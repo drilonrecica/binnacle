@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -66,6 +67,13 @@ const (
 	// skipLogInterval coalesces the warning for a skipped container to one
 	// line per container per interval.
 	skipLogInterval = time.Minute
+	// inventoryRefreshInterval is how often an unchanged host and resource
+	// set is rewritten (STO-4). A changed set is written on the tick that saw
+	// it. The refresh keeps resources.last_seen_at well inside
+	// inventoryArchiveAfter, so a resource still present is never archived.
+	inventoryRefreshInterval = time.Minute
+	// inventoryArchiveAfter archives resources unseen for this long.
+	inventoryArchiveAfter = 5 * time.Minute
 )
 
 // Sampler runs the host loop and the Docker loop in separate goroutines and
@@ -91,9 +99,7 @@ type Sampler struct {
 	// Logger receives collector diagnostics; nil means slog.Default().
 	Logger *slog.Logger
 	Store  interface {
-		UpsertHost(context.Context, string, string, string) error
-		UpsertResource(context.Context, storage.Resource) error
-		ArchiveMissingResources(context.Context, []string, time.Time) error
+		StoreInventory(context.Context, storage.Inventory) error
 	}
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -121,6 +127,10 @@ type Sampler struct {
 	dockerNanos    atomic.Int64
 	// skipLogged holds when a skipped container was last logged.
 	skipLogged map[string]time.Time
+	// storedInventory is the resource set last written to the store and
+	// storedInventoryAt when; nil until the first successful write.
+	storedInventory   map[string]storage.Resource
+	storedInventoryAt time.Time
 	// rediscover asks the next Docker tick to re-inspect every container: set
 	// after an events resubscription and after a dropped event.
 	rediscover atomic.Bool
@@ -328,24 +338,29 @@ func (s *Sampler) dockerTick(ctx context.Context) {
 	s.publish()
 }
 
-// storeResources records the resource identities of a successful tick.
+// storeResources records the host and resource identities of a successful
+// tick in one transaction, and only when the set changed or the last write is
+// inventoryRefreshInterval old (STO-4). A failed write is retried next tick.
 func (s *Sampler) storeResources(ctx context.Context, resources []metrics.ResourceSnapshot, now time.Time) {
 	if s.Store == nil {
 		return
 	}
-	if err := s.Store.UpsertHost(ctx, "host", storage.HostIdentity("", "binnacle-local-host"), "Server"); err != nil {
-		s.logger().Warn("storing host identity failed", "error", err.Error())
-	}
-	ids := make([]string, 0, len(resources))
+	current := make(map[string]storage.Resource, len(resources))
+	list := make([]storage.Resource, 0, len(resources))
 	for _, resource := range resources {
-		ids = append(ids, string(resource.ID))
-		if err := s.Store.UpsertResource(ctx, storage.Resource{ID: string(resource.ID), HostID: "host", StableKey: resource.StableKey, SourceKind: resource.SourceKind, Name: resource.Name, Context: resource.Context, ProjectName: resource.Project, EnvironmentName: resource.Environment, Category: resource.Category, Status: string(resource.Status)}); err != nil {
-			s.logger().Warn("storing resource failed", "resource", string(resource.ID), "error", err.Error())
-		}
+		r := storage.Resource{ID: string(resource.ID), HostID: "host", StableKey: resource.StableKey, SourceKind: resource.SourceKind, Name: resource.Name, Context: resource.Context, ProjectName: resource.Project, EnvironmentName: resource.Environment, Category: resource.Category, Status: string(resource.Status)}
+		current[r.ID] = r
+		list = append(list, r)
 	}
-	if err := s.Store.ArchiveMissingResources(ctx, ids, now.Add(-5*time.Minute)); err != nil {
-		s.logger().Warn("archiving missing resources failed", "error", err.Error())
+	if s.storedInventory != nil && maps.Equal(current, s.storedInventory) && now.Sub(s.storedInventoryAt) < inventoryRefreshInterval {
+		return
 	}
+	inventory := storage.Inventory{HostID: "host", HostIdentity: storage.HostIdentity("", "binnacle-local-host"), HostName: "Server", Resources: list, ArchiveBefore: now.Add(-inventoryArchiveAfter)}
+	if err := s.Store.StoreInventory(ctx, inventory); err != nil {
+		s.logger().Warn("storing host and resource identities failed", "resources", len(list), "error", err.Error())
+		return
+	}
+	s.storedInventory, s.storedInventoryAt = current, now
 }
 
 // staleResources copies the last successful resource set with identities

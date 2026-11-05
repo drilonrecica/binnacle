@@ -67,7 +67,10 @@ Sessions slide with activity up to `BINNACLE_SESSION_IDLE_TIMEOUT` (default
 `BINNACLE_SESSION_ABSOLUTE_LIFETIME` (default 30 days, at most 90 days); both
 can also be changed in Settings → Access. A session bootstrapped from a
 trusted proxy ends within 24 hours regardless of the configured lifetime, so a
-revoked upstream identity is re-checked at least daily. Sessions are not bound
+revoked upstream identity is re-checked at least daily. Activity is recorded at
+most once a minute (or every half idle timeout when that is shorter), so a
+polling tab does not write the session on every request; the idle expiry can
+lag the latest request by up to that interval. Sessions are not bound
 to a browser user agent or network prefix: that binding signs people out on
 browser updates and network changes without stopping a stolen cookie.
 

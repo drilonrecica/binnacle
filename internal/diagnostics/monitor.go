@@ -121,6 +121,7 @@ func (m *Monitor) Snapshot() MonitorSnapshot {
 			metric("writer_pool_wait_time", "Writer pool wait time", float64(health.Writer.WaitDuration)/float64(time.Millisecond), "milliseconds", "normal", "Total time statements spent waiting for the write connection since start."),
 			metric("reader_pool_waits", "Reader pool waits", health.Reader.WaitCount, "count", "normal", "Statements that waited for one of the four read-only SQLite connections since start."),
 			metric("reader_pool_wait_time", "Reader pool wait time", float64(health.Reader.WaitDuration)/float64(time.Millisecond), "milliseconds", "normal", "Total time statements spent waiting for a read-only connection since start."),
+			metric("write_transactions", "Write transactions", health.WriteTransactions, "count", "normal", "SQLite write transactions committed since start; the benchmark reports the rate."),
 			metric("unclean_shutdown", "Unclean shutdown", health.UncleanShutdown, "", uncleanShutdownStatus(health.UncleanShutdown), "The previous process did not close storage. SQLite recovered the WAL; run a diagnostics bundle for the full integrity check."),
 		)
 	}

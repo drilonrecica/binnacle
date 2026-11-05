@@ -69,7 +69,7 @@ func TestMonitorMarksRawDockerSocket(t *testing.T) {
 type storageHealth struct{ unclean bool }
 
 func (s storageHealth) Health() storage.Health {
-	return storage.Health{UncleanShutdown: s.unclean, Writer: storage.PoolStats{MaxOpen: 1, WaitCount: 7, WaitDuration: 350 * time.Millisecond}, Reader: storage.PoolStats{MaxOpen: 4, WaitCount: 2, WaitDuration: 20 * time.Millisecond}}
+	return storage.Health{UncleanShutdown: s.unclean, Writer: storage.PoolStats{MaxOpen: 1, WaitCount: 7, WaitDuration: 350 * time.Millisecond}, Reader: storage.PoolStats{MaxOpen: 4, WaitCount: 2, WaitDuration: 20 * time.Millisecond}, WriteTransactions: 42}
 }
 
 func TestMonitorReportsPoolWaitsAndUncleanShutdown(t *testing.T) {
@@ -79,6 +79,9 @@ func TestMonitorReportsPoolWaitsAndUncleanShutdown(t *testing.T) {
 	}
 	if byID["writer_pool_waits"].Value != int64(7) || byID["writer_pool_wait_time"].Value != float64(350) || byID["reader_pool_waits"].Value != int64(2) || byID["reader_pool_wait_time"].Value != float64(20) {
 		t.Fatalf("pool metrics=%+v", byID)
+	}
+	if byID["write_transactions"].Value != uint64(42) {
+		t.Fatalf("write_transactions=%+v", byID["write_transactions"])
 	}
 	if byID["unclean_shutdown"].Value != true || byID["unclean_shutdown"].Status != "warning" {
 		t.Fatalf("unclean_shutdown=%+v", byID["unclean_shutdown"])

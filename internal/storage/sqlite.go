@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/drilonrecica/binnacle/migrations"
@@ -34,11 +35,40 @@ const (
 	IntegrityCheckTimeout = 2 * time.Minute
 )
 
+// writeTransactions counts committed transactions that changed at least one
+// row, across every connection of the process (STO-4). SQLite's commit hook
+// also fires when a read-only transaction commits, so the update hook marks
+// the connection's open transaction as changed and only those commits count;
+// a rollback clears the mark. No table is WITHOUT ROWID, so the update hook
+// sees every row change.
+var writeTransactions atomic.Uint64
+
+// WriteTransactions is the number of row-changing transactions committed
+// since the process started, for monitor-health and the benchmark.
+func WriteTransactions() uint64 { return writeTransactions.Load() }
+
+// countWrites installs the hooks behind WriteTransactions on one connection.
+// SQLite calls a connection's hooks from the goroutine using it, one at a
+// time, so the flag needs no lock.
+func countWrites(conn *sqlite3.SQLiteConn) {
+	changed := false
+	conn.RegisterUpdateHook(func(int, string, string, int64) { changed = true })
+	conn.RegisterRollbackHook(func() { changed = false })
+	conn.RegisterCommitHook(func() int {
+		if changed {
+			writeTransactions.Add(1)
+			changed = false
+		}
+		return 0
+	})
+}
+
 func init() {
 	// journal_size_limit has no DSN parameter in the driver, so it is the one
 	// pragma applied by a connect hook. The hook runs for every connection the
 	// pools open, including reconnects, so nothing is lost after ErrBadConn.
 	sql.Register(driverName, &sqlite3.SQLiteDriver{ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+		countWrites(conn)
 		_, err := conn.Exec(fmt.Sprintf("PRAGMA journal_size_limit=%d", journalSizeLimit), nil)
 		return err
 	}})
@@ -141,12 +171,15 @@ type Health struct {
 	// RollupDuration and RetentionDuration are the wall-clock time of the
 	// latest pass of each worker; zero until the first pass completes.
 	RollupDuration, RetentionDuration time.Duration
+	// WriteTransactions is the process-wide count of committed row-changing
+	// transactions (see WriteTransactions).
+	WriteTransactions uint64
 }
 
 func (m *Manager) Health() Health {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return Health{UncleanShutdown: m.uncleanShutdown, Writer: poolStats(m.writer), Reader: poolStats(m.reader), RollupDuration: m.rollupDuration, RetentionDuration: m.retentionDuration}
+	return Health{UncleanShutdown: m.uncleanShutdown, Writer: poolStats(m.writer), Reader: poolStats(m.reader), RollupDuration: m.rollupDuration, RetentionDuration: m.retentionDuration, WriteTransactions: WriteTransactions()}
 }
 func poolStats(db *sql.DB) PoolStats {
 	if db == nil {

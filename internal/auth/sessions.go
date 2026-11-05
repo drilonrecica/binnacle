@@ -30,6 +30,12 @@ const (
 	ProxySessionLifetime       = 24 * time.Hour
 )
 
+// SessionTouchInterval is how often an active session's last_seen_at and idle
+// expiry are written (STO-4). Requests inside the interval reuse the stored
+// row, so a polling tab costs one write a minute instead of one per request;
+// the idle expiry then lags real activity by at most the interval.
+const SessionTouchInterval = time.Minute
+
 type SessionConfig struct {
 	IdleTimeout      time.Duration
 	AbsoluteLifetime time.Duration
@@ -170,7 +176,8 @@ func (s *Sessions) ValidCSRF(r *http.Request) bool {
 }
 
 // Authenticate validates a session token and counts the call as activity,
-// sliding the idle expiry forward.
+// sliding the idle expiry forward. The slide is written at most once per
+// touch interval; inside it the stored session is returned unchanged.
 func (s *Sessions) Authenticate(ctx context.Context, token string) (Session, error) {
 	cfg := s.config()
 	if !cfg.valid() {
@@ -181,12 +188,21 @@ func (s *Sessions) Authenticate(ctx context.Context, token string) (Session, err
 		return Session{}, err
 	}
 	now := s.now().UTC()
+	if now.Sub(session.LastSeenAt) < touchInterval(cfg) {
+		return session, nil
+	}
 	session.LastSeenAt = now
 	session.ExpiresAt = minTime(now.Add(cfg.IdleTimeout), session.AbsoluteExpires)
 	if _, err = s.db.ExecContext(ctx, "UPDATE sessions SET last_seen_at=?,expires_at=? WHERE id_hash=? AND revoked_at IS NULL", now.UnixMilli(), session.ExpiresAt.UnixMilli(), hash); err != nil {
 		return Session{}, err
 	}
 	return session, nil
+}
+
+// touchInterval is SessionTouchInterval, shortened to half the idle timeout so
+// a short configured timeout cannot expire a session that is in use.
+func touchInterval(cfg SessionConfig) time.Duration {
+	return min(SessionTouchInterval, cfg.IdleTimeout/2)
 }
 
 // Check validates a session token without touching its idle expiry.

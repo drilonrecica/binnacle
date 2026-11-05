@@ -74,3 +74,64 @@ func TestWriteBatchSkipsStaleAndAlreadyStoredResources(t *testing.T) {
 		t.Fatalf("recovered batch rows resource=%d component=%d", r, c)
 	}
 }
+
+// STO-4: a container instance row is updated only when its name or resource
+// changed, not on every batch. A test trigger counts the updates.
+func TestWriteBatchUpdatesContainerInstanceOnlyOnChange(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	manager := New(filepath.Join(dir, "binnacle.db"), filepath.Join(dir, "run"))
+	if err := manager.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if err := manager.UpsertHost(ctx, "host", "host-identity", "test-host"); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"web", "api"} {
+		if err := manager.UpsertResource(ctx, Resource{ID: "res_" + key, HostID: "host", StableKey: key, SourceKind: "compose", Name: key, Category: "service", Status: "healthy"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, stmt := range []string{
+		"CREATE TABLE test_instance_updates(n INTEGER NOT NULL)",
+		"INSERT INTO test_instance_updates VALUES(0)",
+		"CREATE TRIGGER test_count_instance_updates AFTER UPDATE ON container_instances BEGIN UPDATE test_instance_updates SET n=n+1; END",
+	} {
+		if _, err := manager.DB().ExecContext(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	base := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	write := func(i int, resource metrics.ResourceID, name string) {
+		t.Helper()
+		at := base.Add(time.Duration(i) * 10 * time.Second)
+		r := metrics.ResourceSnapshot{ID: resource, LastSeenAt: at, Components: []metrics.ResourceComponent{{ID: "c0ffee123456", Name: name}}}
+		snap := metrics.Snapshot{Sequence: metrics.Sequence(i + 1), At: at, Host: metrics.HostObservation{At: at}, Resources: []metrics.ResourceSnapshot{r}}
+		if err := manager.WriteBatch(ctx, metrics.PersistenceBatch{Snapshot: snap}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	updates := func() (n int) {
+		t.Helper()
+		if err := manager.DB().QueryRowContext(ctx, "SELECT n FROM test_instance_updates").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	for i := range 5 {
+		write(i, "res_web", "web_1")
+	}
+	if n := updates(); n != 0 {
+		t.Fatalf("five unchanged batches updated the instance %d times", n)
+	}
+	write(5, "res_web", "web_renamed")
+	write(6, "res_api", "web_renamed")
+	if n := updates(); n != 2 {
+		t.Fatalf("a rename and a move updated the instance %d times, want 2", n)
+	}
+	var resource, name string
+	if err := manager.DB().QueryRowContext(ctx, "SELECT resource_id,name FROM container_instances WHERE id='c0ffee123456'").Scan(&resource, &name); err != nil || resource != "res_api" || name != "web_renamed" {
+		t.Fatalf("instance resource=%s name=%s err=%v", resource, name, err)
+	}
+}

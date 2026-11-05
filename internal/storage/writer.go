@@ -58,10 +58,9 @@ func (m *Manager) WriteBatch(ctx context.Context, b metrics.PersistenceBatch) er
 				return e
 			}
 			for _, comp := range resource.Components {
-				if _, e = tx.ExecContext(ctx, "INSERT OR IGNORE INTO container_instances(id,resource_id,name,created_at) VALUES(?,?,?,?)", string(comp.ID), string(resource.ID), comp.Name, s.At.UnixMilli()); e != nil {
-					return e
-				}
-				if _, e = tx.ExecContext(ctx, "UPDATE container_instances SET resource_id=?, name=? WHERE id=?", string(resource.ID), comp.Name, string(comp.ID)); e != nil {
+				// STO-4: an instance row is rewritten only when its name or
+				// resource changed, not on every batch.
+				if _, e = tx.ExecContext(ctx, "INSERT INTO container_instances(id,resource_id,name,created_at) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET resource_id=excluded.resource_id,name=excluded.name WHERE resource_id IS NOT excluded.resource_id OR name IS NOT excluded.name", string(comp.ID), string(resource.ID), comp.Name, s.At.UnixMilli()); e != nil {
 					return e
 				}
 				if _, e = tx.ExecContext(ctx, "INSERT OR REPLACE INTO container_instance_samples_10s(ts,container_instance_id,cpu_host_pct,memory_working_set_bytes,memory_usage_bytes,network_rx_bps,network_tx_bps,block_read_bps,block_write_bps,pids) VALUES(?,?,?,?,?,?,?,?,?,?)", s.At.UnixMilli(), string(comp.ID), comp.CPUHostPercent, comp.MemoryBytes, nil, comp.RXBPS, comp.TXBPS, comp.BlockReadBPS, comp.BlockWriteBPS, comp.PIDs); e != nil {

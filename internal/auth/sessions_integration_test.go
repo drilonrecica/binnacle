@@ -249,3 +249,80 @@ func TestRevokeOthersKeepsTheCurrentSession(t *testing.T) {
 		t.Fatalf("another user's session revoked: %v", err)
 	}
 }
+
+// STO-4: a polling client must not write the session row on every request.
+// last_seen_at and the idle expiry move at most once per touch interval.
+func TestAuthenticateThrottlesLastSeenWrites(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	manager := storage.New(filepath.Join(dir, "binnacle.db"), filepath.Join(dir, "run"))
+	if err := manager.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	start := time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC)
+	now := start
+	sessions := NewSessions(manager.DB(), SessionConfig{IdleTimeout: time.Hour, AbsoluteLifetime: 24 * time.Hour})
+	sessions.now = func() time.Time { return now }
+	token, _, err := sessions.Issue(ctx, "usr_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored := func() int64 {
+		var seen int64
+		if err := manager.DB().QueryRowContext(ctx, "SELECT last_seen_at FROM sessions").Scan(&seen); err != nil {
+			t.Fatal(err)
+		}
+		return seen
+	}
+	before := storage.WriteTransactions()
+	for range 59 {
+		now = now.Add(time.Second)
+		session, err := sessions.Authenticate(ctx, token)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !session.ExpiresAt.Equal(start.Add(time.Hour)) {
+			t.Fatalf("expiry moved inside the touch interval: %s", session.ExpiresAt)
+		}
+	}
+	if writes := storage.WriteTransactions() - before; writes != 0 {
+		t.Fatalf("59 requests within a minute wrote %d transactions", writes)
+	}
+	if stored() != start.UnixMilli() {
+		t.Fatal("last_seen_at written inside the touch interval")
+	}
+	now = start.Add(SessionTouchInterval)
+	session, err := sessions.Authenticate(ctx, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored() != now.UnixMilli() || !session.ExpiresAt.Equal(now.Add(time.Hour)) {
+		t.Fatalf("touch after the interval not written: seen=%d expires=%s", stored(), session.ExpiresAt)
+	}
+}
+
+// A short idle timeout shortens the touch interval so activity keeps the
+// session alive.
+func TestAuthenticateTouchIntervalHonoursShortIdleTimeout(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	manager := storage.New(filepath.Join(dir, "binnacle.db"), filepath.Join(dir, "run"))
+	if err := manager.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	now := time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC)
+	sessions := NewSessions(manager.DB(), SessionConfig{IdleTimeout: 40 * time.Second, AbsoluteLifetime: time.Hour})
+	sessions.now = func() time.Time { return now }
+	token, _, err := sessions.Issue(ctx, "usr_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 10 {
+		now = now.Add(25 * time.Second)
+		if _, err := sessions.Authenticate(ctx, token); err != nil {
+			t.Fatalf("active session expired at %s: %v", now, err)
+		}
+	}
+}
