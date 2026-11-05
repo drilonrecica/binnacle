@@ -1,14 +1,43 @@
 @font-face {
-  font-family: 'Geist Sans';
-  src: url('/fonts/geist/GeistSans-Variable.woff2') format('woff2');
-  font-weight: 100 900;
+  font-family: 'Barlow';
+  src: url('/fonts/barlow/Barlow-Regular.woff2') format('woff2');
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Geist Mono';
-  src: url('/fonts/geist/GeistMono-Variable.woff2') format('woff2');
-  font-weight: 100 900;
+  font-family: 'Barlow';
+  src: url('/fonts/barlow/Barlow-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Barlow';
+  src: url('/fonts/barlow/Barlow-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('/fonts/barlow-condensed/BarlowCondensed-SemiBold.woff2')
+    format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Medium.woff2') format('woff2');
+  font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
@@ -38,12 +67,9 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background: var(--bg);
-  color: var(--text);
-  font-size: var(--text-base);
+  color: var(--fg);
+  font-size: var(--text-body);
   line-height: var(--leading);
-  font-feature-settings:
-    'ss01' on,
-    'cv11' on;
 }
 
 h1,
@@ -51,9 +77,9 @@ h2,
 h3,
 h4 {
   margin: 0;
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   line-height: var(--leading-tight);
-  letter-spacing: var(--tracking-tight);
+  letter-spacing: var(--tracking-display);
 }
 
 p {
@@ -78,7 +104,6 @@ time,
 .num {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-feature-settings: normal;
 }
 
 button,
@@ -140,10 +165,10 @@ table {
   left: -999px;
   z-index: 200;
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--text);
-  color: var(--text-inverse);
-  font-weight: 600;
+  border-radius: var(--radius-control);
+  background: var(--fg);
+  color: var(--fg-inverse);
+  font-weight: var(--weight-semibold);
 }
 
 .skip-link:focus {
@@ -153,7 +178,7 @@ table {
 /* Thin, theme-aware scrollbars. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-color: var(--line-strong) transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -172,15 +197,15 @@ table {
   z-index: 120;
   max-width: 280px;
   padding: 4px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-3);
-  color: var(--text);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-  box-shadow: var(--shadow-md);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--panel-2);
+  color: var(--fg);
+  font-size: var(--text-meta);
+  line-height: var(--leading);
+  box-shadow: var(--shadow-overlay);
   pointer-events: none;
-  animation: tooltip-in var(--motion-fast) var(--ease-out);
+  animation: tooltip-in var(--motion) var(--ease-out);
 }
 @keyframes tooltip-in {
   from {

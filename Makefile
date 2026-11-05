@@ -100,10 +100,11 @@ web-test: ## Run frontend unit tests.
 
 	$(PNPM) --dir web test:run
 
-web-check: ## Run Svelte type checking and linting.
+web-check: ## Run Svelte type checking, linting and the design-token contrast gate.
 
 	$(PNPM) --dir web check
 	$(PNPM) --dir web lint
+	$(PNPM) --dir web contrast
 
 go-vet: web-build ## Run Go vet and the rule that forbids discarding errors with _ in internal/.
 

@@ -17,6 +17,10 @@ Last reviewed: 2026-11-05
 | Automated bumps | [`renovate.json`](../renovate.json) |
 | Vendored fonts and licenses | [`web/static/fonts/`](../web/static/fonts/), [`landing/assets/fonts/`](../landing/assets/fonts/) |
 
+The app vendors Barlow, Barlow Condensed and JetBrains Mono (all SIL OFL, see
+ADR 027) under `web/static/fonts/`; the landing page still carries Geist until
+it is restyled.
+
 Production uses a Go binary, SQLite through CGO, and embedded frontend assets.
 Node.js and frontend packages are build-time dependencies only. Exact versions
 must be read from the files above rather than copied into operational guides.

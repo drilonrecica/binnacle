@@ -84,7 +84,7 @@
     if (!values?.length) return 60;
     measureContext ??= document.createElement('canvas').getContext('2d');
     if (!measureContext) return 60;
-    measureContext.font = '11px Geist Mono, monospace';
+    measureContext.font = '11px JetBrains Mono, monospace';
     const widest = Math.max(
       ...values.map((value) => measureContext!.measureText(value).width),
     );
@@ -157,7 +157,7 @@
           stroke: axisColor,
           grid: { stroke: grid, width: 1 },
           ticks: { stroke: grid, width: 1 },
-          font: '11px Geist Mono, monospace',
+          font: '11px JetBrains Mono, monospace',
           gap: 6,
           size: 28,
         },
@@ -165,7 +165,7 @@
           stroke: axisColor,
           grid: { stroke: grid, width: 1 },
           ticks: { show: false },
-          font: '11px Geist Mono, monospace',
+          font: '11px JetBrains Mono, monospace',
           gap: 8,
           size: (_u, values) => axisWidth(values),
           values: (_u, values) => values.map((value) => formatValue(value)),

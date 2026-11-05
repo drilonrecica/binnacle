@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "lint": "eslint . --max-warnings=0",
+    "contrast": "node scripts/contrast.mjs",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "test": "vitest",
