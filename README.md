@@ -1,6 +1,6 @@
 # Binnacle
 
-![Binnacle logo](assets/brand/binnacle-wordmark-on-light.png)
+![Binnacle](assets/brand/binnacle-header.svg)
 
 > Lightweight, Coolify-aware monitoring for Docker servers.
 

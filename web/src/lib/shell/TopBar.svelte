@@ -25,14 +25,14 @@
     <a class="brand" href="/overview" aria-label="Binnacle overview">
       <img
         class="mark dark"
-        src="/brand/binnacle-mark-dark.png"
+        src="/brand/binnacle-mark.svg"
         alt=""
         width="24"
         height="24"
       />
       <img
         class="mark light"
-        src="/brand/binnacle-mark.png"
+        src="/brand/binnacle-mark-on-light.svg"
         alt=""
         width="24"
         height="24"

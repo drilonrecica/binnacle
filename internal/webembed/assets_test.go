@@ -111,3 +111,26 @@ func TestBuildIsPrecompressed(t *testing.T) {
 		t.Fatal("no precompressed asset in the embedded build; run make web-build")
 	}
 }
+
+// P4-02: every icon index.html links to, and the brand marks the shell
+// loads, is embedded and served as an image. A missing file would otherwise
+// fall back to index.html with status 200 and break the icon silently.
+func TestBrandAssetsAreEmbedded(t *testing.T) {
+	handler := Handler()
+	index := get(t, handler, "/", nil).Body.String()
+	links := regexp.MustCompile(`<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"`).FindAllStringSubmatch(index, -1)
+	if len(links) < 4 {
+		t.Fatalf("index.html links %d icons, want the SVG favicon, two PNG fallbacks and the apple-touch icon", len(links))
+	}
+	paths := []string{"/brand/binnacle-mark.svg", "/brand/binnacle-mark-on-light.svg"}
+	for _, link := range links {
+		paths = append(paths, link[1])
+	}
+	for _, path := range paths {
+		response := get(t, handler, path, nil)
+		contentType := response.Header().Get("Content-Type")
+		if response.Code != http.StatusOK || !regexp.MustCompile(`^image/(png|svg\+xml)`).MatchString(contentType) {
+			t.Errorf("%s: status %d, Content-Type %q", path, response.Code, contentType)
+		}
+	}
+}

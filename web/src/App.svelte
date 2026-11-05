@@ -149,7 +149,7 @@
 <a class="skip-link" href="#content">Skip to content</a>
 {#if loading}
   <main class="access-state" aria-busy="true">
-    <img src="/brand/binnacle-mark-dark.png" alt="" />
+    <img src="/brand/binnacle-mark.svg" alt="" width="48" height="48" />
     <p>Checking access…</p>
   </main>
 {:else if !allowed}

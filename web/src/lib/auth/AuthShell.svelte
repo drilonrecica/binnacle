@@ -26,14 +26,14 @@
       <span class="brand">
         <img
           class="mark dark"
-          src="/brand/binnacle-mark-dark.png"
+          src="/brand/binnacle-mark.svg"
           alt=""
           width="36"
           height="36"
         />
         <img
           class="mark light"
-          src="/brand/binnacle-mark.png"
+          src="/brand/binnacle-mark-on-light.svg"
           alt=""
           width="36"
           height="36"
