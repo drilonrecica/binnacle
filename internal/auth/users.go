@@ -74,23 +74,49 @@ func (c *Credentials) Authenticate(ctx context.Context, username, password strin
 	}
 	username, err := ValidateUsername(username)
 	if err != nil {
-		_ = VerifyPassword(dummyPasswordHash, password)
-		return User{}, ErrInvalidCredentials
+		return User{}, rejectWithDummyHash(password)
 	}
 	var u User
 	var created int64
 	var hash string
 	err = c.db.QueryRowContext(ctx, "SELECT id,username,password_hash,created_at FROM users WHERE username=?", username).Scan(&u.ID, &u.Username, &hash, &created)
 	if err != nil {
-		// Keep the missing-user path comparably expensive.
-		_ = VerifyPassword(dummyPasswordHash, password)
-		return User{}, ErrInvalidCredentials
+		return User{}, rejectWithDummyHash(password)
 	}
-	if !VerifyPassword(hash, password) {
+	ok, err := VerifyPassword(hash, password)
+	if err != nil {
+		return User{}, err
+	}
+	if !ok {
 		return User{}, ErrInvalidCredentials
 	}
 	u.CreatedAt = time.UnixMilli(created).UTC()
 	return u, nil
+}
+
+// rejectWithDummyHash keeps the missing-user path as expensive as a real
+// verification, and as subject to the hashing budget, so neither timing nor
+// the busy signal reveals whether a username exists.
+func rejectWithDummyHash(password string) error {
+	if _, err := VerifyPassword(dummyPasswordHash, password); err != nil {
+		return err
+	}
+	return ErrInvalidCredentials
+}
+
+// Exists reports whether username names a stored account. Login throttling
+// uses it so only real accounts get lockout buckets. Database errors read as
+// "unknown": the network bucket still applies and Authenticate fails anyway.
+func (c *Credentials) Exists(ctx context.Context, username string) bool {
+	if c == nil || c.db == nil {
+		return false
+	}
+	username, err := ValidateUsername(username)
+	if err != nil {
+		return false
+	}
+	var one int
+	return c.db.QueryRowContext(ctx, "SELECT 1 FROM users WHERE username=?", username).Scan(&one) == nil
 }
 
 func (c *Credentials) UserByID(ctx context.Context, id string) (User, error) {
@@ -128,8 +154,9 @@ func randomID() (string, error) {
 	return "usr_" + hex.EncodeToString(b), nil
 }
 
-// This valid hash is only used to equalize invalid-username and absent-user work.
-const dummyPasswordHash = "$argon2id$v=19$m=65536,t=3,p=4$MDEyMzQ1Njc4OWFiY2RlZg$Dncpc0A4KDsA4DCI5PJq5HR1uGPs2DG8hu6ZUHnLK14"
+// This valid hash is only used to equalize invalid-username and absent-user
+// work. It uses the current parameters so the dummy path costs one budget unit.
+const dummyPasswordHash = "$argon2id$v=19$m=32768,t=3,p=4$MDEyMzQ1Njc4OWFiY2RlZg$rEs+e+stt14QPJl1KJ4hsMevadn33y2bi6V4TbGJjIA"
 
 func isUnique(err error) bool {
 	return err != nil && (contains(err.Error(), "UNIQUE") || contains(err.Error(), "unique"))

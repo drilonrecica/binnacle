@@ -8,11 +8,11 @@ func TestPasswordHashRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !VerifyPassword(hash, "correct horse battery staple") {
-		t.Fatal("valid password rejected")
+	if ok, err := VerifyPassword(hash, "correct horse battery staple"); err != nil || !ok {
+		t.Fatalf("valid password ok=%v err=%v", ok, err)
 	}
-	if VerifyPassword(hash, "wrong password") {
-		t.Fatal("invalid password accepted")
+	if ok, err := VerifyPassword(hash, "wrong password"); err != nil || ok {
+		t.Fatalf("invalid password ok=%v err=%v", ok, err)
 	}
 }
 

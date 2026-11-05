@@ -78,6 +78,9 @@ func (m *MFA) Begin(ctx context.Context, user User, password string) (Enrollment
 		return Enrollment{}, ErrMasterKeyMissing
 	}
 	if _, err := m.credentials.Authenticate(ctx, user.Username, password); err != nil {
+		if errors.Is(err, ErrHashingBusy) {
+			return Enrollment{}, err
+		}
 		return Enrollment{}, ErrInvalidCredentials
 	}
 	seed := make([]byte, 20)
@@ -199,6 +202,9 @@ func (m *MFA) Verify(ctx context.Context, userID, code string) error {
 }
 func (m *MFA) Disable(ctx context.Context, user User, password, code string) error {
 	if _, err := m.credentials.Authenticate(ctx, user.Username, password); err != nil {
+		if errors.Is(err, ErrHashingBusy) {
+			return err
+		}
 		return ErrInvalidCredentials
 	}
 	if err := m.Verify(ctx, user.ID, code); err != nil {

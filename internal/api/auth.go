@@ -2,6 +2,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -21,8 +22,11 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 		}
 	}
 	proxies := protection.Proxies()
-	limited := func(w http.ResponseWriter, r *http.Request, username string) bool {
-		ok, retry := protection.AllowLogin(r, username)
+	exists := func(r *http.Request) func(string) bool {
+		return func(username string) bool { return credentials.Exists(r.Context(), username) }
+	}
+	limited := func(w http.ResponseWriter, r *http.Request, username string, known func(string) bool) bool {
+		ok, retry := protection.AllowLogin(r, username, known)
 		if ok {
 			return true
 		}
@@ -49,12 +53,16 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 			WriteError(w, http.StatusBadRequest, Error{Code: "invalid_request", Message: "A username and password are required."})
 			return
 		}
-		if !limited(w, r, body.Username) {
+		if !limited(w, r, body.Username, exists(r)) {
 			return
 		}
 		user, err := credentials.Authenticate(r.Context(), body.Username, body.Password)
 		if err == nil && mfa != nil {
 			err = mfa.Verify(r.Context(), user.ID, body.Code)
+		}
+		if errors.Is(err, auth.ErrHashingBusy) {
+			writeHashingBusy(w)
+			return
 		}
 		if err != nil {
 			WriteError(w, 401, Error{Code: "invalid_credentials", Message: "Invalid username, password, or authentication code."})
@@ -176,7 +184,7 @@ func (s *Server) EnableMFA(mfa *auth.MFA, credentials *auth.Credentials, session
 		if !ok || !csrf(w, r) {
 			return
 		}
-		if allowed, retry := protection.AllowLogin(r, user.Username); !allowed {
+		if allowed, retry := protection.AllowLogin(r, user.Username, func(string) bool { return true }); !allowed {
 			seconds := maxRetry(retry)
 			w.Header().Set("Retry-After", fmt.Sprint(seconds))
 			WriteError(w, 429, Error{Code: "rate_limited", Message: "Too many authentication attempts."})
@@ -190,6 +198,10 @@ func (s *Server) EnableMFA(mfa *auth.MFA, credentials *auth.Credentials, session
 			return
 		}
 		enrollment, err := mfa.Begin(r.Context(), user, body.Password)
+		if errors.Is(err, auth.ErrHashingBusy) {
+			writeHashingBusy(w)
+			return
+		}
 		if err != nil {
 			WriteError(w, 400, Error{Code: "mfa_enrollment_failed", Message: "MFA enrollment could not be started."})
 			return
@@ -237,9 +249,26 @@ func (s *Server) EnableMFA(mfa *auth.MFA, credentials *auth.Credentials, session
 			return
 		}
 		if err := mfa.Disable(r.Context(), user, body.Password, body.Code); err != nil {
+			if errors.Is(err, auth.ErrHashingBusy) {
+				writeHashingBusy(w)
+				return
+			}
 			WriteError(w, 401, Error{Code: "invalid_credentials", Message: "Invalid password or authentication code."})
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
+}
+
+// hashingRetrySeconds is how long a client waits when both password-hashing
+// slots are busy. One Argon2id run takes well under a second, so one second
+// is enough for a slot to free up without the UI feeling stuck.
+const hashingRetrySeconds = 1
+
+// writeHashingBusy answers 429 when the process-wide Argon2 budget is in use.
+// It is deliberately distinct from rate_limited: the client did nothing wrong
+// and may retry almost immediately.
+func writeHashingBusy(w http.ResponseWriter) {
+	w.Header().Set("Retry-After", fmt.Sprintf("%d", hashingRetrySeconds))
+	WriteError(w, http.StatusTooManyRequests, Error{Code: "server_busy", Message: "The server is busy. Try again in a moment.", Details: map[string]int{"retryAfterSeconds": hashingRetrySeconds}})
 }

@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -148,5 +150,59 @@ func TestLoginRotationAndLogoutControls(t *testing.T) {
 	}
 	if _, err = sessions.Authenticate(ctx, other); err == nil {
 		t.Fatal("logout-all left concurrent session active")
+	}
+}
+
+func TestLoginReturnsBusyWhenHashingIsSaturated(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	manager := storage.New(filepath.Join(dir, "binnacle.db"), filepath.Join(dir, "run"))
+	if err := manager.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	credentials := auth.NewCredentials(manager.DB())
+	if _, err := credentials.CreateAdmin(ctx, "admin", "correct horse battery staple"); err != nil {
+		t.Fatal(err)
+	}
+	sessions := auth.NewSessions(manager.DB(), auth.SessionConfig{IdleTimeout: time.Hour, AbsoluteLifetime: 24 * time.Hour})
+	server := New()
+	server.EnableAuth(credentials, sessions, auth.NewProtection(1024, auth.TrustedProxies{}))
+	const burst = 12
+	codes := make(chan *httptest.ResponseRecorder, burst)
+	var wg sync.WaitGroup
+	for i := 0; i < burst; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			body := fmt.Sprintf(`{"username":"stranger%d","password":"correct horse battery staple"}`, i)
+			request := httptest.NewRequest(http.MethodPost, "http://binnacle.test/api/v1/auth/login", bytes.NewBufferString(body))
+			request.RemoteAddr = fmt.Sprintf("198.18.%d.1:1234", i)
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			server.Handler().ServeHTTP(response, request)
+			codes <- response
+		}(i)
+	}
+	wg.Wait()
+	close(codes)
+	busy := 0
+	for response := range codes {
+		switch response.Code {
+		case http.StatusUnauthorized:
+		case http.StatusTooManyRequests:
+			busy++
+			if response.Header().Get("Retry-After") == "" {
+				t.Fatal("busy response without Retry-After")
+			}
+			if !bytes.Contains(response.Body.Bytes(), []byte(`"server_busy"`)) {
+				t.Fatalf("busy body=%s", response.Body.String())
+			}
+		default:
+			t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+		}
+	}
+	if busy == 0 {
+		t.Fatalf("no request was refused while %d logins hashed concurrently", burst)
 	}
 }

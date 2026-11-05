@@ -124,12 +124,21 @@ func (s *SetupService) Verify(ctx context.Context, token string) error {
 	return nil
 }
 
+// Claim creates the administrator. Availability and the token are checked
+// before any Argon2 work so an unauthenticated caller cannot spend hashing
+// memory; the transaction re-checks both so concurrent claims stay exclusive.
 func (s *SetupService) Claim(ctx context.Context, token, username, password string) (User, error) {
+	if s == nil || s.db == nil {
+		return User{}, ErrSetupUnavailable
+	}
 	username, err := ValidateUsername(username)
 	if err != nil {
 		return User{}, err
 	}
 	if err = ValidatePassword(password); err != nil {
+		return User{}, err
+	}
+	if err = s.Verify(ctx, token); err != nil {
 		return User{}, err
 	}
 	hash, err := HashPassword(password)

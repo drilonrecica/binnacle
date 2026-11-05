@@ -83,12 +83,91 @@ func TestLoginAndSetupLimitsRecover(t *testing.T) {
 		t.Fatal("setup did not recover")
 	}
 	for i := 0; i < 5; i++ {
-		if ok, _ := p.AllowLogin(r, "admin"); !ok {
+		if ok, _ := p.AllowLogin(r, "admin", known); !ok {
 			t.Fatal("login denied early")
 		}
 	}
-	if ok, _ := p.AllowLogin(r, "admin"); ok {
+	if ok, _ := p.AllowLogin(r, "admin", known); ok {
 		t.Fatal("account burst accepted")
+	}
+}
+
+func known(string) bool { return true }
+
+func TestAccountBucketsTrackOnlyRealAccounts(t *testing.T) {
+	p := NewProtection(4096, TrustedProxies{})
+	unknown := func(string) bool { return false }
+	for i := 0; i < 50; i++ {
+		r := httptest.NewRequest("POST", "http://binnacle.test/api/v1/auth/login", nil)
+		r.RemoteAddr = fmt.Sprintf("198.18.%d.1:1234", i)
+		if ok, _ := p.AllowLogin(r, fmt.Sprintf("ghost-%d", i), unknown); !ok {
+			t.Fatal("unknown name denied by an account bucket")
+		}
+	}
+	if n := p.accounts.order.Len(); n != 0 {
+		t.Fatalf("account buckets for unknown names=%d", n)
+	}
+	r := httptest.NewRequest("POST", "http://binnacle.test/api/v1/auth/login", nil)
+	r.RemoteAddr = "192.0.2.10:1234"
+	if ok, _ := p.AllowLogin(r, " Admin ", known); !ok {
+		t.Fatal("real account denied")
+	}
+	if n := p.accounts.order.Len(); n != 1 {
+		t.Fatalf("account buckets after a real login=%d", n)
+	}
+	if _, ok := p.accounts.values["admin"]; !ok {
+		t.Fatal("account bucket is not keyed by the normalized username")
+	}
+}
+
+func TestNetworkLimitedStrangerCannotDrainTheAdminBucket(t *testing.T) {
+	p := NewProtection(4096, TrustedProxies{})
+	stranger := httptest.NewRequest("POST", "http://binnacle.test/api/v1/auth/login", nil)
+	stranger.RemoteAddr = "203.0.113.5:1234"
+	for i := 0; i < 10; i++ {
+		if ok, _ := p.AllowLogin(stranger, fmt.Sprintf("ghost-%d", i), func(string) bool { return false }); !ok {
+			t.Fatal("stranger denied inside the network budget")
+		}
+	}
+	lookups := 0
+	for i := 0; i < 100; i++ {
+		ok, _ := p.AllowLogin(stranger, "admin", func(string) bool { lookups++; return true })
+		if ok {
+			t.Fatal("network-limited stranger accepted")
+		}
+	}
+	if lookups != 0 {
+		t.Fatalf("account lookups while network-limited=%d", lookups)
+	}
+	admin := httptest.NewRequest("POST", "http://binnacle.test/api/v1/auth/login", nil)
+	admin.RemoteAddr = "192.0.2.10:1234"
+	for i := 0; i < 5; i++ {
+		if ok, _ := p.AllowLogin(admin, "admin", known); !ok {
+			t.Fatalf("admin denied on attempt %d after a stranger's flood", i+1)
+		}
+	}
+}
+
+func TestFloodingUnknownNamesDoesNotEvictTheAdminBucket(t *testing.T) {
+	p := NewProtection(64, TrustedProxies{})
+	admin := httptest.NewRequest("POST", "http://binnacle.test/api/v1/auth/login", nil)
+	admin.RemoteAddr = "192.0.2.10:1234"
+	for i := 0; i < 4; i++ {
+		if ok, _ := p.AllowLogin(admin, "admin", known); !ok {
+			t.Fatal("admin denied early")
+		}
+	}
+	for i := 0; i < 500; i++ {
+		r := httptest.NewRequest("POST", "http://binnacle.test/api/v1/auth/login", nil)
+		r.RemoteAddr = fmt.Sprintf("198.18.%d.1:1234", i%256)
+		_, _ = p.AllowLogin(r, fmt.Sprintf("ghost-%d", i), func(string) bool { return false })
+		_, _ = p.AllowMetrics(r)
+	}
+	if ok, _ := p.AllowLogin(admin, "admin", known); !ok {
+		t.Fatal("admin denied on the fifth attempt")
+	}
+	if ok, _ := p.AllowLogin(admin, "admin", known); ok {
+		t.Fatal("flood reset the admin bucket")
 	}
 }
 

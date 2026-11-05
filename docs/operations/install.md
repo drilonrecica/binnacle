@@ -46,6 +46,16 @@ The Coolify template mounts the host `/proc`, `/sys`, `/etc/passwd`,
 `/etc/os-release`, and the Docker socket. It runs `read_only: true` with
 `no-new-privileges` and a 128 MiB memory limit.
 
+### Password hashing and the memory limit
+
+Passwords are hashed with Argon2id at 32 MiB, three passes, and up to four
+lanes. At most two hashes or verifications run at once across the whole
+process, so password work peaks at 64 MiB inside the 128 MiB limit. A login,
+setup claim, or MFA password check that arrives while both slots are busy is
+refused with `429 server_busy` and `Retry-After: 1`; the browser retries after
+a second. Hashes written by earlier releases at 64 MiB keep verifying, but each
+one takes both slots until the password is changed.
+
 The template intentionally exposes only first-run setup and optional Coolify
 enrichment variables. Binnacle's secure defaults apply to advanced
 authentication, portability, private-network access, Prometheus, and

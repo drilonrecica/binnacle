@@ -122,25 +122,39 @@ type Limiter struct {
 	now    func() time.Time
 }
 
+// accountBuckets bounds the per-account login LRU. Only stored accounts are
+// inserted, so the real population is the number of users (one), and an
+// attacker presenting invented names can never evict a real bucket.
+const accountBuckets = 64
+
 type Protection struct {
-	limiter *Limiter
-	proxies TrustedProxies
+	limiter  *Limiter
+	accounts *Limiter
+	proxies  TrustedProxies
 }
 
 func NewProtection(max int, proxies TrustedProxies) *Protection {
-	return &Protection{limiter: NewLimiter(max), proxies: proxies}
+	return &Protection{limiter: NewLimiter(max), accounts: NewLimiter(accountBuckets), proxies: proxies}
 }
 func (p *Protection) Proxies() TrustedProxies { return p.proxies }
 func (p *Protection) allow(scope, key string, policy BucketPolicy) (bool, time.Duration) {
 	return p.limiter.Allow(scope+":"+key, policy)
 }
-func (p *Protection) AllowLogin(r *http.Request, account string) (bool, time.Duration) {
-	a, ra := p.allow("login-ip", p.proxies.ClientPrefix(r), BucketPolicy{Capacity: 10, Refill: time.Minute})
-	b, rb := p.allow("login-account", strings.ToLower(strings.TrimSpace(account)), BucketPolicy{Capacity: 5, Refill: 5 * time.Minute})
-	if rb > ra {
-		ra = rb
+
+// AllowLogin applies the per-network budget first and, only when it passes
+// and exists reports a stored account, the per-account budget. exists runs
+// lazily so a flood that is already network-limited costs no database read and
+// never touches an account bucket (SEC-10).
+func (p *Protection) AllowLogin(r *http.Request, account string, exists func(string) bool) (bool, time.Duration) {
+	ok, retry := p.allow("login-ip", p.proxies.ClientPrefix(r), BucketPolicy{Capacity: 10, Refill: time.Minute})
+	if !ok {
+		return false, retry
 	}
-	return a && b, ra
+	account = strings.ToLower(strings.TrimSpace(account))
+	if exists == nil || !exists(account) {
+		return true, 0
+	}
+	return p.accounts.Allow(account, BucketPolicy{Capacity: 5, Refill: 5 * time.Minute})
 }
 func (p *Protection) AllowSetup(r *http.Request) (bool, time.Duration) {
 	return p.allow("setup", p.proxies.ClientPrefix(r), BucketPolicy{Capacity: 5, Refill: 5 * time.Minute})

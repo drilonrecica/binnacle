@@ -2,6 +2,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -53,6 +54,12 @@ func (s *Server) EnableSetup(setup *auth.SetupService, protection *auth.Protecti
 			WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only POST is supported."})
 			return
 		}
+		// Once an administrator exists the claim surface is gone for good, so a
+		// cheap availability read answers 404 before any limiter or hashing work.
+		if !setup.Available(r.Context()) {
+			WriteError(w, http.StatusNotFound, Error{Code: "not_found", Message: "Setup is no longer available."})
+			return
+		}
 		if !allow(w, r) {
 			return
 		}
@@ -66,7 +73,14 @@ func (s *Server) EnableSetup(setup *auth.SetupService, protection *auth.Protecti
 			return
 		}
 		user, err := setup.Claim(r.Context(), body.Token, body.Username, body.Password)
-		if err != nil {
+		switch {
+		case errors.Is(err, auth.ErrSetupUnavailable):
+			WriteError(w, http.StatusNotFound, Error{Code: "not_found", Message: "Setup is no longer available."})
+			return
+		case errors.Is(err, auth.ErrHashingBusy):
+			writeHashingBusy(w)
+			return
+		case err != nil:
 			WriteError(w, 400, Error{Code: "setup_claim_failed", Message: "The setup request could not be completed."})
 			return
 		}
