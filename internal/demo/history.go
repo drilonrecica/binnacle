@@ -4,10 +4,10 @@ package demo
 
 import (
 	"context"
-	"database/sql"
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/metrics"
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 type HistoryStore interface {
@@ -26,7 +26,7 @@ func SeedHistory(ctx context.Context, store HistoryStore, generator *Generator, 
 	now = now.UTC().Truncate(10 * time.Second)
 	// Component samples reference resource rows, which production creates
 	// through identity resolution. Demo mode creates them here instead.
-	if backed, ok := store.(interface{ DB() *sql.DB }); ok {
+	if backed, ok := store.(interface{ DB() *storage.DB }); ok {
 		if err := seedResources(ctx, backed.DB(), generator, now); err != nil {
 			return err
 		}
@@ -47,7 +47,7 @@ func SeedHistory(ctx context.Context, store HistoryStore, generator *Generator, 
 	return store.RollupOnce(ctx, now)
 }
 
-func seedResources(ctx context.Context, db *sql.DB, generator *Generator, now time.Time) error {
+func seedResources(ctx context.Context, db *storage.DB, generator *Generator, now time.Time) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

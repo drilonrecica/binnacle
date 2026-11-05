@@ -78,6 +78,7 @@ func main() {
 	application.Add(engine)
 
 	store := storage.New(config.Paths.DatabasePath, config.Paths.RuntimeDir)
+	store.Logger = log
 	store.SetBudgetTarget(config.Database.TargetBudgetBytes)
 	application.Add(store)
 	persistence := storage.NewPersistence(engine, store, config.Persistence.RawInterval, config.Persistence.QueueBatchLimit)
@@ -272,7 +273,7 @@ func main() {
 	apiServer.EnableMetrics(store, metricsAuthorizer, protection)
 	apiServer.EnableEvents(store, eventsAuthorizer, protection)
 	apiServer.EnableHistoryDeletion(store, authorizer, sessions)
-	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, Persistence: persistence, Collector: productionSampler, Notifications: notificationWorker, NotificationQueueCapacity: config.Notifications.QueueCapacity, DockerSocket: dockerSocket}
+	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, Persistence: persistence, Collector: productionSampler, Notifications: notificationWorker, NotificationQueueCapacity: config.Notifications.QueueCapacity, DockerSocket: dockerSocket, Storage: store}
 	apiServer.EnableMonitorHealth(monitor, authorizer)
 	bundleService := diagnostics.NewBundleService(func(ctx context.Context) diagnostics.BundleData {
 		schema, schemaErr := store.SchemaVersion(ctx)
@@ -281,6 +282,9 @@ func main() {
 		if sizeErr == nil {
 			databaseBytes = stat.Size()
 		}
+		// The full integrity_check runs here, on a reader connection and
+		// bounded by storage.IntegrityCheckTimeout, never at boot (ADR 021 §3).
+		integrity, integrityErr := store.IntegrityCheck(ctx)
 		var dockerVersion any
 		failures := []string{}
 		if dockerEngine != nil {
@@ -299,9 +303,14 @@ func main() {
 			"configuration": effectiveSettings, "resourceCount": len(engine.Snapshot().Resources),
 			"databaseBytes": databaseBytes, "recentInternalErrors": []string{},
 			"dockerVersion": dockerVersion, "selfMetrics": monitor.Snapshot(),
+			"databaseIntegrity": integrity,
 		}
 		if schemaErr != nil {
 			failures = append(failures, "database schema version unavailable")
+		}
+		if integrityErr != nil {
+			log.Warn("database integrity check for diagnostics failed", "error", integrityErr)
+			failures = append(failures, "database integrity check did not complete")
 		}
 		if sizeErr != nil {
 			failures = append(failures, "database size unavailable")

@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 const (
@@ -38,7 +40,7 @@ type SecretStatus struct {
 // SecretStore encrypts small secrets at rest. Each row records the key version
 // that sealed it, and Get opens it with the matching entry of the keyring.
 type SecretStore struct {
-	db      *sql.DB
+	db      *storage.DB
 	keys    map[int]cipher.AEAD
 	current int
 }
@@ -53,9 +55,9 @@ func (s *SecretStore) KeyVersion() int {
 	return s.current
 }
 
-func (s *SecretStore) SetDB(db *sql.DB) { s.db = db }
+func (s *SecretStore) SetDB(db *storage.DB) { s.db = db }
 
-func NewSecretStore(db *sql.DB, encodedKey string) (*SecretStore, error) {
+func NewSecretStore(db *storage.DB, encodedKey string) (*SecretStore, error) {
 	if encodedKey == "" {
 		return &SecretStore{db: db}, nil
 	}

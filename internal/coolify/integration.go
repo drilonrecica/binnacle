@@ -14,6 +14,7 @@ import (
 	"github.com/drilonrecica/binnacle/internal/auth"
 	"github.com/drilonrecica/binnacle/internal/metrics"
 	"github.com/drilonrecica/binnacle/internal/outbound"
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 const coolifyTokenSecret = "coolify.api_token"
@@ -28,7 +29,7 @@ var (
 )
 
 type Integration struct {
-	db                       *sql.DB
+	db                       *storage.DB
 	secrets                  *auth.SecretStore
 	env                      ClientConfig
 	environmentAuthoritative bool
@@ -50,7 +51,7 @@ type IntegrationStatus struct {
 func NewIntegration(secrets *auth.SecretStore, env ClientConfig) *Integration {
 	return &Integration{secrets: secrets, env: env, environmentAuthoritative: env.BaseURL != "" || env.Token != ""}
 }
-func (i *Integration) SetDB(db *sql.DB) { i.db = db }
+func (i *Integration) SetDB(db *storage.DB) { i.db = db }
 func (i *Integration) Start(ctx context.Context) error {
 	i.mu.Lock()
 	i.ctx = ctx

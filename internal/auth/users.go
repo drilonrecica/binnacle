@@ -4,11 +4,12 @@ package auth
 import (
 	"context"
 	"crypto/rand"
-	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 var (
@@ -22,10 +23,10 @@ type User struct {
 	CreatedAt time.Time
 }
 
-type Credentials struct{ db *sql.DB }
+type Credentials struct{ db *storage.DB }
 
-func NewCredentials(db *sql.DB) *Credentials { return &Credentials{db: db} }
-func (c *Credentials) SetDB(db *sql.DB)      { c.db = db }
+func NewCredentials(db *storage.DB) *Credentials { return &Credentials{db: db} }
+func (c *Credentials) SetDB(db *storage.DB)      { c.db = db }
 
 func (c *Credentials) CreateAdmin(ctx context.Context, username, password string) (User, error) {
 	if c == nil || c.db == nil {

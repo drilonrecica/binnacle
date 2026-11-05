@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 const SessionCookieName = "binnacle_session"
@@ -53,17 +55,17 @@ type Session struct {
 }
 
 type Sessions struct {
-	db      *sql.DB
+	db      *storage.DB
 	now     func() time.Time
 	mu      sync.RWMutex
 	cfg     SessionConfig
 	proxies TrustedProxies
 }
 
-func NewSessions(db *sql.DB, cfg SessionConfig) *Sessions {
+func NewSessions(db *storage.DB, cfg SessionConfig) *Sessions {
 	return &Sessions{db: db, cfg: cfg, now: func() time.Time { return time.Now().UTC() }}
 }
-func (s *Sessions) SetDB(db *sql.DB)                         { s.db = db }
+func (s *Sessions) SetDB(db *storage.DB)                     { s.db = db }
 func (s *Sessions) SetTrustedProxies(proxies TrustedProxies) { s.proxies = proxies }
 func (s *Sessions) SetConfig(cfg SessionConfig) {
 	if cfg.valid() {

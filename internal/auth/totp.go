@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 const (
@@ -39,7 +41,7 @@ type pendingEnrollment struct {
 	expires time.Time
 }
 type MFA struct {
-	db          *sql.DB
+	db          *storage.DB
 	credentials *Credentials
 	secrets     *SecretStore
 	sessions    *Sessions
@@ -48,10 +50,10 @@ type MFA struct {
 	pending     map[string]pendingEnrollment
 }
 
-func NewMFA(db *sql.DB, credentials *Credentials, secrets *SecretStore, sessions *Sessions) *MFA {
+func NewMFA(db *storage.DB, credentials *Credentials, secrets *SecretStore, sessions *Sessions) *MFA {
 	return &MFA{db: db, credentials: credentials, secrets: secrets, sessions: sessions, now: func() time.Time { return time.Now().UTC() }, pending: map[string]pendingEnrollment{}}
 }
-func (m *MFA) SetDB(db *sql.DB) { m.db = db }
+func (m *MFA) SetDB(db *storage.DB) { m.db = db }
 func (m *MFA) Enabled(ctx context.Context, userID string) (bool, error) {
 	var enabled bool
 	err := m.db.QueryRowContext(ctx, "SELECT totp_enabled FROM users WHERE id=?", userID).Scan(&enabled)
@@ -60,7 +62,7 @@ func (m *MFA) Enabled(ctx context.Context, userID string) (bool, error) {
 
 // ValidateAdvancedAuthState prevents disabling MFA while an administrator
 // still depends on it. Enrollment data is deliberately left untouched.
-func ValidateAdvancedAuthState(ctx context.Context, db *sql.DB, enabled bool) error {
+func ValidateAdvancedAuthState(ctx context.Context, db *storage.DB, enabled bool) error {
 	if enabled {
 		return nil
 	}

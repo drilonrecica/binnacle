@@ -3,7 +3,6 @@ package diagnostics
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/dockerapi"
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 type CheckStatus string
@@ -46,7 +46,7 @@ type OnboardingChecker struct {
 	HostProc        string
 	HostSys         string
 	DataDir         string
-	DB              *sql.DB
+	DB              *storage.DB
 	Docker          DockerDiagnostics
 	HTTPClient      *http.Client
 	OutboundURL     string

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/diagnostics"
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 type State struct {
@@ -20,7 +21,7 @@ type State struct {
 }
 
 type Service struct {
-	db        *sql.DB
+	db        *storage.DB
 	checker   diagnostics.OnboardingChecker
 	retention RetentionSettings
 	now       func() time.Time
@@ -31,11 +32,11 @@ type RetentionSettings interface {
 	SetRetentionPreset(context.Context, string, string) error
 }
 
-func New(db *sql.DB, checker diagnostics.OnboardingChecker) *Service {
+func New(db *storage.DB, checker diagnostics.OnboardingChecker) *Service {
 	return &Service{db: db, checker: checker, now: func() time.Time { return time.Now().UTC() }}
 }
 
-func (s *Service) SetDB(db *sql.DB) {
+func (s *Service) SetDB(db *storage.DB) {
 	s.db = db
 	s.checker.DB = db
 }

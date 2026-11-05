@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/metrics"
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 type Enricher struct {
 	Client                               *APIClient
-	db                                   *sql.DB
+	db                                   *storage.DB
 	MetadataInterval, DeploymentInterval time.Duration
 	mu                                   sync.RWMutex
 	byUUID                               map[string]ResourceMetadata
@@ -33,7 +34,7 @@ type SyncStatus struct {
 func NewEnricher(client *APIClient) *Enricher {
 	return &Enricher{Client: client, MetadataInterval: 5 * time.Minute, DeploymentInterval: 30 * time.Second, byUUID: map[string]ResourceMetadata{}, state: SyncStatus{State: "unknown"}}
 }
-func (e *Enricher) SetDB(db *sql.DB) { e.db = db }
+func (e *Enricher) SetDB(db *storage.DB) { e.db = db }
 func (e *Enricher) Start(ctx context.Context) error {
 	if e == nil || e.Client == nil {
 		return nil

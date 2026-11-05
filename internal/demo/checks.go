@@ -3,9 +3,9 @@ package demo
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"github.com/drilonrecica/binnacle/internal/checks"
+	"github.com/drilonrecica/binnacle/internal/storage"
 	"strings"
 	"time"
 )
@@ -20,7 +20,7 @@ func (CheckRunner) Run(_ context.Context, c checks.Check) checks.Result {
 	}
 	return r
 }
-func SeedChecksAlerts(ctx context.Context, db *sql.DB, count, resources int, now time.Time) error {
+func SeedChecksAlerts(ctx context.Context, db *storage.DB, count, resources int, now time.Time) error {
 	if count < 1 {
 		return nil
 	}

@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
-type Repository struct{ db *sql.DB }
+type Repository struct{ db *storage.DB }
 
-func NewRepository(db *sql.DB) *Repository { return &Repository{db: db} }
-func (r *Repository) SetDB(db *sql.DB)     { r.db = db }
+func NewRepository(db *storage.DB) *Repository { return &Repository{db: db} }
+func (r *Repository) SetDB(db *storage.DB)     { r.db = db }
 
 func (r *Repository) Create(ctx context.Context, c Check) error {
 	if err := c.Validate(); err != nil {

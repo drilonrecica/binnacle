@@ -4,6 +4,8 @@ package diagnostics
 import (
 	"testing"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 type notificationHealth struct{}
@@ -60,6 +62,35 @@ func TestMonitorMarksRawDockerSocket(t *testing.T) {
 	for _, value := range monitor.Snapshot().Metrics {
 		if value.ID == "docker_socket" {
 			t.Fatal("docker_socket reported without a Docker client")
+		}
+	}
+}
+
+type storageHealth struct{ unclean bool }
+
+func (s storageHealth) Health() storage.Health {
+	return storage.Health{UncleanShutdown: s.unclean, Writer: storage.PoolStats{MaxOpen: 1, WaitCount: 7, WaitDuration: 350 * time.Millisecond}, Reader: storage.PoolStats{MaxOpen: 4, WaitCount: 2, WaitDuration: 20 * time.Millisecond}}
+}
+
+func TestMonitorReportsPoolWaitsAndUncleanShutdown(t *testing.T) {
+	byID := map[string]MonitorMetric{}
+	for _, value := range (&Monitor{DatabasePath: "/missing", Storage: storageHealth{unclean: true}}).Snapshot().Metrics {
+		byID[value.ID] = value
+	}
+	if byID["writer_pool_waits"].Value != int64(7) || byID["writer_pool_wait_time"].Value != float64(350) || byID["reader_pool_waits"].Value != int64(2) || byID["reader_pool_wait_time"].Value != float64(20) {
+		t.Fatalf("pool metrics=%+v", byID)
+	}
+	if byID["unclean_shutdown"].Value != true || byID["unclean_shutdown"].Status != "warning" {
+		t.Fatalf("unclean_shutdown=%+v", byID["unclean_shutdown"])
+	}
+	for _, value := range (&Monitor{DatabasePath: "/missing", Storage: storageHealth{}}).Snapshot().Metrics {
+		if value.ID == "unclean_shutdown" && (value.Value != false || value.Status != "normal") {
+			t.Fatalf("clean shutdown reported as %+v", value)
+		}
+	}
+	for _, value := range (&Monitor{DatabasePath: "/missing"}).Snapshot().Metrics {
+		if value.ID == "unclean_shutdown" || value.ID == "reader_pool_waits" {
+			t.Fatal("storage metrics reported without a storage manager")
 		}
 	}
 }

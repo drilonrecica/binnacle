@@ -10,14 +10,16 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 var ErrRevisionConflict = errors.New("settings revision conflict")
 
-type Store struct{ db *sql.DB }
+type Store struct{ db *storage.DB }
 
-func NewStore(db *sql.DB) *Store  { return &Store{db: db} }
-func (s *Store) SetDB(db *sql.DB) { s.db = db }
+func NewStore(db *storage.DB) *Store  { return &Store{db: db} }
+func (s *Store) SetDB(db *storage.DB) { s.db = db }
 
 func (s *Store) Overrides() (map[string]string, error) {
 	return s.overrides(context.Background(), s.db)
@@ -80,8 +82,8 @@ type Service struct {
 func NewService(store *Store, base Config, effective map[string]Effective, apply func(Config)) *Service {
 	return &Service{store: store, base: base, effective: effective, current: base, apply: apply}
 }
-func (s *Service) SetDB(db *sql.DB) { s.store.SetDB(db) }
-func (s *Service) Current() Config  { s.mu.RLock(); defer s.mu.RUnlock(); return s.current }
+func (s *Service) SetDB(db *storage.DB) { s.store.SetDB(db) }
+func (s *Service) Current() Config      { s.mu.RLock(); defer s.mu.RUnlock(); return s.current }
 func (s *Service) CurrentRetentionPreset() string {
 	return s.Current().Retention.Preset
 }

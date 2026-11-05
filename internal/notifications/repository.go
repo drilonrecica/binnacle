@@ -16,18 +16,19 @@ import (
 
 	"github.com/drilonrecica/binnacle/internal/alerts"
 	"github.com/drilonrecica/binnacle/internal/auth"
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 type Repository struct {
-	db               *sql.DB
+	db               *storage.DB
 	secrets          *auth.SecretStore
 	reminderInterval time.Duration
 }
 
-func NewRepository(db *sql.DB, secrets *auth.SecretStore) *Repository {
+func NewRepository(db *storage.DB, secrets *auth.SecretStore) *Repository {
 	return &Repository{db: db, secrets: secrets, reminderInterval: 2 * time.Hour}
 }
-func (r *Repository) SetDB(db *sql.DB)                   { r.db = db }
+func (r *Repository) SetDB(db *storage.DB)               { r.db = db }
 func (r *Repository) SetSecretStore(s *auth.SecretStore) { r.secrets = s }
 func (r *Repository) SetReminderInterval(interval time.Duration) {
 	if interval > 0 {

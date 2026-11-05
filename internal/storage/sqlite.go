@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -16,20 +17,47 @@ import (
 	"time"
 
 	"github.com/drilonrecica/binnacle/migrations"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 	"golang.org/x/sys/unix"
 )
 
 const MinimumFreeSpace = 64 << 20
 
-// Manager owns Binnacle's SQLite connection and acts as an app lifecycle component.
+// Pool bounds and connection settings from ADR 021. They are constants, not
+// settings, so the bounds cannot be configured away.
+const (
+	driverName            = "sqlite3_binnacle"
+	readerPoolSize        = 4
+	busyTimeoutMillis     = 5000
+	journalSizeLimit      = 64 << 20
+	openMarkerName        = "storage.open"
+	IntegrityCheckTimeout = 2 * time.Minute
+)
+
+func init() {
+	// journal_size_limit has no DSN parameter in the driver, so it is the one
+	// pragma applied by a connect hook. The hook runs for every connection the
+	// pools open, including reconnects, so nothing is lost after ErrBadConn.
+	sql.Register(driverName, &sqlite3.SQLiteDriver{ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+		_, err := conn.Exec(fmt.Sprintf("PRAGMA journal_size_limit=%d", journalSizeLimit), nil)
+		return err
+	}})
+}
+
+// Manager owns Binnacle's SQLite pools and acts as an app lifecycle component.
 type Manager struct {
 	Path, RuntimeDir string
-	db               *sql.DB
-	mu               sync.Mutex
-	workerCancel     context.CancelFunc
-	workerWG         sync.WaitGroup
-	prevCollectors   map[string]string
+	// Logger receives storage warnings; nil falls back to slog.Default().
+	Logger *slog.Logger
+	db     *DB
+	writer *sql.DB
+	reader *sql.DB
+	// uncleanShutdown is set when the previous process did not close storage.
+	uncleanShutdown bool
+	mu              sync.Mutex
+	workerCancel    context.CancelFunc
+	workerWG        sync.WaitGroup
+	prevCollectors  map[string]string
 	// lastSampleAt is the newest resource observation (LastSeenAt) committed;
 	// resources observed at or before it were already stored.
 	lastSampleAt   time.Time
@@ -81,7 +109,74 @@ func (m *Manager) Stop(context.Context) error {
 	m.workerWG.Wait()
 	return m.Close()
 }
-func (m *Manager) DB() *sql.DB { return m.db }
+
+// DB is the routed handle: reads go to the reader pool, writes and
+// transactions to the writer. Nil until Open succeeds.
+func (m *Manager) DB() *DB { return m.db }
+
+// Writer is the single-connection write pool. Nil until Open succeeds.
+func (m *Manager) Writer() *sql.DB { return m.writer }
+
+// Reader is the read-only pool of four connections. Nil until Open succeeds.
+func (m *Manager) Reader() *sql.DB { return m.reader }
+
+// PoolStats is the bounded view of one pool exposed in monitor-health.
+type PoolStats struct {
+	MaxOpen, Open, InUse int
+	WaitCount            int64
+	WaitDuration         time.Duration
+}
+
+// Health reports the pool bounds and whether the previous process exited
+// without closing storage.
+type Health struct {
+	UncleanShutdown bool
+	Writer, Reader  PoolStats
+}
+
+func (m *Manager) Health() Health {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return Health{UncleanShutdown: m.uncleanShutdown, Writer: poolStats(m.writer), Reader: poolStats(m.reader)}
+}
+func poolStats(db *sql.DB) PoolStats {
+	if db == nil {
+		return PoolStats{}
+	}
+	s := db.Stats()
+	return PoolStats{MaxOpen: s.MaxOpenConnections, Open: s.OpenConnections, InUse: s.InUse, WaitCount: s.WaitCount, WaitDuration: s.WaitDuration}
+}
+
+// IntegrityCheck runs the full PRAGMA integrity_check on a reader connection,
+// bounded by IntegrityCheckTimeout. It returns "ok" or the problems SQLite
+// reported, one per line, as a result for the diagnostics bundle; it never
+// runs at boot (ADR 021 §3).
+func (m *Manager) IntegrityCheck(ctx context.Context) (string, error) {
+	reader := m.Reader()
+	if reader == nil {
+		return "", errors.New("storage is not open")
+	}
+	ctx, cancel := context.WithTimeout(ctx, IntegrityCheckTimeout)
+	defer cancel()
+	rows, err := reader.QueryContext(ctx, "PRAGMA integrity_check")
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var lines []string
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			return "", err
+		}
+		lines = append(lines, line)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
 func (m *Manager) SchemaVersion(ctx context.Context) (int, error) {
 	if m.db == nil {
 		return 0, errors.New("storage is not open")
@@ -114,30 +209,48 @@ func (m *Manager) Open(ctx context.Context) error {
 	if err := ensurePrivateFile(m.Path); err != nil {
 		return err
 	}
-	db, err := sql.Open("sqlite3", m.Path)
+	openMarker := m.openMarkerPath()
+	if _, err := os.Stat(openMarker); err == nil {
+		m.uncleanShutdown = true
+		m.logger().Warn("storage was not closed by the previous process; SQLite recovered the WAL, run the full integrity check from diagnostics to verify the database", "marker", openMarker)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	writer, err := sql.Open(driverName, writerDSN(m.Path))
 	if err != nil {
 		return err
 	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	fail := func(err error) error { _ = db.Close(); return err }
-	for _, pragma := range []string{"PRAGMA journal_mode=WAL", "PRAGMA foreign_keys=ON", "PRAGMA busy_timeout=5000", "PRAGMA synchronous=NORMAL"} {
-		if _, err := db.ExecContext(ctx, pragma); err != nil {
-			return fail(fmt.Errorf("sqlite pragma: %w", err))
-		}
-	}
+	writer.SetMaxOpenConns(1)
+	writer.SetMaxIdleConns(1)
+	fail := func(err error) error { _ = writer.Close(); return err }
+	// quick_check is bounded by the tree walk; the O(size) integrity_check is
+	// an operator tool reached through diagnostics (ADR 021 §3).
 	var integrity string
-	if err := db.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&integrity); err != nil {
-		return fail(err)
+	if err := writer.QueryRowContext(ctx, "PRAGMA quick_check").Scan(&integrity); err != nil {
+		return fail(fmt.Errorf("sqlite quick check: %w", err))
 	}
 	if integrity != "ok" {
-		return fail(fmt.Errorf("sqlite integrity check failed: %s", sanitize(integrity)))
+		return fail(fmt.Errorf("sqlite quick check failed: %s", sanitize(integrity)))
 	}
-	if err := m.migrate(ctx, db); err != nil {
+	if err := m.migrate(ctx, writer); err != nil {
 		_ = writeMarker(marker)
 		return fail(err)
 	}
-	m.db = db
+	reader, err := sql.Open(driverName, readerDSN(m.Path))
+	if err != nil {
+		return fail(err)
+	}
+	reader.SetMaxOpenConns(readerPoolSize)
+	reader.SetMaxIdleConns(readerPoolSize)
+	if err := reader.PingContext(ctx); err != nil {
+		_ = reader.Close()
+		return fail(fmt.Errorf("open read-only pool: %w", err))
+	}
+	if err := os.WriteFile(openMarker, []byte("binnacle storage is open; this file is removed on a clean close\n"), 0600); err != nil {
+		_ = reader.Close()
+		return fail(fmt.Errorf("write open marker: %w", err))
+	}
+	m.writer, m.reader, m.db = writer, reader, NewDB(writer, reader)
 	return nil
 }
 func (m *Manager) Close() error {
@@ -146,11 +259,41 @@ func (m *Manager) Close() error {
 	if m.db == nil {
 		return nil
 	}
-	_, _ = m.db.Exec("PRAGMA wal_checkpoint(PASSIVE)")
-	err := m.db.Close()
-	m.db = nil
+	if _, err := m.writer.Exec("PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
+		m.logger().Warn("WAL checkpoint on close failed", "error", err)
+	}
+	err := m.reader.Close()
+	if writerErr := m.writer.Close(); err == nil {
+		err = writerErr
+	}
+	m.db, m.writer, m.reader = nil, nil, nil
+	if removeErr := os.Remove(m.openMarkerPath()); err == nil && removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+		err = removeErr
+	}
 	return err
 }
+func (m *Manager) logger() *slog.Logger {
+	if m.Logger != nil {
+		return m.Logger
+	}
+	return slog.Default()
+}
+
+// writerDSN and readerDSN carry every connection setting so that each
+// connection the pools open, including reconnects, has them (ADR 021 §2).
+func writerDSN(path string) string {
+	return fmt.Sprintf("file:%s?_txlock=immediate&_journal_mode=WAL&_synchronous=NORMAL&_busy_timeout=%d&_foreign_keys=on&_auto_vacuum=incremental", uriPath(path), busyTimeoutMillis)
+}
+func readerDSN(path string) string {
+	return fmt.Sprintf("file:%s?mode=ro&_query_only=true&_journal_mode=WAL&_synchronous=NORMAL&_busy_timeout=%d&_foreign_keys=on", uriPath(path), busyTimeoutMillis)
+}
+
+// uriPath escapes the characters SQLite's URI parser would otherwise read as
+// query or fragment delimiters.
+func uriPath(path string) string {
+	return strings.NewReplacer("%", "%25", "?", "%3F", "#", "%23").Replace(path)
+}
+func (m *Manager) openMarkerPath() string { return filepath.Join(m.RuntimeDir, openMarkerName) }
 func (m *Manager) migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"); err != nil {
 		return err

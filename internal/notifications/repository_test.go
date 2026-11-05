@@ -31,7 +31,7 @@ func testRepository(t *testing.T) (*storage.Manager, *Repository) {
 	return store, NewRepository(store.DB(), secrets)
 }
 
-func insertRule(t *testing.T, db *sql.DB) {
+func insertRule(t *testing.T, db *storage.DB) {
 	t.Helper()
 	_, err := db.Exec(`INSERT INTO alert_rules(id,family,name,built_in,enabled,severity,scope_type,scope_id,trigger_seconds,recovery_seconds,created_at,updated_at) VALUES('rule','test','Test',0,1,'warning','resource','r',0,0,1,1)`)
 	if err != nil {

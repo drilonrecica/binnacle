@@ -87,7 +87,7 @@ image: ghcr.io/drilonrecica/binnacle:stable
 
 ## Migrations
 
-Binnacle runs forward-only SQLite migrations automatically at startup. Before migrating, it checks database integrity and available disk space. A failed migration is logged and the process stops; it does not delete or recreate the database.
+Binnacle runs forward-only SQLite migrations automatically at startup. Before migrating, it runs a bounded `PRAGMA quick_check` and checks available disk space; the full `integrity_check` is never run at boot because it would hold the container healthcheck for the whole scan on a large database (see [Database integrity](recovery.md#database-integrity)). A failed migration is logged and the process stops; it does not delete or recreate the database.
 
 Schema 19 adds TOTP and proxy-authentication state; schemas 20 and 21 add hashed
 personal API-token metadata and typed, versioned administrator preferences. The

@@ -8,6 +8,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 const SchemaVersion = 1
@@ -25,14 +27,14 @@ type Value struct {
 }
 
 type Repository struct {
-	db  *sql.DB
+	db  *storage.DB
 	now func() time.Time
 }
 
-func NewRepository(db *sql.DB) *Repository {
+func NewRepository(db *storage.DB) *Repository {
 	return &Repository{db: db, now: func() time.Time { return time.Now().UTC() }}
 }
-func (r *Repository) SetDB(db *sql.DB) { r.db = db }
+func (r *Repository) SetDB(db *storage.DB) { r.db = db }
 
 func (r *Repository) Get(ctx context.Context, userID string) (Value, bool, error) {
 	var value Value

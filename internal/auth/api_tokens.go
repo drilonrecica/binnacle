@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 type APIScope string
@@ -43,14 +45,14 @@ type APIToken struct {
 	RevokedAt  *time.Time `json:"revokedAt,omitempty"`
 }
 type APITokenRepository struct {
-	db  *sql.DB
+	db  *storage.DB
 	now func() time.Time
 }
 
-func NewAPITokenRepository(db *sql.DB) *APITokenRepository {
+func NewAPITokenRepository(db *storage.DB) *APITokenRepository {
 	return &APITokenRepository{db: db, now: func() time.Time { return time.Now().UTC() }}
 }
-func (r *APITokenRepository) SetDB(db *sql.DB) { r.db = db }
+func (r *APITokenRepository) SetDB(db *storage.DB) { r.db = db }
 func (r *APITokenRepository) Create(ctx context.Context, userID, name string, scopes []APIScope, expiresAt *time.Time) (APIToken, string, error) {
 	name = strings.TrimSpace(name)
 	if len(name) < 1 || len(name) > 64 {

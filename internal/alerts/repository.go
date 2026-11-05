@@ -10,15 +10,17 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 type Repository struct {
-	db   *sql.DB
+	db   *storage.DB
 	sink IncidentSink
 }
 
-func NewRepository(db *sql.DB) *Repository              { return &Repository{db: db} }
-func (r *Repository) SetDB(db *sql.DB)                  { r.db = db }
+func NewRepository(db *storage.DB) *Repository          { return &Repository{db: db} }
+func (r *Repository) SetDB(db *storage.DB)              { r.db = db }
 func (r *Repository) SetIncidentSink(sink IncidentSink) { r.sink = sink }
 func (r *Repository) SeedDefaults(ctx context.Context) error {
 	if r.db == nil {

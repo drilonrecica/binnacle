@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
 var (
@@ -23,7 +25,7 @@ var (
 )
 
 type SetupService struct {
-	db        *sql.DB
+	db        *storage.DB
 	now       func() time.Time
 	tokenTTL  time.Duration
 	tokenFile string
@@ -33,7 +35,7 @@ type SetupService struct {
 // generated loopback setup token while first-run setup is open.
 const SetupTokenFileName = "setup-token"
 
-func NewSetupService(db *sql.DB) *SetupService {
+func NewSetupService(db *storage.DB) *SetupService {
 	return &SetupService{db: db, now: func() time.Time { return time.Now().UTC() }, tokenTTL: 24 * time.Hour}
 }
 
@@ -43,7 +45,7 @@ func NewSetupService(db *sql.DB) *SetupService {
 func SetupTokenFromEnvironment() (string, error) {
 	return EnvironmentSecret("BINNACLE_SETUP_TOKEN")
 }
-func (s *SetupService) SetDB(db *sql.DB) { s.db = db }
+func (s *SetupService) SetDB(db *storage.DB) { s.db = db }
 
 // SetTokenFile sets where a generated loopback token is written. The file is
 // created 0600 and removed once setup is claimed or disabled.

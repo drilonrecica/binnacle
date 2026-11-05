@@ -35,6 +35,9 @@ type NotificationHealthProvider interface {
 	HealthSnapshot() (queue int, permanent int, dropped int64, lastSuccess *time.Time)
 }
 
+// StorageHealthProvider is the storage manager's view of its pools (ADR 021).
+type StorageHealthProvider interface{ Health() storage.Health }
+
 type Monitor struct {
 	DatabasePath              string
 	DatabaseTarget            int64
@@ -44,6 +47,8 @@ type Monitor struct {
 	Collector                 DurationProvider
 	Notifications             NotificationHealthProvider
 	NotificationQueueCapacity int
+	// Storage reports pool waits and unclean shutdowns. Nil omits the metrics.
+	Storage StorageHealthProvider
 	// DockerSocket reports the startup probe result: "constrained", "raw" or
 	// "unknown" ("" before the probe ran). Nil omits the metric (demo mode).
 	DockerSocket func() string
@@ -106,7 +111,23 @@ func (m *Monitor) Snapshot() MonitorSnapshot {
 			metric("notification_last_success", "Last successful notification", lastSuccessValue(lastSuccess), "", available(lastSuccessValue(lastSuccess)), "Most recent successful outbound delivery."),
 		)
 	}
+	if m.Storage != nil {
+		health := m.Storage.Health()
+		values = append(values,
+			metric("writer_pool_waits", "Writer pool waits", health.Writer.WaitCount, "count", "normal", "Statements that waited for the single SQLite write connection since start."),
+			metric("writer_pool_wait_time", "Writer pool wait time", float64(health.Writer.WaitDuration)/float64(time.Millisecond), "milliseconds", "normal", "Total time statements spent waiting for the write connection since start."),
+			metric("reader_pool_waits", "Reader pool waits", health.Reader.WaitCount, "count", "normal", "Statements that waited for one of the four read-only SQLite connections since start."),
+			metric("reader_pool_wait_time", "Reader pool wait time", float64(health.Reader.WaitDuration)/float64(time.Millisecond), "milliseconds", "normal", "Total time statements spent waiting for a read-only connection since start."),
+			metric("unclean_shutdown", "Unclean shutdown", health.UncleanShutdown, "", uncleanShutdownStatus(health.UncleanShutdown), "The previous process did not close storage. SQLite recovered the WAL; run a diagnostics bundle for the full integrity check."),
+		)
+	}
 	return MonitorSnapshot{At: now, Metrics: values}
+}
+func uncleanShutdownStatus(unclean bool) string {
+	if unclean {
+		return "warning"
+	}
+	return "normal"
 }
 func lastSuccessValue(value *time.Time) any {
 	if value == nil {
