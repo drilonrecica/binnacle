@@ -119,6 +119,39 @@ func (c *Credentials) Exists(ctx context.Context, username string) bool {
 	return c.db.QueryRowContext(ctx, "SELECT 1 FROM users WHERE username=?", username).Scan(&one) == nil
 }
 
+// ChangePassword replaces the stored hash after the current password verifies.
+// The new password must already satisfy ValidatePassword; the caller reports
+// policy failures before paying for a hash. ErrHashingBusy is passed through so
+// the client can retry instead of being told the password was wrong.
+func (c *Credentials) ChangePassword(ctx context.Context, userID, current, next string) error {
+	if c == nil || c.db == nil || userID == "" {
+		return ErrInvalidCredentials
+	}
+	var hash string
+	if err := c.db.QueryRowContext(ctx, "SELECT password_hash FROM users WHERE id=?", userID).Scan(&hash); err != nil {
+		return ErrInvalidCredentials
+	}
+	ok, err := VerifyPassword(hash, current)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrInvalidCredentials
+	}
+	replacement, err := HashPassword(next)
+	if err != nil {
+		return err
+	}
+	result, err := c.db.ExecContext(ctx, "UPDATE users SET password_hash=?,updated_at=? WHERE id=?", replacement, time.Now().UTC().UnixMilli(), userID)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return ErrInvalidCredentials
+	}
+	return nil
+}
+
 func (c *Credentials) UserByID(ctx context.Context, id string) (User, error) {
 	if c == nil || c.db == nil || id == "" {
 		return User{}, ErrInvalidCredentials

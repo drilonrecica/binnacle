@@ -1,5 +1,15 @@
 import { api } from './client';
 
+/* Local password */
+
+export function changePassword(currentPassword: string, newPassword: string) {
+  return api.post(
+    '/api/v1/auth/password',
+    { currentPassword, newPassword },
+    { fallback: 'The password could not be changed.' },
+  );
+}
+
 /* MFA (advanced-auth feature gate) */
 
 export function mfaStatus() {

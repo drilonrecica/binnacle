@@ -58,3 +58,39 @@ func TestPasswordPolicyBoundaries(t *testing.T) {
 		}
 	}
 }
+
+func TestChangePasswordVerifiesCurrentAndRehashes(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	db := storage.New(filepath.Join(dir, "binnacle.db"), filepath.Join(dir, "run"))
+	if err := db.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	credentials := auth.NewCredentials(db.DB())
+	user, err := credentials.CreateAdmin(ctx, "admin", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = credentials.ChangePassword(ctx, user.ID, "wrong password value", "a brand new passphrase"); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Fatalf("wrong current err=%v", err)
+	}
+	if err = credentials.ChangePassword(ctx, user.ID, "correct horse battery staple", "short"); err == nil {
+		t.Fatal("policy-violating password accepted")
+	}
+	if _, err = credentials.Authenticate(ctx, "admin", "correct horse battery staple"); err != nil {
+		t.Fatalf("password changed despite failures: %v", err)
+	}
+	if err = credentials.ChangePassword(ctx, user.ID, "correct horse battery staple", "a brand new passphrase"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = credentials.Authenticate(ctx, "admin", "correct horse battery staple"); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Fatalf("old password still works: %v", err)
+	}
+	if _, err = credentials.Authenticate(ctx, "admin", "a brand new passphrase"); err != nil {
+		t.Fatalf("new password rejected: %v", err)
+	}
+	if err = credentials.ChangePassword(ctx, "usr_missing", "a brand new passphrase", "another new passphrase"); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Fatalf("missing user err=%v", err)
+	}
+}

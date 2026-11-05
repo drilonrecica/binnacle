@@ -116,7 +116,8 @@ func (m *MFA) Confirm(ctx context.Context, userID, code string) ([]string, error
 	if !ok {
 		return nil, ErrMFAInvalid
 	}
-	if !VerifyTOTP(pending.seed, code, m.now()) {
+	step, ok := MatchTOTP(pending.seed, code, m.now())
+	if !ok {
 		return nil, ErrMFAInvalid
 	}
 	m.mu.Lock()
@@ -150,7 +151,7 @@ func (m *MFA) Confirm(ctx context.Context, userID, code string) ([]string, error
 		}
 	}
 	if err == nil {
-		_, err = tx.ExecContext(ctx, "UPDATE users SET totp_enabled=1,totp_secret_key=?,mfa_changed_at=?,updated_at=? WHERE id=?", key, now, now, userID)
+		_, err = tx.ExecContext(ctx, "UPDATE users SET totp_enabled=1,totp_secret_key=?,totp_last_step=?,mfa_changed_at=?,updated_at=? WHERE id=?", key, step, now, now, userID)
 	}
 	if err == nil {
 		err = tx.Commit()
@@ -162,21 +163,39 @@ func (m *MFA) Confirm(ctx context.Context, userID, code string) ([]string, error
 	_ = m.sessions.RevokeAll(ctx, userID)
 	return codes, nil
 }
+
+// Verify accepts a current TOTP code once or consumes one recovery code. A
+// TOTP step is accepted only when it is later than the last accepted step for
+// the user; the compare-and-set below is one statement, so two concurrent
+// logins with the same code cannot both succeed (SEC-8).
 func (m *MFA) Verify(ctx context.Context, userID, code string) error {
-	enabled, err := m.Enabled(ctx, userID)
-	if err != nil {
+	var enabled bool
+	var key string
+	var last int64
+	if err := m.db.QueryRowContext(ctx, "SELECT totp_enabled,COALESCE(totp_secret_key,''),totp_last_step FROM users WHERE id=?", userID).Scan(&enabled, &key, &last); err != nil {
 		return ErrMFAInvalid
 	}
 	if !enabled {
 		return nil
 	}
-	var key string
-	if err = m.db.QueryRowContext(ctx, "SELECT COALESCE(totp_secret_key,'') FROM users WHERE id=?", userID).Scan(&key); err != nil || key == "" {
+	if key == "" {
 		return ErrMFAInvalid
 	}
 	seed, err := m.secrets.Get(ctx, key)
-	if err == nil && VerifyTOTP(seed, code, m.now()) {
-		return nil
+	if err == nil {
+		if step, ok := MatchTOTP(seed, code, m.now()); ok {
+			if step <= last {
+				return ErrMFAInvalid
+			}
+			result, err := m.db.ExecContext(ctx, "UPDATE users SET totp_last_step=? WHERE id=? AND totp_last_step<?", step, userID, step)
+			if err != nil {
+				return ErrMFAInvalid
+			}
+			if affected, _ := result.RowsAffected(); affected != 1 {
+				return ErrMFAInvalid
+			}
+			return nil
+		}
 	}
 	hash := recoveryHash(code)
 	if hash == "" {
@@ -221,7 +240,7 @@ func (m *MFA) Disable(ctx context.Context, user User, password, code string) err
 	}
 	now := m.now().UnixMilli()
 	if _, err = tx.ExecContext(ctx, "DELETE FROM recovery_codes WHERE user_id=?", user.ID); err == nil {
-		_, err = tx.ExecContext(ctx, "UPDATE users SET totp_enabled=0,totp_secret_key=NULL,mfa_changed_at=?,updated_at=? WHERE id=?", now, now, user.ID)
+		_, err = tx.ExecContext(ctx, "UPDATE users SET totp_enabled=0,totp_secret_key=NULL,totp_last_step=0,mfa_changed_at=?,updated_at=? WHERE id=?", now, now, user.ID)
 	}
 	if err == nil {
 		err = tx.Commit()
@@ -236,10 +255,15 @@ func (m *MFA) Disable(ctx context.Context, user User, password, code string) err
 	return nil
 }
 
-func TOTP(seed []byte, at time.Time) string {
-	counter := uint64(at.Unix() / 30)
+func TOTP(seed []byte, at time.Time) string { return totpAtStep(seed, totpStep(at)) }
+
+// totpStep is the RFC 6238 counter for an instant: whole 30-second periods
+// since the Unix epoch.
+func totpStep(at time.Time) int64 { return at.Unix() / int64(TOTPPeriod/time.Second) }
+
+func totpAtStep(seed []byte, step int64) string {
 	var message [8]byte
-	binary.BigEndian.PutUint64(message[:], counter)
+	binary.BigEndian.PutUint64(message[:], uint64(step))
 	mac := hmac.New(sha1.New, seed)
 	_, _ = mac.Write(message[:])
 	sum := mac.Sum(nil)
@@ -247,20 +271,35 @@ func TOTP(seed []byte, at time.Time) string {
 	value := (uint32(sum[offset])&0x7f)<<24 | uint32(sum[offset+1])<<16 | uint32(sum[offset+2])<<8 | uint32(sum[offset+3])
 	return fmt.Sprintf("%06d", value%1000000)
 }
+
+// VerifyTOTP reports whether code is valid for at, within one step of clock
+// drift either way. Callers that must refuse replays use MatchTOTP and store
+// the step it returns.
 func VerifyTOTP(seed []byte, code string, at time.Time) bool {
+	_, ok := MatchTOTP(seed, code, at)
+	return ok
+}
+
+// MatchTOTP returns the step a code was generated for, searching the current
+// step and its two neighbours. Every candidate is compared so the time taken
+// does not reveal which step matched.
+func MatchTOTP(seed []byte, code string, at time.Time) (int64, bool) {
 	if len(code) != 6 {
-		return false
+		return 0, false
 	}
 	if _, err := strconv.Atoi(code); err != nil {
-		return false
+		return 0, false
 	}
-	for step := -1; step <= 1; step++ {
-		expected := TOTP(seed, at.Add(time.Duration(step)*TOTPPeriod))
-		if hmac.Equal([]byte(expected), []byte(code)) {
-			return true
+	current := totpStep(at)
+	var matched int64
+	found := false
+	for delta := int64(-1); delta <= 1; delta++ {
+		step := current + delta
+		if hmac.Equal([]byte(totpAtStep(seed, step)), []byte(code)) && !found {
+			matched, found = step, true
 		}
 	}
-	return false
+	return matched, found
 }
 func newRecoveryCodes() ([]string, []string, error) {
 	codes := make([]string, 10)

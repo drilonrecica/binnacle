@@ -78,6 +78,8 @@ func TestMFAEnrollmentAndAtomicRecoveryConsumption(t *testing.T) {
 	if err = mfa.Verify(ctx, user.ID, codes[0]); err == nil {
 		t.Fatal("recovery code was reused")
 	}
+	// The confirmation code was consumed by Confirm; the next step is fresh.
+	fixed = fixed.Add(TOTPPeriod)
 	if err = mfa.Verify(ctx, user.ID, TOTP(seed, fixed)); err != nil {
 		t.Fatal(err)
 	}
@@ -125,5 +127,84 @@ func TestAdvancedAuthDisabledRefusesStoredTOTPEnrollment(t *testing.T) {
 	}
 	if err = ValidateAdvancedAuthState(ctx, manager.DB(), true); err != nil {
 		t.Fatalf("enabled advanced auth rejected stored enrollment: %v", err)
+	}
+}
+
+func TestTOTPCodeIsAcceptedOnlyOnce(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store := storage.New(filepath.Join(dir, "db"), filepath.Join(dir, "runtime"))
+	if err := store.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	credentials := NewCredentials(store.DB())
+	user, err := credentials.CreateAdmin(ctx, "admin", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions := NewSessions(store.DB(), SessionConfig{IdleTimeout: time.Hour, AbsoluteLifetime: 24 * time.Hour})
+	secrets, err := NewSecretStore(store.DB(), "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mfa := NewMFA(store.DB(), credentials, secrets, sessions)
+	now := time.Unix(1_800_000_000, 0).UTC()
+	mfa.now = func() time.Time { return now }
+	if _, err = mfa.Begin(ctx, user, "correct horse battery staple"); err != nil {
+		t.Fatal(err)
+	}
+	mfa.mu.Lock()
+	seed := append([]byte(nil), mfa.pending[user.ID].seed...)
+	mfa.mu.Unlock()
+	if _, err = mfa.Confirm(ctx, user.ID, TOTP(seed, now)); err != nil {
+		t.Fatal(err)
+	}
+	// SEC-8: the code that confirmed enrollment is already spent.
+	if err = mfa.Verify(ctx, user.ID, TOTP(seed, now)); err == nil {
+		t.Fatal("confirmation code was replayed at login")
+	}
+	now = now.Add(TOTPPeriod)
+	current := TOTP(seed, now)
+	if err = mfa.Verify(ctx, user.ID, current); err != nil {
+		t.Fatalf("fresh step rejected: %v", err)
+	}
+	if err = mfa.Verify(ctx, user.ID, current); err == nil {
+		t.Fatal("code accepted twice within its window")
+	}
+	// The previous step is still inside clock tolerance but behind the
+	// accepted one, so a shoulder-surfed earlier code is useless.
+	if err = mfa.Verify(ctx, user.ID, TOTP(seed, now.Add(-TOTPPeriod))); err == nil {
+		t.Fatal("older step accepted after a newer one")
+	}
+	// The next step can be used slightly early (clock tolerance) and then
+	// becomes the high-water mark.
+	if err = mfa.Verify(ctx, user.ID, TOTP(seed, now.Add(TOTPPeriod))); err != nil {
+		t.Fatalf("next step within tolerance rejected: %v", err)
+	}
+	now = now.Add(TOTPPeriod)
+	if err = mfa.Verify(ctx, user.ID, TOTP(seed, now)); err == nil {
+		t.Fatal("step accepted after it was already used early")
+	}
+	var last int64
+	if err = store.DB().QueryRowContext(ctx, "SELECT totp_last_step FROM users WHERE id=?", user.ID).Scan(&last); err != nil || last != now.Unix()/30 {
+		t.Fatalf("stored step=%d err=%v want %d", last, err, now.Unix()/30)
+	}
+}
+
+func TestMatchTOTPReportsTheStep(t *testing.T) {
+	seed := []byte("01234567890123456789")
+	at := time.Unix(1_800_000_000, 0)
+	for delta := int64(-1); delta <= 1; delta++ {
+		step, ok := MatchTOTP(seed, TOTP(seed, at.Add(time.Duration(delta)*TOTPPeriod)), at)
+		if !ok || step != at.Unix()/30+delta {
+			t.Fatalf("delta=%d step=%d ok=%v", delta, step, ok)
+		}
+	}
+	if _, ok := MatchTOTP(seed, "12345", at); ok {
+		t.Fatal("short code matched")
+	}
+	if _, ok := MatchTOTP(seed, "12345a", at); ok {
+		t.Fatal("non-numeric code matched")
 	}
 }

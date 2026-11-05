@@ -7,7 +7,9 @@ redacted before search or delivery and are never stored by Binnacle.
 
 Responses default to 500 lines and cannot exceed the configured 5,000-line or
 1 MiB ceilings. A resource can contain at most 32 log components. Follow
-sessions stop after 30 minutes or as soon as the browser disconnects.
+sessions stop after 30 minutes, as soon as the browser disconnects, or when
+the browser session is signed out or expires; the session is re-checked on
+every 20-second heartbeat.
 
 Redaction covers common authorization headers, password/token/API-key
 assignments, credential-bearing URLs, and private-key blocks. It is

@@ -85,7 +85,7 @@ func (s *Server) EnableSetup(setup *auth.SetupService, protection *auth.Protecti
 			return
 		}
 		if sessions != nil {
-			token, csrf, session, issueErr := sessions.IssueForRequest(r.Context(), user.ID, r, protection.Proxies())
+			token, csrf, session, issueErr := sessions.IssueWithCSRF(r.Context(), user.ID)
 			if issueErr != nil {
 				WriteError(w, 500, Error{Code: "session_error", Message: "The administrator was created; sign in to continue."})
 				return

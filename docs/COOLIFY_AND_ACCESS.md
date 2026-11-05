@@ -50,7 +50,30 @@ returns ten high-entropy recovery codes once. Only recovery-code hashes and the
 encrypted TOTP seed are stored.
 
 Changing MFA revokes other sessions. A recovery code is consumed atomically.
+A TOTP code is accepted once: Binnacle stores the last accepted 30-second step
+for the account and refuses any code for that step or an earlier one, so a code
+seen over someone's shoulder cannot be replayed inside the clock-drift window.
 TOTP applies only to local login; an external identity provider owns its MFA.
+
+## Sessions and the local password
+
+Sessions slide with activity up to `BINNACLE_SESSION_IDLE_TIMEOUT` (default
+12 h, at most 7 days) and never outlive
+`BINNACLE_SESSION_ABSOLUTE_LIFETIME` (default 30 days, at most 90 days); both
+can also be changed in Settings → Access. A session bootstrapped from a
+trusted proxy ends within 24 hours regardless of the configured lifetime, so a
+revoked upstream identity is re-checked at least daily. Sessions are not bound
+to a browser user agent or network prefix: that binding signs people out on
+browser updates and network changes without stopping a stolen cookie.
+
+The live dashboard stream and log follow re-check the session on every
+20-second heartbeat and close when it has been signed out, expired, or ended by
+an MFA or password change. The check does not count as activity, so a tab left
+open still idles out.
+
+Settings → Access can change the administrator password. The current password
+is required, the request is CSRF-protected and login-throttled, and every other
+session is signed out while the one making the change stays signed in.
 
 ## Trusted-proxy authentication
 

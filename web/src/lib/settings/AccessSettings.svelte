@@ -7,6 +7,7 @@
   import Field from '../ui/Field.svelte';
   import Input from '../ui/Input.svelte';
   import MfaCard from './MfaCard.svelte';
+  import PasswordCard from './PasswordCard.svelte';
   import SettingMeta from './SettingMeta.svelte';
   import SettingsSection from './SettingsSection.svelte';
   import { SettingsForm } from './settings-form.svelte';
@@ -31,14 +32,14 @@
     validators: {
       'sessions.idle_timeout': (value) => {
         const ms = parseGoDuration(value);
-        return ms == null || ms < 300_000 || ms > 30 * 86_400_000
-          ? 'Between 5 minutes and 30 days.'
+        return ms == null || ms < 300_000 || ms > 7 * 86_400_000
+          ? 'Between 5 minutes and 7 days.'
           : null;
       },
       'sessions.absolute_lifetime': (value) => {
         const ms = parseGoDuration(value);
-        return ms == null || ms < 3_600_000 || ms > 365 * 86_400_000
-          ? 'Between 1 hour and 365 days.'
+        return ms == null || ms < 3_600_000 || ms > 90 * 86_400_000
+          ? 'Between 1 hour and 90 days.'
           : null;
       },
     },
@@ -58,7 +59,7 @@
 <div class="stack">
   <SettingsSection
     title="Sessions"
-    description="Browser sessions slide with activity up to the idle timeout and never outlive the absolute lifetime."
+    description="Browser sessions slide with activity up to the idle timeout and never outlive the absolute lifetime. Sessions started by a trusted proxy end within a day."
     dirty={form.dirty}
     saving={form.saving}
     error={form.error}
@@ -102,6 +103,8 @@
       <SettingMeta setting={snapshot?.values['sessions.absolute_lifetime']} />
     </div>
   </SettingsSection>
+
+  <PasswordCard />
 
   <MfaCard available={Boolean(snapshot?.features.advancedAuth)} {onsignedout} />
 

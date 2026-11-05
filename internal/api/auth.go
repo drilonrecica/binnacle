@@ -71,7 +71,7 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 		if previous := auth.TokenFromRequest(r); previous != "" {
 			_ = sessions.Revoke(r.Context(), previous)
 		}
-		token, csrf, session, err := sessions.IssueForRequest(r.Context(), user.ID, r, proxies)
+		token, csrf, session, err := sessions.IssueWithCSRF(r.Context(), user.ID)
 		if err != nil {
 			WriteError(w, 500, Error{Code: "session_error", Message: "Could not start session."})
 			return
@@ -134,6 +134,61 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 		_ = sessions.RevokeAll(r.Context(), session.UserID)
 		auth.ClearSessionCookie(w, proxies.Secure(r))
 		auth.ClearCSRFCookie(w, proxies.Secure(r))
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	// Password change (SEC-21): same-origin, CSRF, the current password, and
+	// the login throttle so the stored hash cannot be brute-forced from a
+	// stolen session. Other sessions are revoked; the caller stays signed in.
+	s.Handle("/api/v1/auth/password", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			WriteError(w, 405, Error{Code: "method_not_allowed", Message: "Only POST is supported."})
+			return
+		}
+		if !sessions.ValidCSRF(r) {
+			WriteError(w, 403, Error{Code: "csrf_invalid", Message: "A valid CSRF token is required."})
+			return
+		}
+		token := auth.TokenFromRequest(r)
+		session, err := sessions.Authenticate(r.Context(), token)
+		if err != nil {
+			WriteError(w, 401, Error{Code: "unauthorized", Message: "A browser session is required."})
+			return
+		}
+		user, err := credentials.UserByID(r.Context(), session.UserID)
+		if err != nil {
+			WriteError(w, 401, Error{Code: "unauthorized", Message: "A browser session is required."})
+			return
+		}
+		if !limited(w, r, user.Username, func(string) bool { return true }) {
+			return
+		}
+		var body struct {
+			CurrentPassword string `json:"currentPassword"`
+			NewPassword     string `json:"newPassword"`
+		}
+		if DecodeJSON(r, &body) != nil {
+			WriteError(w, 400, Error{Code: "invalid_request", Message: "The current and new passwords are required."})
+			return
+		}
+		if err = auth.ValidatePassword(body.NewPassword); err != nil {
+			WriteError(w, 400, Error{Code: "password_policy", Message: "The new " + err.Error() + "."})
+			return
+		}
+		err = credentials.ChangePassword(r.Context(), user.ID, body.CurrentPassword, body.NewPassword)
+		switch {
+		case errors.Is(err, auth.ErrHashingBusy):
+			writeHashingBusy(w)
+			return
+		case errors.Is(err, auth.ErrInvalidCredentials):
+			WriteError(w, 401, Error{Code: "invalid_credentials", Message: "The current password is incorrect."})
+			return
+		case err != nil:
+			WriteError(w, 500, Error{Code: "password_change_failed", Message: "The password could not be changed."})
+			return
+		}
+		if err = sessions.RevokeOthers(r.Context(), user.ID, token); err != nil {
+			s.logger.Error("revoke other sessions after password change", "error", err)
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 }

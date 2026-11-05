@@ -47,7 +47,7 @@ func (s *Server) enableExternalSession(proxy *auth.ProxyAuthenticator, credentia
 		if previous := auth.TokenFromRequest(r); previous != "" {
 			_ = sessions.Revoke(r.Context(), previous)
 		}
-		token, csrf, session, err := sessions.IssueForProxyRequest(r.Context(), user.ID, subject, r, proxy.CookieProxies())
+		token, csrf, session, err := sessions.IssueForProxy(r.Context(), user.ID, subject)
 		if err != nil {
 			WriteError(w, 500, Error{Code: "session_error", Message: "Could not start session."})
 			return

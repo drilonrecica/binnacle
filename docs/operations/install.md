@@ -158,7 +158,7 @@ sent only on secure responses. Two settings provide that knowledge:
   the rightmost `X-Forwarded-Proto` value from a trusted peer decides the
   scheme. With or without one, the first untrusted address in
   `X-Forwarded-For` (read right to left across every header line) identifies
-  the client for rate limiting and session fingerprints. A `/0` prefix is
+  the client for rate limiting and request logs. A `/0` prefix is
   refused.
 
 Without either setting, a deployment behind an HTTPS proxy accepts logins but

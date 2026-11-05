@@ -13,9 +13,26 @@ import (
 )
 
 type Authorizer interface{ Authorize(*http.Request) bool }
+
+// Rechecker re-validates an open stream's credentials on every heartbeat
+// without counting the check as activity (SEC-12). Authorizers that lack it are
+// re-checked with Authorize instead.
+type Rechecker interface{ Recheck(*http.Request) bool }
+
 type DemoAuthorizer bool
 
 func (a DemoAuthorizer) Authorize(*http.Request) bool { return bool(a) }
+
+// streamHeartbeat is how often an open stream sends a comment frame and
+// re-checks its session. Tests shorten it.
+var streamHeartbeat = 20 * time.Second
+
+func recheckFunc(auth Authorizer, r *http.Request) func() bool {
+	if rc, ok := auth.(Rechecker); ok {
+		return func() bool { return rc.Recheck(r) }
+	}
+	return func() bool { return auth.Authorize(r) }
+}
 func (s *Server) EnableLive(engine *metrics.Engine, auth Authorizer, protection *authpkg.Protection, decorators ...SnapshotDecorator) {
 	s.Handle("/api/v1/live", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -31,7 +48,7 @@ func (s *Server) EnableLive(engine *metrics.Engine, auth Authorizer, protection 
 			WriteError(w, 429, Error{Code: "rate_limited", Message: "Too many live connections. Try again shortly.", Details: map[string]int{"retryAfterSeconds": maxRetry(retry)}})
 			return
 		}
-		stream(w, r, engine, decorators...)
+		stream(w, r, engine, recheckFunc(auth, r), decorators...)
 	}))
 	s.Handle("/api/v1/session", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if auth == nil || !auth.Authorize(r) {
@@ -41,7 +58,7 @@ func (s *Server) EnableLive(engine *metrics.Engine, auth Authorizer, protection 
 		w.WriteHeader(http.StatusNoContent)
 	}))
 }
-func stream(w http.ResponseWriter, r *http.Request, e *metrics.Engine, decorators ...SnapshotDecorator) {
+func stream(w http.ResponseWriter, r *http.Request, e *metrics.Engine, recheck func() bool, decorators ...SnapshotDecorator) {
 	f, ok := w.(http.Flusher)
 	if !ok {
 		WriteError(w, 500, Error{Code: "stream_unsupported", Message: "Streaming is unavailable."})
@@ -58,13 +75,18 @@ func stream(w http.ResponseWriter, r *http.Request, e *metrics.Engine, decorator
 			f.Flush()
 		}
 	}
-	beat := time.NewTicker(20 * time.Second)
+	beat := time.NewTicker(streamHeartbeat)
 	defer beat.Stop()
 	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case <-beat.C:
+			if !recheck() {
+				// The session ended (logout, MFA change, expiry): close so the
+				// client re-authenticates instead of reading forever.
+				return
+			}
 			fmt.Fprint(w, ": heartbeat\n\n")
 			f.Flush()
 		case message, ok := <-sub.C:

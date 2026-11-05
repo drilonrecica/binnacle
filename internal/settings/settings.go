@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/auth"
 )
 
 type Config struct {
@@ -199,6 +201,12 @@ func (c Config) Validate() error {
 	}
 	if c.Sessions.AbsoluteLifetime < c.Sessions.IdleTimeout {
 		return fmt.Errorf("sessions.absolute_lifetime must be at least idle_timeout")
+	}
+	if c.Sessions.IdleTimeout > auth.MaxSessionIdleTimeout {
+		return fmt.Errorf("sessions.idle_timeout must be at most %s", auth.MaxSessionIdleTimeout)
+	}
+	if c.Sessions.AbsoluteLifetime > auth.MaxSessionAbsoluteLifetime {
+		return fmt.Errorf("sessions.absolute_lifetime must be at most %s", auth.MaxSessionAbsoluteLifetime)
 	}
 	if c.Persistence.QueueBatchLimit <= 0 || c.Charts.MaxPointsPerSeries <= 0 || c.Docker.MaxConcurrency <= 0 || c.Checks.MaxConcurrency <= 0 || c.Logs.MaxResponseBytes <= 0 || c.Logs.MaxLines <= 0 || c.Database.TargetBudgetBytes <= 0 {
 		return fmt.Errorf("limits and budgets must be positive")

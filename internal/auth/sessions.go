@@ -17,12 +17,30 @@ const SessionCookieName = "binnacle_session"
 
 var ErrSessionInvalid = errors.New("session is invalid")
 
+// Session lifetime ceilings (SEC-19). Configuration above them is refused by
+// settings validation and clamped here as well, so no code path can issue a
+// longer session. Proxy sessions are shorter because the proxy's identity
+// assertion is checked only when the session is bootstrapped; a day bounds how
+// long a revoked upstream identity keeps working.
+const (
+	MaxSessionIdleTimeout      = 7 * 24 * time.Hour
+	MaxSessionAbsoluteLifetime = 90 * 24 * time.Hour
+	ProxySessionLifetime       = 24 * time.Hour
+)
+
 type SessionConfig struct {
 	IdleTimeout      time.Duration
 	AbsoluteLifetime time.Duration
 }
 
 func (c SessionConfig) valid() bool { return c.IdleTimeout > 0 && c.AbsoluteLifetime >= c.IdleTimeout }
+
+// capped returns the configuration with both lifetimes held under the ceilings.
+func (c SessionConfig) capped() SessionConfig {
+	c.IdleTimeout = min(c.IdleTimeout, MaxSessionIdleTimeout)
+	c.AbsoluteLifetime = min(c.AbsoluteLifetime, MaxSessionAbsoluteLifetime)
+	return c
+}
 
 type Session struct {
 	UserID          string
@@ -54,24 +72,28 @@ func (s *Sessions) SetConfig(cfg SessionConfig) {
 		s.mu.Unlock()
 	}
 }
-func (s *Sessions) config() SessionConfig { s.mu.RLock(); defer s.mu.RUnlock(); return s.cfg }
+func (s *Sessions) config() SessionConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.capped()
+}
 
 func (s *Sessions) Issue(ctx context.Context, userID string) (string, Session, error) {
-	token, _, session, err := s.issue(ctx, userID, "", "", "local", "")
+	token, _, session, err := s.issue(ctx, userID, "local", "")
 	return token, session, err
 }
 
 // IssueWithCSRF returns the only plaintext copy of the anti-CSRF token.
 func (s *Sessions) IssueWithCSRF(ctx context.Context, userID string) (string, string, Session, error) {
-	return s.issue(ctx, userID, "", "", "local", "")
+	return s.issue(ctx, userID, "local", "")
 }
-func (s *Sessions) IssueForRequest(ctx context.Context, userID string, r *http.Request, proxies TrustedProxies) (string, string, Session, error) {
-	return s.issue(ctx, userID, fingerprint(r.UserAgent()), fingerprint(proxies.ClientPrefix(r)), "local", "")
+
+// IssueForProxy records the proxy-asserted subject the session was mapped
+// from and bounds the session by ProxySessionLifetime.
+func (s *Sessions) IssueForProxy(ctx context.Context, userID, subject string) (string, string, Session, error) {
+	return s.issue(ctx, userID, "proxy", subject)
 }
-func (s *Sessions) IssueForProxyRequest(ctx context.Context, userID, subject string, r *http.Request, proxies TrustedProxies) (string, string, Session, error) {
-	return s.issue(ctx, userID, fingerprint(r.UserAgent()), fingerprint(proxies.ClientPrefix(r)), "proxy", subject)
-}
-func (s *Sessions) issue(ctx context.Context, userID, userAgentHash, ipPrefixHash, authMethod, authSubject string) (string, string, Session, error) {
+func (s *Sessions) issue(ctx context.Context, userID, authMethod, authSubject string) (string, string, Session, error) {
 	if s == nil || s.db == nil || userID == "" {
 		return "", "", Session{}, ErrSessionInvalid
 	}
@@ -88,12 +110,17 @@ func (s *Sessions) issue(ctx context.Context, userID, userAgentHash, ipPrefixHas
 		return "", "", Session{}, err
 	}
 	now := s.now().UTC()
-	absolute := now.Add(cfg.AbsoluteLifetime)
-	if authMethod != "local" && authMethod != "proxy" {
+	lifetime := cfg.AbsoluteLifetime
+	switch authMethod {
+	case "local":
+	case "proxy":
+		lifetime = min(lifetime, ProxySessionLifetime)
+	default:
 		return "", "", Session{}, ErrSessionInvalid
 	}
+	absolute := now.Add(lifetime)
 	session := Session{UserID: userID, CreatedAt: now, LastSeenAt: now, ExpiresAt: minTime(now.Add(cfg.IdleTimeout), absolute), AbsoluteExpires: absolute, AuthMethod: authMethod, AuthSubject: authSubject}
-	if _, err = s.db.ExecContext(ctx, "INSERT INTO sessions(id_hash,user_id,created_at,last_seen_at,expires_at,absolute_expires_at,revoked_at,csrf_hash,user_agent_hash,ip_prefix_hash,auth_method,auth_subject) VALUES(?,?,?,?,?,?,NULL,?,?,?,?,?)", tokenHash(token), userID, now.UnixMilli(), now.UnixMilli(), session.ExpiresAt.UnixMilli(), absolute.UnixMilli(), CSRFHash(csrf), nullFingerprint(userAgentHash), nullFingerprint(ipPrefixHash), authMethod, nullFingerprint(authSubject)); err != nil {
+	if _, err = s.db.ExecContext(ctx, "INSERT INTO sessions(id_hash,user_id,created_at,last_seen_at,expires_at,absolute_expires_at,revoked_at,csrf_hash,auth_method,auth_subject) VALUES(?,?,?,?,?,?,NULL,?,?,?)", tokenHash(token), userID, now.UnixMilli(), now.UnixMilli(), session.ExpiresAt.UnixMilli(), absolute.UnixMilli(), CSRFHash(csrf), authMethod, nullString(authSubject)); err != nil {
 		return "", "", Session{}, err
 	}
 	return token, csrf, session, nil
@@ -103,6 +130,14 @@ func (s *Sessions) issue(ctx context.Context, userID, userAgentHash, ipPrefixHas
 func (s *Sessions) Authorize(r *http.Request) bool {
 	_, err := s.Authenticate(r.Context(), TokenFromRequest(r))
 	return err == nil
+}
+
+// Recheck reports whether the request's session is still valid without
+// counting the check as activity. Open streams call it on every heartbeat so a
+// logout, an MFA change or an expiry closes them (SEC-12), while a tab left
+// open still idles out.
+func (s *Sessions) Recheck(r *http.Request) bool {
+	return s.Check(r.Context(), TokenFromRequest(r)) == nil
 }
 func (s *Sessions) Actor(r *http.Request) (string, bool) {
 	var id, method string
@@ -132,13 +167,37 @@ func (s *Sessions) ValidCSRF(r *http.Request) bool {
 	return expected != "" && ValidCSRF(r, expected)
 }
 
+// Authenticate validates a session token and counts the call as activity,
+// sliding the idle expiry forward.
 func (s *Sessions) Authenticate(ctx context.Context, token string) (Session, error) {
-	if s == nil || s.db == nil || token == "" {
-		return Session{}, ErrSessionInvalid
-	}
 	cfg := s.config()
 	if !cfg.valid() {
 		return Session{}, ErrSessionInvalid
+	}
+	session, hash, err := s.load(ctx, token)
+	if err != nil {
+		return Session{}, err
+	}
+	now := s.now().UTC()
+	session.LastSeenAt = now
+	session.ExpiresAt = minTime(now.Add(cfg.IdleTimeout), session.AbsoluteExpires)
+	if _, err = s.db.ExecContext(ctx, "UPDATE sessions SET last_seen_at=?,expires_at=? WHERE id_hash=? AND revoked_at IS NULL", now.UnixMilli(), session.ExpiresAt.UnixMilli(), hash); err != nil {
+		return Session{}, err
+	}
+	return session, nil
+}
+
+// Check validates a session token without touching its idle expiry.
+func (s *Sessions) Check(ctx context.Context, token string) error {
+	_, _, err := s.load(ctx, token)
+	return err
+}
+
+// load reads a session and rejects revoked or expired ones. An expired row is
+// marked revoked so later lookups are cheap and Cleanup removes it.
+func (s *Sessions) load(ctx context.Context, token string) (Session, string, error) {
+	if s == nil || s.db == nil || token == "" {
+		return Session{}, "", ErrSessionInvalid
 	}
 	hash := tokenHash(token)
 	var session Session
@@ -147,7 +206,7 @@ func (s *Sessions) Authenticate(ctx context.Context, token string) (Session, err
 	var subject sql.NullString
 	err := s.db.QueryRowContext(ctx, "SELECT user_id,created_at,last_seen_at,expires_at,absolute_expires_at,revoked_at,auth_method,auth_subject FROM sessions WHERE id_hash=?", hash).Scan(&session.UserID, &created, &seen, &expires, &absolute, &revoked, &session.AuthMethod, &subject)
 	if err != nil || revoked.Valid {
-		return Session{}, ErrSessionInvalid
+		return Session{}, "", ErrSessionInvalid
 	}
 	session.CreatedAt, session.LastSeenAt = time.UnixMilli(created).UTC(), time.UnixMilli(seen).UTC()
 	session.ExpiresAt, session.AbsoluteExpires = time.UnixMilli(expires).UTC(), time.UnixMilli(absolute).UTC()
@@ -157,14 +216,9 @@ func (s *Sessions) Authenticate(ctx context.Context, token string) (Session, err
 	now := s.now().UTC()
 	if !now.Before(session.ExpiresAt) || !now.Before(session.AbsoluteExpires) {
 		_, _ = s.db.ExecContext(ctx, "UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE id_hash=?", now.UnixMilli(), hash)
-		return Session{}, ErrSessionInvalid
+		return Session{}, "", ErrSessionInvalid
 	}
-	session.LastSeenAt = now
-	session.ExpiresAt = minTime(now.Add(cfg.IdleTimeout), session.AbsoluteExpires)
-	if _, err = s.db.ExecContext(ctx, "UPDATE sessions SET last_seen_at=?,expires_at=? WHERE id_hash=? AND revoked_at IS NULL", now.UnixMilli(), session.ExpiresAt.UnixMilli(), hash); err != nil {
-		return Session{}, err
-	}
-	return session, nil
+	return session, hash, nil
 }
 
 func (s *Sessions) Revoke(ctx context.Context, token string) error {
@@ -180,6 +234,16 @@ func (s *Sessions) RevokeAll(ctx context.Context, userID string) error {
 		return ErrSessionInvalid
 	}
 	_, err := s.db.ExecContext(ctx, "UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE user_id=?", s.now().UTC().UnixMilli(), userID)
+	return err
+}
+
+// RevokeOthers ends every session of the user except the one identified by
+// token, so a password change signs out other devices and keeps the caller in.
+func (s *Sessions) RevokeOthers(ctx context.Context, userID, token string) error {
+	if s == nil || s.db == nil || userID == "" || token == "" {
+		return ErrSessionInvalid
+	}
+	_, err := s.db.ExecContext(ctx, "UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE user_id=? AND id_hash<>?", s.now().UTC().UnixMilli(), userID, tokenHash(token))
 	return err
 }
 
@@ -258,14 +322,7 @@ func minTime(a, b time.Time) time.Time {
 	}
 	return b
 }
-func fingerprint(value string) string {
-	if value == "" {
-		return ""
-	}
-	sum := sha256.Sum256([]byte(value))
-	return base64.RawStdEncoding.EncodeToString(sum[:])
-}
-func nullFingerprint(value string) any {
+func nullString(value string) any {
 	if value == "" {
 		return nil
 	}

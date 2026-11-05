@@ -2,11 +2,13 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/diagnostics"
@@ -45,20 +47,53 @@ func (s *Server) EnableLogs(service *diagnostics.LogService, engine *metrics.Eng
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Accel-Buffering", "no")
-		_, readErr := service.Read(r.Context(), request, func(entry diagnostics.LogEntry) error {
-			payload, err := json.Marshal(entry)
-			if err != nil {
-				return err
-			}
-			if _, err = fmt.Fprintf(w, "event: log\ndata: %s\n\n", payload); err != nil {
+		// Log lines arrive on the Docker reader's goroutine and heartbeats on
+		// a ticker; one mutex serialises both writers. The follow context is
+		// cancelled when the session stops validating (SEC-12), and the
+		// heartbeat goroutine is joined before the handler returns so nothing
+		// writes to a finished response.
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+		var mu sync.Mutex
+		write := func(format string, args ...any) error {
+			mu.Lock()
+			defer mu.Unlock()
+			if _, err := fmt.Fprintf(w, format, args...); err != nil {
 				return err
 			}
 			flusher.Flush()
 			return nil
+		}
+		recheck := recheckFunc(sessions, r)
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			beat := time.NewTicker(streamHeartbeat)
+			defer beat.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-beat.C:
+					if !recheck() || write(": heartbeat\n\n") != nil {
+						cancel()
+						return
+					}
+				}
+			}
+		}()
+		_, readErr := service.Read(ctx, request, func(entry diagnostics.LogEntry) error {
+			payload, err := json.Marshal(entry)
+			if err != nil {
+				return err
+			}
+			return write("event: log\ndata: %s\n\n", payload)
 		})
+		cancel()
+		wg.Wait()
 		if readErr == nil {
-			_, _ = fmt.Fprint(w, "event: end\ndata: {}\n\n")
-			flusher.Flush()
+			_ = write("event: end\ndata: {}\n\n")
 		}
 	}))
 }

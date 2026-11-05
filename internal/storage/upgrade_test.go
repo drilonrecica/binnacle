@@ -17,7 +17,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func TestUpgradeSchema17Through22PreservesExistingData(t *testing.T) {
+func TestUpgradeSchema17Through23PreservesExistingData(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "binnacle.db")
@@ -77,7 +77,7 @@ func TestUpgradeSchema17Through22PreservesExistingData(t *testing.T) {
 	if _, err = db.ExecContext(ctx, `INSERT INTO users(id,username,password_hash,created_at,updated_at) VALUES('user-1','admin','hash',1,1)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.ExecContext(ctx, `INSERT INTO sessions(id_hash,user_id,created_at,last_seen_at,expires_at,absolute_expires_at,csrf_hash) VALUES('session-hash','user-1',1,1,9999999999999,9999999999999,'csrf-hash')`); err != nil {
+	if _, err = db.ExecContext(ctx, `INSERT INTO sessions(id_hash,user_id,created_at,last_seen_at,expires_at,absolute_expires_at,csrf_hash,user_agent_hash,ip_prefix_hash) VALUES('session-hash','user-1',1,1,9999999999999,9999999999999,'csrf-hash','ua-hash','ip-hash')`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = db.ExecContext(ctx, `INSERT INTO encrypted_secrets(key,ciphertext,nonce,algorithm,key_version,updated_at) VALUES('existing.secret',X'0102',X'0304','AES-256-GCM',1,1)`); err != nil {
@@ -98,8 +98,18 @@ func TestUpgradeSchema17Through22PreservesExistingData(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer manager.Close()
-	if version, versionErr := manager.SchemaVersion(ctx); versionErr != nil || version != 22 {
+	if version, versionErr := manager.SchemaVersion(ctx); versionErr != nil || version != 23 {
 		t.Fatalf("schema version=%d err=%v", version, versionErr)
+	}
+	// Migration 023 drops the unused session fingerprints and adds the TOTP
+	// replay high-water mark with a zero default for existing accounts.
+	var fingerprint sql.NullString
+	if err = manager.DB().QueryRowContext(ctx, "SELECT user_agent_hash FROM sessions WHERE id_hash='session-hash'").Scan(&fingerprint); err == nil {
+		t.Fatal("session fingerprint columns were not dropped")
+	}
+	var lastStep int64
+	if err = manager.DB().QueryRowContext(ctx, "SELECT totp_last_step FROM users WHERE id='user-1'").Scan(&lastStep); err != nil || lastStep != 0 {
+		t.Fatalf("totp_last_step=%d err=%v", lastStep, err)
 	}
 	var name string
 	if err = manager.DB().QueryRowContext(ctx, "SELECT name FROM resources WHERE id='resource-1'").Scan(&name); err != nil || name != "existing" {
