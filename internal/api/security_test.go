@@ -20,7 +20,7 @@ func newSecurityServer(t *testing.T) *Server {
 	p := authpkg.NewProtection(1024, authpkg.TrustedProxies{})
 	s := New()
 	s.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
-	s.EnableLive(nil, DemoAuthorizer(true), p)
+	s.EnableLive(nil, DemoAuthorizer(true), p, LiveOptions{})
 	return s
 }
 
@@ -58,7 +58,7 @@ func TestHSTSOnTLS(t *testing.T) {
 func TestUnauthorizedRequestRejected(t *testing.T) {
 	server := New()
 	p := authpkg.NewProtection(1024, authpkg.TrustedProxies{})
-	server.EnableLive(nil, DemoAuthorizer(false), p)
+	server.EnableLive(nil, DemoAuthorizer(false), p, LiveOptions{})
 
 	req := httptest.NewRequest(http.MethodGet, "http://binnacle.test/api/v1/live", nil)
 	rec := httptest.NewRecorder()
@@ -185,7 +185,7 @@ func TestHSTSFollowsTheProxyAwareSecureCheck(t *testing.T) {
 			s := New()
 			s.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
 			s.SetTrustedProxies(test.proxies)
-			s.EnableLive(nil, DemoAuthorizer(true), authpkg.NewProtection(16, test.proxies))
+			s.EnableLive(nil, DemoAuthorizer(true), authpkg.NewProtection(16, test.proxies), LiveOptions{})
 			req := httptest.NewRequest(http.MethodGet, "http://binnacle.test/api/v1/session", nil)
 			req.RemoteAddr = test.peer
 			if test.proto != "" {

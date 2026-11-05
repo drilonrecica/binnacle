@@ -34,8 +34,11 @@ Event `id` is a string: a ULID that stays unique across restarts and is the
 same in the live stream, `/api/v1/events` and the exports (ADR 021 §9; events
 stored by earlier versions keep their numeric-looking ids). Live event
 payloads also carry `seq`, the per-process stream sequence. The SSE `id:`
-field of every frame is that sequence, so `Last-Event-ID` resumes events
-missed since it; it restarts with the process. `/api/v1/events` pages with
+field of an event frame is that sequence, and of a snapshot frame the highest
+sequence sent so far, so ids never go backwards and `Last-Event-ID` resumes
+events missed since it; it restarts with the process. When every live slot is
+taken (`live.max_clients`, default 8) the stream answers `503` with
+`Retry-After` and error code `live_capacity`. `/api/v1/events` pages with
 `before=<id>`, ordered newest first by time and then by storage order.
 
 History responses list `gaps` with a `reason`: `host_reboot` (a

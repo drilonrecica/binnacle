@@ -43,10 +43,13 @@ type NotificationHealthProvider interface {
 type StorageHealthProvider interface{ Health() storage.Health }
 
 type Monitor struct {
-	DatabasePath              string
-	DatabaseTarget            int64
-	QueueCapacity             int
-	Engine                    *metrics.Engine
+	DatabasePath   string
+	DatabaseTarget int64
+	QueueCapacity  int
+	Engine         *metrics.Engine
+	// LiveClients counts open live streams; they share one engine
+	// subscription, so the engine cannot count them.
+	LiveClients               func() int
 	Persistence               PersistenceMetrics
 	Collector                 DurationProvider
 	Notifications             NotificationHealthProvider
@@ -107,7 +110,7 @@ func (m *Monitor) Snapshot() MonitorSnapshot {
 		metric("rollup_duration", "Rollup duration", durationValue(health.RollupDuration), "milliseconds", durationStatus(health.RollupDuration, 500*time.Millisecond), "Latest incremental rollup pass over every tier; unavailable until the first pass."),
 		metric("retention_duration", "Retention duration", durationValue(health.RetentionDuration), "milliseconds", durationStatus(health.RetentionDuration, 2*time.Second), "Latest retention pass; unavailable until the first pass."),
 		metric("collection_duration", "Collector duration", durationValue(collectionDuration), "milliseconds", durationStatus(collectionDuration, 2*time.Second), "Latest host and Docker collection cycle."),
-		metric("sse_clients", "SSE clients", sseClients(m.Engine), "clients", "normal", "Currently connected live clients."),
+		metric("sse_clients", "SSE clients", sseClients(m.LiveClients), "clients", "normal", "Currently connected live clients."),
 		metric("docker", "Docker API health", dockerStatus, "", dockerStatusValue(dockerStatus), "Current Docker collector state."),
 	}
 	if m.DockerSocket != nil {
@@ -317,11 +320,11 @@ func durationStatus(value, warning time.Duration) string {
 	}
 	return "normal"
 }
-func sseClients(engine *metrics.Engine) int {
-	if engine == nil {
+func sseClients(clients func() int) int {
+	if clients == nil {
 		return 0
 	}
-	return engine.SSEClients()
+	return clients()
 }
 func socketStatus(value string) string {
 	switch value {

@@ -58,6 +58,7 @@ type Collection struct {
 }
 type Live struct {
 	SSEInterval time.Duration `toml:"sse_interval"`
+	MaxClients  int           `toml:"max_clients"`
 }
 type Persistence struct {
 	RawInterval     time.Duration `toml:"raw_interval"`
@@ -129,7 +130,7 @@ type Prometheus struct {
 func Defaults() Config {
 	return Config{
 		Paths: Paths{DataDir: "/var/lib/binnacle", HostProc: "/proc", HostSys: "/sys", HostRoot: "/", HostPasswd: "/host/etc/passwd"}, HTTP: HTTP{ListenAddress: ":8080"}, Auth: Auth{Mode: "local", IdentityHeader: "X-Forwarded-User"},
-		Collection: Collection{HostInterval: 2 * time.Second, ContainerInterval: 2 * time.Second, MinimumInterval: time.Second}, Live: Live{SSEInterval: 2 * time.Second}, Persistence: Persistence{RawInterval: 10 * time.Second, QueueBatchLimit: 60},
+		Collection: Collection{HostInterval: 2 * time.Second, ContainerInterval: 2 * time.Second, MinimumInterval: time.Second}, Live: Live{SSEInterval: 2 * time.Second, MaxClients: 8}, Persistence: Persistence{RawInterval: 10 * time.Second, QueueBatchLimit: 60},
 		Retention: Retention{Preset: "balanced", Raw: 48 * time.Hour, OneMinute: 30 * 24 * time.Hour, FifteenMinute: 365 * 24 * time.Hour, OneHour: 0}, Database: Database{TargetBudgetBytes: 1073741824, WarningRatio: .80, CriticalRatio: .95, EmergencyPauseRatio: .98}, Charts: Charts{MaxPointsPerSeries: 1000}, Docker: Docker{SocketPath: "/var/run/docker.sock", MaxConcurrency: 4}, Checks: Checks{MaxConcurrency: 8}, Notifications: Notifications{MaxConcurrency: 4, QueueCapacity: 1000, DeliveryTimeout: 15 * time.Second, ReminderInterval: 2 * time.Hour}, Logs: Logs{MaxResponseBytes: 1048576, MaxLines: 5000}, Sessions: Sessions{IdleTimeout: 12 * time.Hour, AbsoluteLifetime: 720 * time.Hour},
 	}
 }
@@ -203,6 +204,9 @@ func (c Config) Validate() error {
 		if d <= 0 {
 			return fmt.Errorf("%s must be positive", name)
 		}
+	}
+	if c.Live.MaxClients < 1 || c.Live.MaxClients > 64 {
+		return fmt.Errorf("live.max_clients must be between 1 and 64")
 	}
 	if c.Sessions.AbsoluteLifetime < c.Sessions.IdleTimeout {
 		return fmt.Errorf("sessions.absolute_lifetime must be at least idle_timeout")

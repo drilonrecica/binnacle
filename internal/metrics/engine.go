@@ -14,8 +14,7 @@ type Engine struct {
 	events      []Event
 	filesystems []FilesystemObservation
 	maxEvents   int
-	subscribers map[uint64]chan Snapshot
-	live        map[uint64]chan LiveMessage
+	live        map[uint64]*liveSub
 	nextSub     uint64
 	nextMessage Sequence
 	// persistedSeq is the high-water mark of events handed to persistence:
@@ -51,16 +50,38 @@ func NewEngine(maxEvents int) *Engine {
 	if maxEvents < 1 {
 		maxEvents = 128
 	}
-	return &Engine{maxEvents: maxEvents, subscribers: map[uint64]chan Snapshot{}, live: map[uint64]chan LiveMessage{}}
+	return &Engine{maxEvents: maxEvents, live: map[uint64]*liveSub{}}
 }
 
-type LiveMessage struct {
-	Snapshot *Snapshot
-	Event    *Event
-}
+// LiveEventBuffer is how many published events a subscriber may fall behind
+// before the engine closes its subscription.
+const LiveEventBuffer = 256
+
+// Subscription receives the engine's snapshots and events (RUN-5).
+//
+// Snapshots and events travel in separate channels so that coalescing
+// snapshots never discards an event: Snapshots holds at most the latest
+// snapshot, a newer one replacing an unread one, while Events carries every
+// event in sequence order. A subscriber more than LiveEventBuffer events
+// behind is closed instead (both channels), so it can resume from the ring
+// with EventsAfter rather than silently losing events.
+//
+// Every event with a sequence below a snapshot's is sent to Events before
+// that snapshot reaches Snapshots.
 type Subscription struct {
-	C      <-chan LiveMessage
-	cancel func()
+	Snapshots <-chan Snapshot
+	Events    <-chan Event
+	cancel    func()
+}
+
+type liveSub struct {
+	snapshots chan Snapshot
+	events    chan Event
+}
+
+func (s *liveSub) close() {
+	close(s.snapshots)
+	close(s.events)
 }
 
 func (s *Subscription) Close() {
@@ -102,25 +123,17 @@ func (e *Engine) Publish(snapshot Snapshot, events ...Event) {
 		}
 		e.events = append([]Event(nil), e.events[excess:]...)
 	}
-	for _, ch := range e.subscribers {
-		select {
-		case <-ch:
-		default:
-		}
-		select {
-		case ch <- snapshot:
-		default:
-		}
-	}
-	for id, ch := range e.live {
-		sendLive(ch, LiveMessage{Snapshot: snapshotPtr(clone(snapshot))})
+	for id, sub := range e.live {
+		replaceSnapshot(sub.snapshots, clone(snapshot))
 		for _, event := range events {
-			eventCopy := event
-			if !sendLive(ch, LiveMessage{Event: &eventCopy}) {
-				delete(e.live, id)
-				close(ch)
-				break
+			select {
+			case sub.events <- event:
+				continue
+			default:
 			}
+			delete(e.live, id)
+			sub.close()
+			break
 		}
 	}
 }
@@ -129,17 +142,17 @@ func (e *Engine) Subscribe() *Subscription {
 	defer e.mu.Unlock()
 	e.nextSub++
 	id := e.nextSub
-	ch := make(chan LiveMessage, 33)
-	e.live[id] = ch
+	sub := &liveSub{snapshots: make(chan Snapshot, 1), events: make(chan Event, LiveEventBuffer)}
+	e.live[id] = sub
 	if e.snapshot.Sequence > 0 {
-		sendLive(ch, LiveMessage{Snapshot: snapshotPtr(clone(e.snapshot))})
+		replaceSnapshot(sub.snapshots, clone(e.snapshot))
 	}
-	return &Subscription{C: ch, cancel: func() {
+	return &Subscription{Snapshots: sub.snapshots, Events: sub.events, cancel: func() {
 		e.mu.Lock()
 		defer e.mu.Unlock()
-		if c, ok := e.live[id]; ok {
+		if s, ok := e.live[id]; ok {
 			delete(e.live, id)
-			close(c)
+			s.close()
 		}
 	}}
 }
@@ -150,7 +163,9 @@ func (e *Engine) PublishFilesystems(obs []FilesystemObservation) {
 	e.snapshot.Filesystems = append([]FilesystemObservation(nil), obs...)
 }
 func (e *Engine) Snapshot() Snapshot { e.mu.RLock(); defer e.mu.RUnlock(); return clone(e.snapshot) }
-func (e *Engine) SSEClients() int    { e.mu.RLock(); defer e.mu.RUnlock(); return len(e.live) }
+
+// Subscribers is the number of open subscriptions.
+func (e *Engine) Subscribers() int { e.mu.RLock(); defer e.mu.RUnlock(); return len(e.live) }
 
 // EventsDropped is the number of events evicted from the ring before a
 // persistence batch took them; they reached the live stream but not history.
@@ -185,23 +200,14 @@ func copyCollectors(in map[string]CollectorHealth) map[string]CollectorHealth {
 	}
 	return out
 }
-func snapshotPtr(s Snapshot) *Snapshot { return &s }
-func sendLive(ch chan LiveMessage, message LiveMessage) bool {
-	if message.Snapshot != nil {
-		select {
-		case <-ch:
-		default:
-		}
-		select {
-		case ch <- message:
-		default:
-		}
-		return true
-	}
+
+// replaceSnapshot puts s in the one-slot channel ch, discarding an unread
+// older snapshot. Only the engine sends on ch, under e.mu, so the second
+// send cannot block.
+func replaceSnapshot(ch chan Snapshot, s Snapshot) {
 	select {
-	case ch <- message:
-		return true
+	case <-ch:
 	default:
-		return false
 	}
+	ch <- s
 }

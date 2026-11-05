@@ -65,13 +65,7 @@ func TestEngineAssignsSequenceAndKeepsGivenIDs(t *testing.T) {
 	sub := engine.Subscribe()
 	defer sub.Close()
 	engine.Publish(Snapshot{}, Event{ID: "given", Type: "a"}, Event{Type: "b"})
-	var live []Event
-	for len(live) < 2 {
-		message := <-sub.C
-		if message.Event != nil {
-			live = append(live, *message.Event)
-		}
-	}
+	live := []Event{<-sub.Events, <-sub.Events}
 	if live[0].ID != "given" || live[1].ID == "" || live[0].Seq == 0 || live[1].Seq <= live[0].Seq {
 		t.Fatalf("live events=%+v", live)
 	}

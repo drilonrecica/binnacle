@@ -21,7 +21,7 @@ func TestLiveEventsResumeFromSequence(t *testing.T) {
 	engine.Publish(metrics.Snapshot{}, metrics.Event{Type: "first", Message: "one"}, metrics.Event{Type: "second", Message: "two"})
 	events := engine.EventsAfter(0)
 	server := New()
-	server.EnableLive(engine, DemoAuthorizer(true), auth.NewProtection(16, auth.TrustedProxies{}))
+	server.EnableLive(engine, DemoAuthorizer(true), auth.NewProtection(16, auth.TrustedProxies{}), LiveOptions{})
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	request := httptest.NewRequest(http.MethodGet, "http://binnacle.test/api/v1/live", nil).WithContext(ctx)

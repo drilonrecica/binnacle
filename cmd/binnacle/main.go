@@ -268,13 +268,13 @@ func main() {
 		eventsAuthorizer = api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeEventsRead}
 		incidentsAuthorizer = api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeIncidentsRead, TokenPathPrefixes: []string{"/api/v1/incidents"}}
 	}
-	apiServer.EnableLive(engine, authorizer, protection, alertRepository, coolifyIntegration)
+	apiServer.EnableLive(engine, authorizer, protection, api.LiveOptions{Interval: config.Live.SSEInterval, MaxClients: config.Live.MaxClients, Logger: log}, alertRepository, coolifyIntegration)
 	apiServer.EnableCurrent(engine, serverAuthorizer)
 	apiServer.EnableResources(engine, resourceAuthorizer, store, protection, alertRepository, coolifyIntegration)
 	apiServer.EnableMetrics(store, metricsAuthorizer, protection)
 	apiServer.EnableEvents(store, eventsAuthorizer, protection)
 	apiServer.EnableHistoryDeletion(store, authorizer, sessions)
-	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, Persistence: persistence, Collector: productionSampler, Notifications: notificationWorker, NotificationQueueCapacity: config.Notifications.QueueCapacity, DockerSocket: dockerSocket, Storage: store}
+	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, LiveClients: apiServer.LiveClients, Persistence: persistence, Collector: productionSampler, Notifications: notificationWorker, NotificationQueueCapacity: config.Notifications.QueueCapacity, DockerSocket: dockerSocket, Storage: store}
 	apiServer.EnableMonitorHealth(monitor, authorizer)
 	bundleService := diagnostics.NewBundleService(func(ctx context.Context) diagnostics.BundleData {
 		schema, schemaErr := store.SchemaVersion(ctx)

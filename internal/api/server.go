@@ -34,6 +34,7 @@ type Server struct {
 	proxies        auth.TrustedProxies
 	requestTimeout time.Duration
 	writeGrace     time.Duration
+	live           *liveHub
 }
 
 // RequestTimeout bounds every non-streaming request: the handler context is

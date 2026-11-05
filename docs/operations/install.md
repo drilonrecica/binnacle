@@ -235,6 +235,21 @@ and `503` otherwise. Its body carries `ready`, the lifecycle `state`,
 (`healthy`, `degraded`, `down`, `unknown`), without reasons or the version. A
 degraded collector does not make Binnacle unready.
 
+### Live stream and assets
+
+All open dashboards share one live feed: each snapshot is decorated and
+encoded once and the same bytes go to every client. Snapshot frames go out at
+most once per `live.sse_interval` (`BINNACLE_SSE_INTERVAL`, default 2 s);
+faster ticks are coalesced to the latest, while events are sent at once and
+never dropped. A client too slow to keep up is disconnected and resumes from
+`Last-Event-ID`. At most `live.max_clients` (`BINNACLE_SSE_MAX_CLIENTS`,
+default 8, between 1 and 64) streams are open at once; the next one gets
+`503` with `Retry-After` and error code `live_capacity`. See ADR 025.
+
+UI assets are embedded with Brotli and gzip variants and served by the
+client's `Accept-Encoding` with `Vary: Accept-Encoding`. Each file carries an
+ETag from its content in the build, so revalidation answers `304`.
+
 ### Shutdown
 
 On `SIGTERM` Binnacle stops within 9 s, inside Docker's default 10 s grace:

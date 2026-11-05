@@ -68,7 +68,7 @@ func TestLiveStreamClosesWhenSessionIsRevoked(t *testing.T) {
 		t.Fatal(err)
 	}
 	server := New()
-	server.EnableLive(metrics.NewEngine(8), sessions, auth.NewProtection(16, auth.TrustedProxies{}))
+	server.EnableLive(metrics.NewEngine(8), sessions, auth.NewProtection(16, auth.TrustedProxies{}), LiveOptions{})
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	request := httptest.NewRequest(http.MethodGet, "http://binnacle.test/api/v1/live", nil).WithContext(streamCtx)
