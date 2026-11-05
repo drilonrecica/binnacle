@@ -165,7 +165,7 @@ func main() {
 		dockerEngine, dockerLogs = limitedDocker, limitedDocker
 		onboardingService.SetDocker(dockerEngine)
 		cache := dockercollector.NewCache()
-		productionSampler = &production.Sampler{Engine: engine, Docker: dockerEngine, Cache: cache, Store: store, HostProc: config.Paths.HostProc, HostSys: config.Paths.HostSys, HostRoot: config.Paths.HostRoot, DataDir: config.Paths.DataDir, MaxDockerConcurrency: config.Docker.MaxConcurrency, Interval: func() time.Duration {
+		productionSampler = &production.Sampler{Engine: engine, Logger: log, Docker: dockerEngine, Cache: cache, Store: store, HostProc: config.Paths.HostProc, HostSys: config.Paths.HostSys, HostRoot: config.Paths.HostRoot, DataDir: config.Paths.DataDir, MaxDockerConcurrency: config.Docker.MaxConcurrency, Interval: func() time.Duration {
 			return settingsService.Current().Collection.HostInterval
 		}}
 		application.Add(productionSampler)

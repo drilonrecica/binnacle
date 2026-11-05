@@ -4,6 +4,7 @@ package dockerapi
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"reflect"
 	"testing"
@@ -41,7 +42,7 @@ func TestEngineAdaptsReadOnlySDKOperations(t *testing.T) {
 	ctx := context.Background()
 
 	containers, err := engine.List(ctx)
-	if err != nil || len(containers) != 1 || containers[0].Name != "web" || !sdk.listOptions.All {
+	if err != nil || len(containers) != 1 || containers[0].Name != "web" || containers[0].State != "running" || !sdk.listOptions.All {
 		t.Fatalf("List()=%+v options=%+v error=%v", containers, sdk.listOptions, err)
 	}
 	inspect, err := engine.Inspect(ctx, "container-id")
@@ -66,6 +67,9 @@ func TestEngineAdaptsReadOnlySDKOperations(t *testing.T) {
 	event := <-engine.Events(ctx)
 	if event.ID != "container-id" || event.Action != "start" {
 		t.Fatalf("Events()=%+v", event)
+	}
+	if !sdk.eventsOptions.Filters["type"]["container"] || len(sdk.eventsOptions.Filters) != 1 {
+		t.Fatalf("events filters=%v, want only type=container", sdk.eventsOptions.Filters)
 	}
 	version, err := engine.Version(ctx)
 	if err != nil || version.EngineVersion != "29.5.1" || version.APIVersion != "1.55" {
@@ -100,18 +104,22 @@ func TestStatsWithoutNetworksLeavesNetworkIOUnknown(t *testing.T) {
 }
 
 type fakeSDK struct {
-	listOptions  dockerclient.ContainerListOptions
-	statsOptions dockerclient.ContainerStatsOptions
-	logsOptions  dockerclient.ContainerLogsOptions
-	statsBody    string
-	closed       bool
+	listOptions   dockerclient.ContainerListOptions
+	statsOptions  dockerclient.ContainerStatsOptions
+	logsOptions   dockerclient.ContainerLogsOptions
+	eventsOptions dockerclient.EventsListOptions
+	// eventsErr, when set, makes Events behave like the real SDK after a
+	// daemon disconnect: one error on errs, errs closed, messages left open.
+	eventsErr error
+	statsBody string
+	closed    bool
 }
 
 func newFakeSDK() *fakeSDK { return &fakeSDK{} }
 
 func (sdk *fakeSDK) ContainerList(_ context.Context, options dockerclient.ContainerListOptions) (dockerclient.ContainerListResult, error) {
 	sdk.listOptions = options
-	return dockerclient.ContainerListResult{Items: []containertypes.Summary{{ID: "container-id", Names: []string{"/web"}, Image: "example/web"}}}, nil
+	return dockerclient.ContainerListResult{Items: []containertypes.Summary{{ID: "container-id", Names: []string{"/web"}, Image: "example/web", State: containertypes.StateRunning}}}, nil
 }
 
 func (sdk *fakeSDK) ContainerInspect(_ context.Context, id string, _ dockerclient.ContainerInspectOptions) (dockerclient.ContainerInspectResult, error) {
@@ -137,7 +145,14 @@ func (sdk *fakeSDK) ContainerLogs(_ context.Context, _ string, options dockercli
 	return io.NopCloser(bytes.NewBufferString("line\n")), nil
 }
 
-func (sdk *fakeSDK) Events(context.Context, dockerclient.EventsListOptions) dockerclient.EventsResult {
+func (sdk *fakeSDK) Events(_ context.Context, options dockerclient.EventsListOptions) dockerclient.EventsResult {
+	sdk.eventsOptions = options
+	if sdk.eventsErr != nil {
+		errs := make(chan error, 1)
+		errs <- sdk.eventsErr
+		close(errs)
+		return dockerclient.EventsResult{Messages: make(chan eventtypes.Message), Err: errs}
+	}
 	messages := make(chan eventtypes.Message, 1)
 	errs := make(chan error)
 	messages <- eventtypes.Message{Action: "start", Actor: eventtypes.Actor{ID: "container-id"}, Time: time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC).Unix()}
@@ -155,3 +170,21 @@ func (sdk *fakeSDK) ImageList(context.Context, dockerclient.ImageListOptions) (d
 }
 
 func (sdk *fakeSDK) Close() error { sdk.closed = true; return nil }
+
+// The real SDK reports a dropped stream with one error and never closes
+// Messages; the output channel must still close so the sampler resubscribes.
+func TestEngineEventsClosesWhenStreamFails(t *testing.T) {
+	sdk := newFakeSDK()
+	sdk.eventsErr = errors.New("unexpected EOF")
+	engine := &Engine{client: sdk}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	select {
+	case _, ok := <-engine.Events(ctx):
+		if ok {
+			t.Fatal("received an event from a failed stream")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Events() output stayed open after the stream failed")
+	}
+}

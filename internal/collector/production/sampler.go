@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"sort"
@@ -30,7 +32,31 @@ type MetadataCache interface {
 	Get(id string) (dockercollector.Metadata, bool)
 	Set(v dockercollector.Metadata)
 	Remove(id string)
+	Retain(keep map[string]struct{}) int
+	Apply(e dockerapi.Event) dockercollector.EventEffect
 }
+
+// Docker state and events constants (ADR 022 §2, §5). They are constants so
+// the bounds cannot be configured away.
+const (
+	// metadataMaxAge forces a re-inspect of containers whose cached metadata
+	// is older than this, even when no event or state change asked for one.
+	metadataMaxAge = 10 * time.Minute
+	// eventCallTimeout bounds the Inspect that resolves an uncached
+	// container's resource for an event.
+	eventCallTimeout = 5 * time.Second
+	// eventQueueSize bounds the events forwarded from the subscription to the
+	// sampler loop; when full the oldest is dropped and a re-discover asked.
+	eventQueueSize = 256
+	// pendingEventLimit bounds the normalised events waiting for the next
+	// published snapshot.
+	pendingEventLimit = 128
+	// Resubscription backoff: doubles from the minimum to the cap with ±20 %
+	// jitter, and resets once a stream stayed open for eventsStableAfter.
+	eventsMinBackoff  = time.Second
+	eventsMaxBackoff  = 60 * time.Second
+	eventsStableAfter = 60 * time.Second
+)
 
 type Sampler struct {
 	Engine   *metrics.Engine
@@ -46,7 +72,9 @@ type Sampler struct {
 	DataDir              string
 	Interval             func() time.Duration
 	MaxDockerConcurrency int
-	Store                interface {
+	// Logger receives collector diagnostics; nil means slog.Default().
+	Logger *slog.Logger
+	Store  interface {
 		UpsertHost(context.Context, string, string, string) error
 		UpsertResource(context.Context, storage.Resource) error
 		ArchiveMissingResources(context.Context, []string, time.Time) error
@@ -64,6 +92,16 @@ type Sampler struct {
 	hostFailures      int
 	dockerFailures    int
 	LastDurationNanos atomic.Int64
+	// rediscover asks the next Docker tick to re-inspect every container: set
+	// after an events resubscription and after a dropped event.
+	rediscover atomic.Bool
+	// eventsDisconnected is true while the events stream is down and being
+	// resubscribed; the docker collector reason says so.
+	eventsDisconnected atomic.Bool
+	eventsDropped      atomic.Int64
+	// eventsBackoff overrides the resubscription backoff bounds in tests:
+	// minimum, cap and the open duration after which it resets.
+	eventsBackoff *[3]time.Duration
 	// statfs and mountPoint replace unix.Statfs and isMountPoint in tests.
 	statfs     func(string, *unix.Statfs_t) error
 	mountPoint func(string) bool
@@ -94,7 +132,9 @@ func (s *Sampler) Stop(context.Context) error {
 func (s *Sampler) run(ctx context.Context) {
 	var dockerEvents <-chan dockerapi.Event
 	if s.Docker != nil {
-		dockerEvents = s.Docker.Events(ctx)
+		queue := make(chan dockerapi.Event, eventQueueSize)
+		go s.watchEvents(ctx, queue)
+		dockerEvents = queue
 	}
 	pending := make([]metrics.Event, 0, 16)
 	for {
@@ -111,14 +151,9 @@ func (s *Sampler) run(ctx context.Context) {
 			case <-ctx.Done():
 				timer.Stop()
 				return
-			case event, ok := <-dockerEvents:
-				if !ok {
-					dockerEvents = nil
-					continue
-				}
-				s.handleDockerEvent(ctx, event)
-				if normalized, accepted := events.NormalizeDocker(event, false); accepted {
-					if len(pending) == 128 {
+			case event := <-dockerEvents:
+				if normalized, accepted := s.handleDockerEvent(ctx, event); accepted {
+					if len(pending) == pendingEventLimit {
 						pending = pending[1:]
 					}
 					pending = append(pending, normalized)
@@ -161,6 +196,13 @@ func (s *Sampler) collect(ctx context.Context, pending []metrics.Event) {
 	} else {
 		s.dockerFailures = 0
 		collectors["docker"] = health("docker", 0, nil, now)
+		if s.eventsDisconnected.Load() {
+			// State still comes from List every tick; only the fast path
+			// between ticks is missing (ADR 022 §5).
+			h := collectors["docker"]
+			h.Reason = "events disconnected"
+			collectors["docker"] = h
+		}
 		s.lastResources = append([]metrics.ResourceSnapshot(nil), resourceValues...)
 		if s.Store != nil {
 			_ = s.Store.UpsertHost(ctx, "host", storage.HostIdentity("", "binnacle-local-host"), "Server")
@@ -174,24 +216,128 @@ func (s *Sampler) collect(ctx context.Context, pending []metrics.Event) {
 	}
 	s.Engine.Publish(metrics.Snapshot{At: now, BootIdentity: metrics.BootIdentity(boot), Host: host, Resources: resourceValues, Collectors: collectors}, pending...)
 }
-func (s *Sampler) handleDockerEvent(ctx context.Context, event dockerapi.Event) {
-	if s.Cache == nil {
+
+// watchEvents keeps one Docker events subscription open and forwards its
+// events to queue. When the stream closes for any reason but ctx ending, it
+// resubscribes with exponential backoff and asks the next tick for a full
+// re-discover, since anything may have changed while it was down.
+func (s *Sampler) watchEvents(ctx context.Context, queue chan dockerapi.Event) {
+	minimum, maximum, stableAfter := eventsMinBackoff, eventsMaxBackoff, eventsStableAfter
+	if s.eventsBackoff != nil {
+		minimum, maximum, stableAfter = s.eventsBackoff[0], s.eventsBackoff[1], s.eventsBackoff[2]
+	}
+	delay := minimum
+	for subscription := 0; ; subscription++ {
+		if subscription > 0 {
+			s.rediscover.Store(true)
+		}
+		opened := time.Now()
+		stream := s.Docker.Events(ctx)
+		s.eventsDisconnected.Store(false)
+	forward:
+		for stream != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case event, ok := <-stream:
+				if !ok {
+					break forward
+				}
+				s.enqueueEvent(queue, event)
+			}
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		s.eventsDisconnected.Store(true)
+		if time.Since(opened) >= stableAfter {
+			delay = minimum
+		}
+		wait := jitter(delay)
+		s.logger().Warn("docker events stream closed; resubscribing", "retry_in", wait.String())
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+		delay = min(delay*2, maximum)
+	}
+}
+
+// enqueueEvent forwards one event without blocking the subscription: when the
+// queue is full the oldest event is dropped, counted, and a re-discover asked,
+// so a lost event delays a metadata refresh by one tick but never loses state.
+func (s *Sampler) enqueueEvent(queue chan dockerapi.Event, event dockerapi.Event) {
+	select {
+	case queue <- event:
 		return
+	default:
 	}
-	switch strings.ToLower(event.Action) {
-	case "destroy":
-		s.Cache.Remove(event.ID)
-	case "die", "stop", "pause":
+	select {
+	case <-queue:
+	default:
+	}
+	s.eventsDropped.Add(1)
+	s.rediscover.Store(true)
+	select {
+	case queue <- event:
+	default:
+	}
+}
+
+// jitter spreads d by ±20 %.
+func jitter(d time.Duration) time.Duration {
+	return time.Duration(float64(d) * (0.8 + 0.4*rand.Float64()))
+}
+
+// handleDockerEvent normalises one Docker event, attaches the resource id of
+// its container (EVT-3), and applies it to the metadata cache. The resource is
+// resolved before the cache is updated, because destroy removes the entry.
+func (s *Sampler) handleDockerEvent(ctx context.Context, event dockerapi.Event) (metrics.Event, bool) {
+	normalized, accepted := events.NormalizeDocker(event, false)
+	if accepted {
+		normalized.ResourceID = s.eventResource(ctx, event)
+	}
+	if s.Cache != nil && s.Cache.Apply(event).DropStats {
+		delete(s.previousStats, event.ID)
+	}
+	return normalized, accepted
+}
+
+// eventResource resolves the container of an event to its resource id through
+// the same identity resolution as the tick. A container not cached yet (an
+// event seen before the first tick that lists it) is inspected once. When
+// resolution fails the event keeps an empty resource id.
+func (s *Sampler) eventResource(ctx context.Context, event dockerapi.Event) metrics.ResourceID {
+	if s.Cache != nil {
 		if v, ok := s.Cache.Get(event.ID); ok {
-			v.State = strings.ToLower(event.Action)
-			s.Cache.Set(v)
-		}
-	case "start", "unpause", "restart", "health_status":
-		// Refresh metadata on lifecycle/health changes.
-		if inspect, err := s.Docker.Inspect(ctx, event.ID); err == nil {
-			s.Cache.Set(dockercollector.Metadata{ID: inspect.ID, Name: inspect.Name, Image: inspect.Image, Created: inspect.Created, State: inspect.State, Health: inspect.Health, Labels: inspect.Labels, Environment: inspect.Environment, Networks: inspect.Networks, Mounts: inspect.Mounts})
+			return containerResourceID(v.Inspect())
 		}
 	}
+	if s.Docker == nil || strings.EqualFold(event.Action, "destroy") {
+		s.logger().Debug("docker event without a known container", "container", event.ID, "action", event.Action)
+		return ""
+	}
+	request, cancel := context.WithTimeout(ctx, eventCallTimeout)
+	inspect, err := s.Docker.Inspect(request, event.ID)
+	cancel()
+	if err != nil {
+		s.logger().Debug("docker event container could not be resolved", "container", event.ID, "action", event.Action, "error", err.Error())
+		return ""
+	}
+	if s.Cache != nil {
+		s.Cache.Set(dockercollector.MetadataFromInspect(inspect, time.Now()))
+	}
+	return containerResourceID(inspect)
+}
+
+func (s *Sampler) logger() *slog.Logger {
+	if s.Logger != nil {
+		return s.Logger
+	}
+	return slog.Default()
 }
 
 func (s *Sampler) CollectionDuration() time.Duration {
@@ -523,12 +669,30 @@ func (s *Sampler) collectDocker(ctx context.Context, tick time.Time, hostTotal *
 	if s.previousStats == nil {
 		s.previousStats = map[string]dockerSample{}
 	}
+	// The list is the source of truth for which containers exist: both
+	// per-container maps shrink to it on every tick (COL-8).
+	present := make(map[string]struct{}, len(containers))
 	for _, container := range containers {
-		inspect, inspectErr := s.inspect(ctx, container.ID)
+		present[container.ID] = struct{}{}
+	}
+	for id := range s.previousStats {
+		if _, ok := present[id]; !ok {
+			delete(s.previousStats, id)
+		}
+	}
+	if s.Cache != nil {
+		s.Cache.Retain(present)
+	}
+	full := s.rediscover.Swap(false)
+	for _, container := range containers {
+		inspect, inspectErr := s.inspect(ctx, container, tick, full)
 		if inspectErr != nil {
+			if full {
+				s.rediscover.Store(true)
+			}
 			return nil, inspectErr
 		}
-		identity := resources.ResolveMetadata(resources.Metadata{Labels: inspect.Labels, Environment: inspect.Environment, ContainerName: inspect.Name, Image: inspect.Image})
+		identity := containerIdentity(inspect)
 		resolvedCategory := category(inspect.Labels, identity)
 		if identity.Context == "" {
 			identity.Context = resolvedCategory
@@ -551,6 +715,8 @@ func (s *Sampler) collectDocker(ctx context.Context, tick time.Time, hostTotal *
 		group.status = append(group.status, status)
 		component := metrics.ResourceComponent{ID: metrics.ContainerID(container.ID), Name: inspect.Name, Status: status, RuntimeState: inspect.State, HealthStatus: inspect.Health}
 		if inspect.State != "running" {
+			// No rate across a stop, even when the die event was lost.
+			delete(s.previousStats, container.ID)
 			group.components = append(group.components, component)
 			continue
 		}
@@ -607,20 +773,39 @@ func dockerIO(v dockerapi.IOCounters) dockercollector.IOCounters {
 	return dockercollector.IOCounters{RX: v.RX, TX: v.TX, Read: v.Read, Write: v.Write, Network: v.Network}
 }
 
-func (s *Sampler) inspect(ctx context.Context, id string) (dockerapi.Inspect, error) {
-	if s.Cache != nil {
-		if v, ok := s.Cache.Get(id); ok {
-			return dockerapi.Inspect{ID: v.ID, Name: v.Name, Image: v.Image, Created: v.Created, State: v.State, Health: v.Health, Labels: v.Labels, Environment: v.Environment, Networks: v.Networks, Mounts: v.Mounts}, nil
+// inspect returns the metadata of one listed container. The cached entry is
+// used unless the container is new, its listed state differs from the cached
+// one, an event marked it, it is older than metadataMaxAge, or full asks for a
+// re-discover (ADR 022 §2). The listed state always wins over the inspected
+// one, so the runtime state is at most one tick old even when events are lost.
+func (s *Sampler) inspect(ctx context.Context, container dockerapi.Container, tick time.Time, full bool) (dockerapi.Inspect, error) {
+	if s.Cache != nil && !full {
+		if v, ok := s.Cache.Get(container.ID); ok && !v.Reinspect && tick.Sub(v.InspectedAt) < metadataMaxAge && (container.State == "" || container.State == v.State) {
+			return v.Inspect(), nil
 		}
 	}
-	inspect, err := s.Docker.Inspect(ctx, id)
+	inspect, err := s.Docker.Inspect(ctx, container.ID)
 	if err != nil {
 		return dockerapi.Inspect{}, err
 	}
+	if container.State != "" {
+		inspect.State = container.State
+	}
 	if s.Cache != nil {
-		s.Cache.Set(dockercollector.Metadata{ID: inspect.ID, Name: inspect.Name, Image: inspect.Image, Created: inspect.Created, State: inspect.State, Health: inspect.Health, Labels: inspect.Labels, Environment: inspect.Environment, Networks: inspect.Networks, Mounts: inspect.Mounts})
+		s.Cache.Set(dockercollector.MetadataFromInspect(inspect, tick))
 	}
 	return inspect, nil
+}
+
+// containerIdentity resolves a container's logical resource identity.
+func containerIdentity(inspect dockerapi.Inspect) resources.Identity {
+	return resources.ResolveMetadata(resources.Metadata{Labels: inspect.Labels, Environment: inspect.Environment, ContainerName: inspect.Name, Image: inspect.Image})
+}
+
+// containerResourceID is the resource id the tick publishes the container
+// under; events use it so their counters group by resource.
+func containerResourceID(inspect dockerapi.Inspect) metrics.ResourceID {
+	return resourceID(containerIdentity(inspect).StableKey)
 }
 
 func containerStatus(state, health string) metrics.ResourceStatus {

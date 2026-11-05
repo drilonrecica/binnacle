@@ -15,6 +15,7 @@ import (
 	"time"
 
 	containertypes "github.com/moby/moby/api/types/container"
+	eventtypes "github.com/moby/moby/api/types/events"
 	dockerclient "github.com/moby/moby/client"
 )
 
@@ -27,7 +28,11 @@ type Client interface {
 	Version(context.Context) (Version, error)
 	Diagnostics(context.Context) (Diagnostics, error)
 }
-type Container struct{ ID, Name, Image string }
+
+// Container is one row of the container list. State is the runtime state the
+// daemon reports ("running", "exited", ...); the sampler takes it as the
+// authoritative state on every tick (ADR 022 §2).
+type Container struct{ ID, Name, Image, State string }
 type Inspect struct {
 	ID, Name, Image, Created, State, Health string
 	TTY                                     bool
@@ -151,7 +156,7 @@ func (e *Engine) List(ctx context.Context) ([]Container, error) {
 		if len(value.Names) > 0 {
 			name = strings.TrimPrefix(value.Names[0], "/")
 		}
-		result = append(result, Container{ID: value.ID, Name: name, Image: value.Image})
+		result = append(result, Container{ID: value.ID, Name: name, Image: value.Image, State: string(value.State)})
 	}
 	return result, nil
 }
@@ -325,39 +330,50 @@ func (e *Engine) Stats(ctx context.Context, id string) (Stats, error) {
 }
 func (e *Engine) Events(ctx context.Context) <-chan Event {
 	output := make(chan Event, 32)
-	stream := e.client.Events(ctx, dockerclient.EventsListOptions{})
+	// Only container events: network, image and volume events reuse actions
+	// such as "create" and "destroy" with ids that are not containers.
+	stream := e.client.Events(ctx, dockerclient.EventsListOptions{Filters: dockerclient.Filters{}.Add("type", "container")})
 	messages, errs := stream.Messages, stream.Err
 	go func() {
+		// Closing output is how the caller learns the stream ended and must
+		// resubscribe (ADR 022 §5).
 		defer close(output)
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case _, ok := <-errs:
-				if !ok {
-					errs = nil
-				}
-				if errs == nil && messages == nil {
-					return
-				}
-			case message, ok := <-messages:
-				if !ok {
-					messages = nil
-					if errs == nil {
+			case <-errs:
+				// The SDK sends at most one error and then closes errs, but it
+				// never closes messages; either signal ends the stream. Messages
+				// already delivered before the error are still forwarded.
+				for {
+					select {
+					case message, ok := <-messages:
+						if !ok || !forwardEvent(ctx, output, message) {
+							return
+						}
+					default:
 						return
 					}
-					continue
 				}
-				at := time.Unix(message.Time, 0).UTC().Format(time.RFC3339)
-				select {
-				case output <- Event{ID: message.Actor.ID, Action: string(message.Action), Time: at}:
-				case <-ctx.Done():
+			case message, ok := <-messages:
+				if !ok || !forwardEvent(ctx, output, message) {
 					return
 				}
 			}
 		}
 	}()
 	return output
+}
+
+func forwardEvent(ctx context.Context, output chan<- Event, message eventtypes.Message) bool {
+	at := time.Unix(message.Time, 0).UTC().Format(time.RFC3339)
+	select {
+	case output <- Event{ID: message.Actor.ID, Action: string(message.Action), Time: at}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 func (e *Engine) Version(ctx context.Context) (Version, error) {
 	value, err := e.client.ServerVersion(ctx, dockerclient.ServerVersionOptions{})
