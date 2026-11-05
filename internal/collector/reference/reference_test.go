@@ -83,8 +83,8 @@ func TestDockerMemoryReference(t *testing.T) {
 
 // TestDockerIOReference validates rate normalization from absolute counters.
 func TestDockerIOReference(t *testing.T) {
-	previous := dockercollector.IOCounters{RX: 1000, TX: 2000, Read: 3000, Write: 4000}
-	current := dockercollector.IOCounters{RX: 4000, TX: 5000, Read: 6000, Write: 10000}
+	previous := dockercollector.IOCounters{RX: 1000, TX: 2000, Read: 3000, Write: 4000, Network: true}
+	current := dockercollector.IOCounters{RX: 4000, TX: 5000, Read: 6000, Write: 10000, Network: true}
 	got := dockercollector.NormalizeIO(previous, current, 10.0)
 	checkRate(t, "RX", got.RX, 300.0)
 	checkRate(t, "TX", got.TX, 300.0)

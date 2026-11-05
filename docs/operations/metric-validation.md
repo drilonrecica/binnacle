@@ -7,11 +7,12 @@ Docker interfaces, and how to verify them.
 
 | Binnacle metric | Reference interface | Validation notes |
 | --- | --- | --- |
-| CPU percent | `/proc/stat` aggregate `cpu` line | Busy percentage over the sampling interval; should stay in `[0, 100]`. |
+| CPU percent | `/proc/stat` aggregate `cpu` line | Busy percentage over the sampling interval; busy is everything except `idle` and `iowait`, so `irq` and `softirq` count as busy. Should stay in `[0, 100]`. |
 | Memory used | `/proc/meminfo` `MemTotal` - `MemAvailable` | Matches the kernel's own "used" convention on modern Linux. |
 | Load | `/proc/loadavg` first field | 1-minute load average. |
 | Uptime | `/proc/uptime` first field | Seconds since boot. |
 | Network RX/TX | `/proc/1/net/dev` counters (host network namespace) | Rates are deltas over elapsed time; counters never decrease. |
+| Disk read/write bytes and IOPS | `/proc/diskstats`, summed over the whole devices in `<host sys>/block` | Partitions and `dm-*`, `md*`, `zram*`, `loop*` and `ram*` devices are excluded, so each byte is counted once; compare with `iostat -d` on the physical disks. Without `<host sys>/block` disk I/O is unknown and the `host` collector shows degraded. |
 | Filesystem used/total and inodes | `/proc/1/mountinfo` plus `statfs` on `<host root>/<target>` for each retained mount | Matches `df` on the host. Pseudo filesystems are filtered by type and duplicates by `maj:min`. |
 
 ## Docker metrics
@@ -20,9 +21,13 @@ Docker interfaces, and how to verify them.
 | --- | --- | --- |
 | CPU host percent | `docker stats` `CPU %` | Ratio of container CPU time to system CPU time, expressed as a percent of one host core. |
 | CPU cores ratio | `docker stats` | `container_delta / system_delta`; multiply by host cores for absolute core usage. |
-| Memory working set | `docker stats` `MEM USAGE` | `usage - inactive_file`, falling back to `usage` when cache data is unavailable. |
+| Memory working set | `docker stats` `MEM USAGE` | `usage - inactive_file` (`total_inactive_file` on cgroup v1), falling back to `usage` when cache data is unavailable. |
 | Memory percent | `docker stats` `MEM %` | Working set divided by container limit or host memory, whichever is smaller. |
-| IO rates | `docker stats` `NET I/O`, `BLOCK I/O` | Counter deltas divided by elapsed seconds. |
+| IO rates | `docker stats` `NET I/O`, `BLOCK I/O` | Counter deltas divided by elapsed seconds. A container without networks (host or `none` network mode) has unknown network rates, not zero. |
+
+All rates divide by elapsed time measured on the monotonic clock, so a
+wall-clock step (NTP correction, manual change) does not skew them; samples
+are stored with their UTC wall-clock time.
 
 ## Known semantic differences
 

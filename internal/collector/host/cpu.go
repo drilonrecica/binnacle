@@ -29,6 +29,11 @@ func ParseProcStat(input string) (map[string]CPUCounters, error) {
 		if len(v) > 4 {
 			c.IOWait = v[4]
 		}
+		// irq and softirq time is busy time; dropping it under-reports CPU
+		// on network-heavy hosts (COL-7).
+		if len(v) > 6 {
+			c.IRQ, c.SoftIRQ = v[5], v[6]
+		}
 		if len(v) > 7 {
 			c.Steal = v[7]
 		}

@@ -54,7 +54,24 @@ type CPUStats struct {
 	OnlineCPUs              int
 }
 type MemoryStats struct{ Usage, Limit, InactiveFile uint64 }
-type IOCounters struct{ RX, TX, Read, Write uint64 }
+type IOCounters struct {
+	RX, TX, Read, Write uint64
+	// Network reports whether the daemon returned per-network counters. It is
+	// false for host-network and network-none containers, whose RX and TX are
+	// unknown rather than zero (COL-7).
+	Network bool
+}
+
+// inactiveFile returns the reclaimable file cache to subtract from usage, as
+// the Docker CLI does: cgroup v1 reports it hierarchically as
+// total_inactive_file, cgroup v2 as inactive_file (COL-7).
+func inactiveFile(stats map[string]uint64) uint64 {
+	if v, ok := stats["total_inactive_file"]; ok {
+		return v
+	}
+	return stats["inactive_file"]
+}
+
 type Limited struct {
 	Client Client
 	sem    chan struct{}
@@ -286,7 +303,8 @@ func (e *Engine) Stats(ctx context.Context, id string) (Stats, error) {
 	if err = json.NewDecoder(io.LimitReader(response.Body, 4<<20)).Decode(&value); err != nil {
 		return Stats{}, err
 	}
-	result := Stats{CPU: CPUStats{TotalUsage: value.CPUStats.CPUUsage.TotalUsage, SystemUsage: value.CPUStats.SystemUsage, OnlineCPUs: int(value.CPUStats.OnlineCPUs)}, Memory: MemoryStats{Usage: value.MemoryStats.Usage, Limit: value.MemoryStats.Limit, InactiveFile: value.MemoryStats.Stats["inactive_file"]}}
+	result := Stats{CPU: CPUStats{TotalUsage: value.CPUStats.CPUUsage.TotalUsage, SystemUsage: value.CPUStats.SystemUsage, OnlineCPUs: int(value.CPUStats.OnlineCPUs)}, Memory: MemoryStats{Usage: value.MemoryStats.Usage, Limit: value.MemoryStats.Limit, InactiveFile: inactiveFile(value.MemoryStats.Stats)}}
+	result.IO.Network = len(value.Networks) > 0
 	for _, network := range value.Networks {
 		result.IO.RX += network.RxBytes
 		result.IO.TX += network.TxBytes

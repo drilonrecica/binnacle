@@ -37,6 +37,9 @@ type Sampler struct {
 	Docker   dockerapi.Client
 	Cache    MetadataCache
 	HostProc string
+	// HostSys is the host's sysfs; <HostSys>/block lists the whole devices
+	// whose diskstats are summed. Empty means "/sys".
+	HostSys string
 	// HostRoot is the read-only bind mount of the host's "/" under which
 	// filesystems are measured with statfs; "/" for a standalone binary.
 	HostRoot             string
@@ -130,8 +133,10 @@ func (s *Sampler) run(ctx context.Context) {
 func (s *Sampler) collect(ctx context.Context, pending []metrics.Event) {
 	started := time.Now()
 	defer func() { s.LastDurationNanos.Store(time.Since(started).Nanoseconds()) }()
-	now := time.Now().UTC()
-	host, filesystems, boot, fsReason, hostErr := s.collectHost(now)
+	// started keeps its monotonic reading for elapsed time between ticks;
+	// UTC() strips it, so only the stored and published copy is UTC (COL-8).
+	now := started.UTC()
+	host, filesystems, boot, fsReason, hostErr := s.collectHost(started)
 	if len(filesystems) > 0 {
 		s.Engine.PublishFilesystems(filesystems)
 	}
@@ -148,7 +153,7 @@ func (s *Sampler) collect(ctx context.Context, pending []metrics.Event) {
 			collectors["host"] = h
 		}
 	}
-	resourceValues, dockerErr := s.collectDocker(ctx, now, host.MemoryTotalBytes)
+	resourceValues, dockerErr := s.collectDocker(ctx, started, host.MemoryTotalBytes)
 	if dockerErr != nil {
 		s.dockerFailures++
 		collectors["docker"] = health("docker", s.dockerFailures, dockerErr, now)
@@ -196,7 +201,11 @@ func (s *Sampler) CollectionDuration() time.Duration {
 	return time.Duration(s.LastDurationNanos.Load())
 }
 
-func (s *Sampler) collectHost(now time.Time) (metrics.HostObservation, []metrics.FilesystemObservation, string, string, error) {
+// collectHost reads one host sample. tick should carry a monotonic clock
+// reading: rates use it for elapsed time, and its UTC copy stamps the sample.
+// The returned reason is non-empty when some host metrics are unavailable.
+func (s *Sampler) collectHost(tick time.Time) (metrics.HostObservation, []metrics.FilesystemObservation, string, string, error) {
+	now := tick.UTC()
 	read := func(name string) ([]byte, error) { return os.ReadFile(filepath.Join(s.HostProc, name)) }
 	statRaw, err := read("stat")
 	if err != nil {
@@ -242,17 +251,7 @@ func (s *Sampler) collectHost(now time.Time) (metrics.HostObservation, []metrics
 	}
 	network := hostcollector.AggregateNetwork(networks)
 
-	diskRaw, err := read("diskstats")
-	var disk hostcollector.DiskCounters
-	if err == nil {
-		disks, _ := hostcollector.ParseDiskstats(string(diskRaw))
-		for _, d := range disks {
-			disk.Reads += d.Reads
-			disk.ReadSectors += d.ReadSectors
-			disk.Writes += d.Writes
-			disk.WriteSectors += d.WriteSectors
-		}
-	}
+	disk, diskErr := s.diskCounters(read)
 
 	var cpu, cpuUser, cpuSystem, cpuIOWait, cpuSteal *float64
 	if s.haveCPU {
@@ -264,7 +263,7 @@ func (s *Sampler) collectHost(now time.Time) (metrics.HostObservation, []metrics
 	var rx, tx, rxPackets, txPackets *float64
 	var rxErrors, txErrors, rxDrops, txDrops *int64
 	if !s.previousNetworkAt.IsZero() {
-		elapsed := now.Sub(s.previousNetworkAt).Seconds()
+		elapsed := tick.Sub(s.previousNetworkAt).Seconds()
 		rx = hostcollector.Rate(network.RXBytes, s.previousNetwork.RXBytes, elapsed)
 		tx = hostcollector.Rate(network.TXBytes, s.previousNetwork.TXBytes, elapsed)
 		rxPackets = hostcollector.Rate(network.RXPackets, s.previousNetwork.RXPackets, elapsed)
@@ -274,17 +273,22 @@ func (s *Sampler) collectHost(now time.Time) (metrics.HostObservation, []metrics
 		rxDrops = deltaInt64(network.RXDrops, s.previousNetwork.RXDrops)
 		txDrops = deltaInt64(network.TXDrops, s.previousNetwork.TXDrops)
 	}
-	s.previousNetwork, s.previousNetworkAt = network, now
+	s.previousNetwork, s.previousNetworkAt = network, tick
 
 	var diskReadBPS, diskWriteBPS, diskReadIOPS, diskWriteIOPS *float64
-	if !s.previousDiskAt.IsZero() {
-		elapsed := now.Sub(s.previousDiskAt).Seconds()
+	if diskErr == nil && !s.previousDiskAt.IsZero() {
+		elapsed := tick.Sub(s.previousDiskAt).Seconds()
 		diskReadBPS = hostcollector.Rate(hostcollector.SectorToBytes(disk.ReadSectors), hostcollector.SectorToBytes(s.previousDisk.ReadSectors), elapsed)
 		diskWriteBPS = hostcollector.Rate(hostcollector.SectorToBytes(disk.WriteSectors), hostcollector.SectorToBytes(s.previousDisk.WriteSectors), elapsed)
 		diskReadIOPS = hostcollector.Rate(disk.Reads, s.previousDisk.Reads, elapsed)
 		diskWriteIOPS = hostcollector.Rate(disk.Writes, s.previousDisk.Writes, elapsed)
 	}
-	s.previousDisk, s.previousDiskAt = disk, now
+	if diskErr != nil {
+		// Unknown, not zero; the next good sample starts a fresh baseline.
+		s.previousDisk, s.previousDiskAt = hostcollector.DiskCounters{}, time.Time{}
+	} else {
+		s.previousDisk, s.previousDiskAt = disk, tick
+	}
 
 	used, total := int64(memory.Used), int64(memory.Total)
 	available := int64(memory.Available)
@@ -329,8 +333,42 @@ func (s *Sampler) collectHost(now time.Time) (metrics.HostObservation, []metrics
 		observation.DiskTotalBytes, observation.DiskUsedBytes = &totalBytes, &usedBytes
 	}
 
+	reason := fsReason
+	if diskErr != nil {
+		reason = joinReason(reason, "disk I/O unavailable: "+diskErr.Error())
+	}
 	bootRaw, _ := read("sys/kernel/random/boot_id")
-	return observation, fsystems, strings.TrimSpace(string(bootRaw)), fsReason, nil
+	return observation, fsystems, strings.TrimSpace(string(bootRaw)), reason, nil
+}
+
+// diskCounters sums /proc/diskstats over the whole devices listed in
+// <HostSys>/block, so partitions and stacked devices are not double counted
+// (COL-3). Without the device list the counters are unknown.
+func (s *Sampler) diskCounters(read func(string) ([]byte, error)) (hostcollector.DiskCounters, error) {
+	raw, err := read("diskstats")
+	if err != nil {
+		return hostcollector.DiskCounters{}, err
+	}
+	disks, err := hostcollector.ParseDiskstats(string(raw))
+	if err != nil {
+		return hostcollector.DiskCounters{}, err
+	}
+	hostSys := s.HostSys
+	if hostSys == "" {
+		hostSys = "/sys"
+	}
+	whole, err := hostcollector.WholeDevices(filepath.Join(hostSys, "block"))
+	if err != nil {
+		return hostcollector.DiskCounters{}, err
+	}
+	return hostcollector.SumWholeDevices(disks, whole), nil
+}
+
+func joinReason(a, b string) string {
+	if a == "" {
+		return b
+	}
+	return a + "; " + b
 }
 
 func deltaInt64(current, previous uint64) *int64 {
@@ -470,7 +508,10 @@ type resourceGroup struct {
 	manualName, manualContext                    bool
 }
 
-func (s *Sampler) collectDocker(ctx context.Context, now time.Time, hostTotal *int64) ([]metrics.ResourceSnapshot, error) {
+// collectDocker samples every container. tick should carry a monotonic clock
+// reading for the elapsed time of IO rates; its UTC copy stamps the result.
+func (s *Sampler) collectDocker(ctx context.Context, tick time.Time, hostTotal *int64) ([]metrics.ResourceSnapshot, error) {
+	now := tick.UTC()
 	if s.Docker == nil {
 		return nil, errors.New("Docker client is not configured")
 	}
@@ -531,7 +572,7 @@ func (s *Sampler) collectDocker(ctx context.Context, now time.Time, hostTotal *i
 				group.cpu += *cpu.HostPercent
 				group.cpuOK = true
 			}
-			io := dockercollector.NormalizeIO(dockercollector.IOCounters{RX: previous.value.IO.RX, TX: previous.value.IO.TX, Read: previous.value.IO.Read, Write: previous.value.IO.Write}, dockercollector.IOCounters{RX: stats.IO.RX, TX: stats.IO.TX, Read: stats.IO.Read, Write: stats.IO.Write}, now.Sub(previous.at).Seconds())
+			io := dockercollector.NormalizeIO(dockerIO(previous.value.IO), dockerIO(stats.IO), tick.Sub(previous.at).Seconds())
 			component.RXBPS, component.TXBPS, component.BlockReadBPS, component.BlockWriteBPS = io.RX, io.TX, io.Read, io.Write
 			if io.RX != nil {
 				group.rx += *io.RX
@@ -551,7 +592,7 @@ func (s *Sampler) collectDocker(ctx context.Context, now time.Time, hostTotal *i
 			}
 		}
 		group.components = append(group.components, component)
-		s.previousStats[container.ID] = dockerSample{value: stats, at: now}
+		s.previousStats[container.ID] = dockerSample{value: stats, at: tick}
 	}
 	result := make([]metrics.ResourceSnapshot, 0, len(groups))
 	for stable, group := range groups {
@@ -560,6 +601,10 @@ func (s *Sampler) collectDocker(ctx context.Context, now time.Time, hostTotal *i
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result, nil
+}
+
+func dockerIO(v dockerapi.IOCounters) dockercollector.IOCounters {
+	return dockercollector.IOCounters{RX: v.RX, TX: v.TX, Read: v.Read, Write: v.Write, Network: v.Network}
 }
 
 func (s *Sampler) inspect(ctx context.Context, id string) (dockerapi.Inspect, error) {

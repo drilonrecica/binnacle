@@ -49,7 +49,7 @@ func TestEngineAdaptsReadOnlySDKOperations(t *testing.T) {
 		t.Fatalf("Inspect()=%+v error=%v", inspect, err)
 	}
 	stats, err := engine.Stats(ctx, "container-id")
-	if err != nil || stats.CPU.TotalUsage != 10 || stats.Memory.InactiveFile != 5 || stats.IO.RX != 7 || stats.IO.Read != 9 || stats.PIDs == nil || *stats.PIDs != 3 {
+	if err != nil || stats.CPU.TotalUsage != 10 || stats.Memory.InactiveFile != 5 || stats.IO.RX != 7 || !stats.IO.Network || stats.IO.Read != 9 || stats.PIDs == nil || *stats.PIDs != 3 {
 		t.Fatalf("Stats()=%+v error=%v", stats, err)
 	}
 	if sdk.statsOptions.Stream || sdk.statsOptions.IncludePreviousSample {
@@ -80,10 +80,30 @@ func TestEngineAdaptsReadOnlySDKOperations(t *testing.T) {
 	}
 }
 
+func TestStatsPrefersCgroupV1TotalInactiveFile(t *testing.T) {
+	// cgroup v1: inactive_file covers only the container's own cgroup, while
+	// total_inactive_file includes its children and is what docker stats uses.
+	sdk := &fakeSDK{statsBody: `{"memory_stats":{"usage":1000,"limit":4000,"stats":{"inactive_file":10,"total_inactive_file":400}},"networks":{"eth0":{"rx_bytes":1,"tx_bytes":1}}}`}
+	stats, err := (&Engine{client: sdk}).Stats(context.Background(), "id")
+	if err != nil || stats.Memory.InactiveFile != 400 {
+		t.Fatalf("Stats()=%+v error=%v", stats, err)
+	}
+}
+
+func TestStatsWithoutNetworksLeavesNetworkIOUnknown(t *testing.T) {
+	// A host-network or network-none container has no "networks" object.
+	sdk := &fakeSDK{statsBody: `{"memory_stats":{"usage":1000,"stats":{"inactive_file":10}},"blkio_stats":{"io_service_bytes_recursive":[{"op":"Write","value":9}]}}`}
+	stats, err := (&Engine{client: sdk}).Stats(context.Background(), "id")
+	if err != nil || stats.IO.Network || stats.IO.Write != 9 || stats.Memory.InactiveFile != 10 {
+		t.Fatalf("Stats()=%+v error=%v", stats, err)
+	}
+}
+
 type fakeSDK struct {
 	listOptions  dockerclient.ContainerListOptions
 	statsOptions dockerclient.ContainerStatsOptions
 	logsOptions  dockerclient.ContainerLogsOptions
+	statsBody    string
 	closed       bool
 }
 
@@ -106,6 +126,9 @@ func (sdk *fakeSDK) ContainerInspect(_ context.Context, id string, _ dockerclien
 func (sdk *fakeSDK) ContainerStats(_ context.Context, _ string, options dockerclient.ContainerStatsOptions) (dockerclient.ContainerStatsResult, error) {
 	sdk.statsOptions = options
 	body := `{"cpu_stats":{"cpu_usage":{"total_usage":10},"system_cpu_usage":100,"online_cpus":2},"memory_stats":{"usage":50,"limit":100,"stats":{"inactive_file":5}},"networks":{"eth0":{"rx_bytes":7,"tx_bytes":8}},"blkio_stats":{"io_service_bytes_recursive":[{"op":"Read","value":9}]},"pids_stats":{"current":3}}`
+	if sdk.statsBody != "" {
+		body = sdk.statsBody
+	}
 	return dockerclient.ContainerStatsResult{Body: io.NopCloser(bytes.NewBufferString(body))}, nil
 }
 
