@@ -38,3 +38,28 @@ func TestMonitorReportsSanitizedNotificationHealth(t *testing.T) {
 		t.Fatalf("notification health=%+v", byID)
 	}
 }
+
+func TestMonitorMarksRawDockerSocket(t *testing.T) {
+	for access, want := range map[string]string{"raw": "warning", "constrained": "normal", "unknown": "unavailable", "": "unavailable"} {
+		monitor := &Monitor{DatabasePath: "/missing", DockerSocket: func() string { return access }}
+		var found *MonitorMetric
+		for _, value := range monitor.Snapshot().Metrics {
+			if value.ID == "docker_socket" {
+				value := value
+				found = &value
+			}
+		}
+		if found == nil || found.Status != want {
+			t.Fatalf("access %q metric=%+v, want status %s", access, found, want)
+		}
+		if access == "" && found.Value != nil || access != "" && found.Value != access {
+			t.Fatalf("access %q value=%v", access, found.Value)
+		}
+	}
+	monitor := &Monitor{DatabasePath: "/missing"}
+	for _, value := range monitor.Snapshot().Metrics {
+		if value.ID == "docker_socket" {
+			t.Fatal("docker_socket reported without a Docker client")
+		}
+	}
+}

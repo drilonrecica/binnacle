@@ -44,10 +44,13 @@ type Monitor struct {
 	Collector                 DurationProvider
 	Notifications             NotificationHealthProvider
 	NotificationQueueCapacity int
-	mu                        sync.Mutex
-	previousCPU               time.Duration
-	previousAt                time.Time
-	readCPU                   func() time.Duration
+	// DockerSocket reports the startup probe result: "constrained", "raw" or
+	// "unknown" ("" before the probe ran). Nil omits the metric (demo mode).
+	DockerSocket func() string
+	mu           sync.Mutex
+	previousCPU  time.Duration
+	previousAt   time.Time
+	readCPU      func() time.Duration
 }
 
 func (m *Monitor) Snapshot() MonitorSnapshot {
@@ -85,6 +88,14 @@ func (m *Monitor) Snapshot() MonitorSnapshot {
 		metric("collection_duration", "Collector duration", durationValue(collectionDuration), "milliseconds", durationStatus(collectionDuration, 2*time.Second), "Latest host and Docker collection cycle."),
 		metric("sse_clients", "SSE clients", sseClients(m.Engine), "clients", "normal", "Currently connected live clients."),
 		metric("docker", "Docker API health", dockerStatus, "", dockerStatusValue(dockerStatus), "Current Docker collector state."),
+	}
+	if m.DockerSocket != nil {
+		access := m.DockerSocket()
+		var value any
+		if access != "" {
+			value = access
+		}
+		values = append(values, metric("docker_socket", "Docker socket access", value, "", socketStatus(access), "Startup probe of a Docker path Binnacle never needs. \"raw\" means the full Engine API is reachable; put a constrained socket proxy in front."))
 	}
 	if m.Notifications != nil {
 		queue, permanent, notificationDropped, lastSuccess := m.Notifications.HealthSnapshot()
@@ -243,6 +254,15 @@ func sseClients(engine *metrics.Engine) int {
 		return 0
 	}
 	return engine.SSEClients()
+}
+func socketStatus(value string) string {
+	switch value {
+	case "constrained":
+		return "normal"
+	case "raw":
+		return "warning"
+	}
+	return "unavailable"
 }
 func dockerStatusValue(value string) string {
 	if value == "healthy" {

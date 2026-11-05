@@ -34,6 +34,26 @@ export BINNACLE_SETUP_TOKEN="$(openssl rand -hex 32)"
 
 Store it in a password manager. After the first administrator is created, the setup token is permanently disabled and cannot be reused.
 
+A setup token is valid for 24 hours. While no administrator exists, every
+restart re-arms setup with a fresh 24-hour window, so an expired token never
+locks you out: restart the container and use the token again.
+
+### Loopback-only installs
+
+When Binnacle listens only on loopback (for example
+`BINNACLE_LISTEN_ADDRESS=127.0.0.1:8080`) and `BINNACLE_SETUP_TOKEN` is not
+set, it generates a token itself. The token is never logged. It is written to
+`setup-token` in the runtime directory (`/var/lib/binnacle/runtime/setup-token`
+by default), readable only by the Binnacle user, and the startup log names the
+path:
+
+```bash
+cat /var/lib/binnacle/runtime/setup-token
+```
+
+Each start before setup is claimed replaces the file with a new token. The file
+is deleted once the administrator exists.
+
 ## Install with Coolify
 
 1. Add the Binnacle service template to your Coolify instance (or use **Docker Compose Empty** and paste `packaging/coolify/binnacle.yaml`).
@@ -118,6 +138,11 @@ allows only ping, version, container list/inspect/stats/logs, and events reads.
 Do not replace this with a direct daemon-socket mount in production. A direct
 mount remains possible only as an explicit legacy deployment override.
 
+At startup Binnacle asks the socket for one path the proxy policy denies
+(`GET /images/json`). If the request succeeds, the socket is probably the raw
+daemon socket: Binnacle logs a warning and **Settings › System** shows
+**Docker socket access** as `raw`. A proxied socket shows `constrained`.
+
 For Docker secrets, mount the master key as a file rather than exposing it in
 the container environment:
 
@@ -194,6 +219,13 @@ carries the client's network prefix (`/24` for IPv4, `/56` for IPv6), never
 the full address, and redacts token query parameters. Health probes and asset
 requests are logged at debug level. `/healthz` returns only `{"state": ...}`
 and does not reveal the version.
+
+`binnacle --healthcheck` reads the same configuration as the server and dials
+`/healthz` on the configured listen address (an unspecified host such as
+`:8080` or `0.0.0.0` means `127.0.0.1`), giving up after 3 s.
+
+The SQLite database file is created with mode `0600`; an existing file that
+other users can read is tightened on start.
 
 ## Environment variables
 

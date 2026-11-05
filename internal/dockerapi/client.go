@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -70,6 +71,38 @@ type sdkClient interface {
 	ContainerLogs(context.Context, string, dockerclient.ContainerLogsOptions) (dockerclient.ContainerLogsResult, error)
 	Events(context.Context, dockerclient.EventsListOptions) dockerclient.EventsResult
 	ServerVersion(context.Context, dockerclient.ServerVersionOptions) (dockerclient.ServerVersionResult, error)
+	// ImageList is used only by ProbeSocketAccess: Binnacle never needs image
+	// data, so a constrained socket proxy denies it and a raw socket answers.
+	ImageList(context.Context, dockerclient.ImageListOptions) (dockerclient.ImageListResult, error)
+}
+
+// SocketAccess describes what the configured Docker socket lets Binnacle do.
+type SocketAccess string
+
+const (
+	// SocketConstrained means a path Binnacle does not need was refused, as a
+	// constrained socket proxy does.
+	SocketConstrained SocketAccess = "constrained"
+	// SocketRaw means a path outside Binnacle's read set was answered, so the
+	// socket is probably the raw daemon socket with full Engine API access.
+	SocketRaw SocketAccess = "raw"
+	// SocketUnknown means the probe could not reach the daemon.
+	SocketUnknown SocketAccess = "unknown"
+)
+
+// ProbeSocketAccess asks for one path that Binnacle's socket proxy policy
+// denies (GET /images/json). Any HTTP error answer counts as constrained, a
+// success as raw, and a transport or context failure as unknown.
+func (e *Engine) ProbeSocketAccess(ctx context.Context) (SocketAccess, error) {
+	_, err := e.client.ImageList(ctx, dockerclient.ImageListOptions{})
+	switch {
+	case err == nil:
+		return SocketRaw, nil
+	case dockerclient.IsErrConnectionFailed(err), errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return SocketUnknown, err
+	default:
+		return SocketConstrained, nil
+	}
 }
 
 type Engine struct {

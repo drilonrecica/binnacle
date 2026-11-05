@@ -8,10 +8,11 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -54,7 +55,11 @@ func main() {
 		return
 	}
 	if *healthcheck {
-		if err := runHealthcheck(); err != nil {
+		config, _, err := settings.Load()
+		if err == nil {
+			err = runHealthcheck(config.HTTP.ListenAddress, healthcheckTimeout)
+		}
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -82,6 +87,7 @@ func main() {
 	// Demo mode only replaces real host/Docker collection with synthetic data;
 	// it does not disable authentication.
 	setup := auth.NewSetupService(nil)
+	setup.SetTokenFile(filepath.Join(config.Paths.RuntimeDir, auth.SetupTokenFileName))
 	credentials := auth.NewCredentials(nil)
 	sessions := auth.NewSessions(nil, auth.SessionConfig{IdleTimeout: config.Sessions.IdleTimeout, AbsoluteLifetime: config.Sessions.AbsoluteLifetime})
 	tokenRepository := auth.NewAPITokenRepository(nil)
@@ -123,6 +129,7 @@ func main() {
 	var dockerEngine dockerapi.Client
 	var dockerLogs dockerapi.LogClient
 	var productionSampler *production.Sampler
+	var dockerSocket func() string
 	if *demoMode || config.Demo {
 		generator := demo.New(*demoSeed, realClock{})
 		generator.Containers = *demoContainers
@@ -141,12 +148,16 @@ func main() {
 			os.Exit(1)
 		}
 		limitedDocker := dockerapi.New(rawEngine, config.Docker.MaxConcurrency)
+		var socketAccess atomic.Value
+		socketAccess.Store("")
+		dockerSocket = func() string { return socketAccess.Load().(string) }
 		application.Add(app.ComponentFuncs{
 			StartFunc: func(ctx context.Context) error {
 				if err := dockerapi.RequireSupportedEngine(ctx, limitedDocker); err != nil {
 					_ = rawEngine.Close()
 					return err
 				}
+				probeDockerSocket(ctx, log, rawEngine, &socketAccess)
 				return nil
 			},
 			StopFunc: func(context.Context) error { return rawEngine.Close() },
@@ -198,10 +209,15 @@ func main() {
 			return err
 		}
 		generated, err := setup.Initialize(ctx, config.HTTP.ListenAddress, setupToken)
-		if generated != "" {
-			log.Warn("local setup token generated for loopback installation; retrieve it from the setup UI")
+		if err != nil {
+			return err
 		}
-		return err
+		if generated != "" {
+			log.Warn("first-run setup is open: setup token written for this loopback installation; paste the file's contents into the setup page", "path", setup.TokenFile())
+		} else if setup.Available(ctx) {
+			log.Info("first-run setup is open: enter the BINNACLE_SETUP_TOKEN value on the setup page")
+		}
+		return nil
 	}})
 	application.Add(coolifyIntegration)
 	application.Add(sessions)
@@ -254,7 +270,7 @@ func main() {
 	apiServer.EnableMetrics(store, metricsAuthorizer, protection)
 	apiServer.EnableEvents(store, eventsAuthorizer, protection)
 	apiServer.EnableHistoryDeletion(store, authorizer, sessions)
-	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, Persistence: persistence, Collector: productionSampler, Notifications: notificationWorker, NotificationQueueCapacity: config.Notifications.QueueCapacity}
+	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, Persistence: persistence, Collector: productionSampler, Notifications: notificationWorker, NotificationQueueCapacity: config.Notifications.QueueCapacity, DockerSocket: dockerSocket}
 	apiServer.EnableMonitorHealth(monitor, authorizer)
 	bundleService := diagnostics.NewBundleService(func(ctx context.Context) diagnostics.BundleData {
 		schema, schemaErr := store.SchemaVersion(ctx)
@@ -326,16 +342,4 @@ func main() {
 		log.Error("application exited with error", "error", err)
 		os.Exit(1)
 	}
-}
-
-func runHealthcheck() error {
-	resp, err := http.Get("http://127.0.0.1:8080/healthz")
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("health check returned %s", resp.Status)
-	}
-	return nil
 }

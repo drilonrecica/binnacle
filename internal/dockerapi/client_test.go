@@ -24,7 +24,7 @@ func TestAllowedEnvironmentOnlyRetainsCoolifyMetadata(t *testing.T) {
 
 func TestSDKBoundaryContainsOnlyReadOperations(t *testing.T) {
 	typeOfBoundary := reflect.TypeOf((*sdkClient)(nil)).Elem()
-	want := []string{"ContainerInspect", "ContainerList", "ContainerLogs", "ContainerStats", "Events", "ServerVersion"}
+	want := []string{"ContainerInspect", "ContainerList", "ContainerLogs", "ContainerStats", "Events", "ImageList", "ServerVersion"}
 	if typeOfBoundary.NumMethod() != len(want) {
 		t.Fatalf("sdkClient has %d methods, want %d", typeOfBoundary.NumMethod(), len(want))
 	}
@@ -125,6 +125,10 @@ func (sdk *fakeSDK) Events(context.Context, dockerclient.EventsListOptions) dock
 
 func (sdk *fakeSDK) ServerVersion(context.Context, dockerclient.ServerVersionOptions) (dockerclient.ServerVersionResult, error) {
 	return dockerclient.ServerVersionResult{Version: "29.5.1", APIVersion: "1.55"}, nil
+}
+
+func (sdk *fakeSDK) ImageList(context.Context, dockerclient.ImageListOptions) (dockerclient.ImageListResult, error) {
+	return dockerclient.ImageListResult{}, nil
 }
 
 func (sdk *fakeSDK) Close() error { sdk.closed = true; return nil }

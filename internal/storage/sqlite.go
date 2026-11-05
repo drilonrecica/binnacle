@@ -108,6 +108,9 @@ func (m *Manager) Open(ctx context.Context) error {
 	if err := freeSpace(filepath.Dir(m.Path)); err != nil {
 		return err
 	}
+	if err := ensurePrivateFile(m.Path); err != nil {
+		return err
+	}
 	db, err := sql.Open("sqlite3", m.Path)
 	if err != nil {
 		return err
@@ -185,6 +188,29 @@ func (m *Manager) migrate(ctx context.Context, db *sql.DB) error {
 		}
 		if err = tx.Commit(); err != nil {
 			return fmt.Errorf("migration %03d commit: %w", version, err)
+		}
+	}
+	return nil
+}
+
+// ensurePrivateFile creates the database file 0600 before SQLite opens it and
+// tightens an existing file that other users could read. SQLite gives the WAL
+// and shared-memory files the main file's mode, so they follow.
+func ensurePrivateFile(path string) error {
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
+	if err == nil {
+		return file.Close()
+	}
+	if !errors.Is(err, os.ErrExist) {
+		return fmt.Errorf("create database file: %w", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode().Perm()&0077 != 0 {
+		if err := os.Chmod(path, info.Mode().Perm()&0700); err != nil {
+			return fmt.Errorf("restrict database file mode: %w", err)
 		}
 	}
 	return nil

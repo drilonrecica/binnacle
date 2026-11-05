@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -21,10 +23,15 @@ var (
 )
 
 type SetupService struct {
-	db       *sql.DB
-	now      func() time.Time
-	tokenTTL time.Duration
+	db        *sql.DB
+	now       func() time.Time
+	tokenTTL  time.Duration
+	tokenFile string
 }
+
+// SetupTokenFileName is the file inside the runtime directory that holds a
+// generated loopback setup token while first-run setup is open.
+const SetupTokenFileName = "setup-token"
 
 func NewSetupService(db *sql.DB) *SetupService {
 	return &SetupService{db: db, now: func() time.Time { return time.Now().UTC() }, tokenTTL: 24 * time.Hour}
@@ -38,6 +45,13 @@ func SetupTokenFromEnvironment() (string, error) {
 }
 func (s *SetupService) SetDB(db *sql.DB) { s.db = db }
 
+// SetTokenFile sets where a generated loopback token is written. The file is
+// created 0600 and removed once setup is claimed or disabled.
+func (s *SetupService) SetTokenFile(path string) { s.tokenFile = path }
+
+// TokenFile reports where a generated loopback token is written.
+func (s *SetupService) TokenFile() string { return s.tokenFile }
+
 // Disable permanently records that first-run setup has completed. It is used
 // by non-browser bootstrap paths as well as the browser claim transaction.
 func (s *SetupService) Disable(ctx context.Context) error {
@@ -47,11 +61,20 @@ func (s *SetupService) Disable(ctx context.Context) error {
 	now := s.now().UTC().UnixMilli()
 	_, err := s.db.ExecContext(ctx, `INSERT INTO setup_state(id,token_hash,expires_at,claimed_at,created_at)
 		VALUES(1,NULL,NULL,?,?) ON CONFLICT(id) DO UPDATE SET token_hash=NULL,claimed_at=COALESCE(setup_state.claimed_at,excluded.claimed_at)`, now, now)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.removeTokenFile()
 }
 
-// Initialize creates an operator token only for loopback-only installations. A
-// public listener must be supplied an operator token out of band.
+// Initialize arms first-run setup while no user exists. A public listener
+// must be supplied an operator token out of band; a loopback-only listener
+// without one gets a generated token written to the token file. While setup is
+// unclaimed and no user exists, every start re-arms it: the configured token
+// gets a fresh expiry and a loopback install gets a fresh generated token, so
+// an expired unclaimed token never blocks setup permanently. The returned
+// value is the generated token, empty when the operator supplied one or setup
+// is closed.
 func (s *SetupService) Initialize(ctx context.Context, listenAddress, configuredToken string) (generated string, err error) {
 	if s == nil || s.db == nil {
 		return "", ErrSetupUnavailable
@@ -61,38 +84,93 @@ func (s *SetupService) Initialize(ctx context.Context, listenAddress, configured
 		return "", err
 	}
 	if users > 0 {
-		return "", nil
+		return "", s.removeTokenFile()
 	}
 	var claimed sql.NullInt64
-	err = s.db.QueryRowContext(ctx, "SELECT claimed_at FROM setup_state WHERE id=1").Scan(&claimed)
-	if err == nil {
-		if claimed.Valid {
-			return "", nil
-		}
-		return "", nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	var expires int64
+	exists := true
+	err = s.db.QueryRowContext(ctx, "SELECT claimed_at,COALESCE(expires_at,0) FROM setup_state WHERE id=1").Scan(&claimed, &expires)
+	if errors.Is(err, sql.ErrNoRows) {
+		exists = false
+	} else if err != nil {
 		return "", err
 	}
-	public := publicListener(listenAddress)
+	if exists && claimed.Valid {
+		return "", s.removeTokenFile()
+	}
+	now := s.now().UTC()
 	token := strings.TrimSpace(configuredToken)
 	if token == "" {
-		if public {
+		if publicListener(listenAddress) {
+			if exists && now.UnixMilli() < expires {
+				// A token supplied on an earlier start is still valid.
+				return "", nil
+			}
 			return "", fmt.Errorf("public setup requires BINNACLE_SETUP_TOKEN")
 		}
-		var e error
-		token, e = randomSetupToken()
-		if e != nil {
-			return "", e
+		if s.tokenFile == "" {
+			return "", fmt.Errorf("loopback setup requires a token file location")
+		}
+		if token, err = randomSetupToken(); err != nil {
+			return "", err
 		}
 		generated = token
 	}
 	if len(token) < 32 {
 		return "", fmt.Errorf("setup token must be at least 32 characters")
 	}
-	now := s.now().UTC()
-	_, err = s.db.ExecContext(ctx, "INSERT INTO setup_state(id,token_hash,expires_at,created_at) VALUES(1,?,?,?)", setupHash(token), now.Add(s.tokenTTL).UnixMilli(), now.UnixMilli())
-	return generated, err
+	if generated == "" {
+		if err = s.removeTokenFile(); err != nil {
+			return "", err
+		}
+	} else if err = writeTokenFile(s.tokenFile, token); err != nil {
+		return "", fmt.Errorf("write setup token file: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO setup_state(id,token_hash,expires_at,created_at) VALUES(1,?,?,?)
+		ON CONFLICT(id) DO UPDATE SET token_hash=excluded.token_hash,expires_at=excluded.expires_at WHERE setup_state.claimed_at IS NULL`,
+		setupHash(token), now.Add(s.tokenTTL).UnixMilli(), now.UnixMilli())
+	if err != nil {
+		return "", err
+	}
+	return generated, nil
+}
+
+// writeTokenFile replaces path atomically with a file readable only by the
+// Binnacle user. The temporary file is created 0600 with O_EXCL so the token
+// is never exposed through a wider mode, whatever the umask.
+func writeTokenFile(path, token string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	file, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	if _, err = file.WriteString(token + "\n"); err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func (s *SetupService) removeTokenFile() error {
+	if s.tokenFile == "" {
+		return nil
+	}
+	if err := os.Remove(s.tokenFile); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove setup token file: %w", err)
+	}
+	return nil
 }
 
 func (s *SetupService) Available(ctx context.Context) bool {
@@ -185,6 +263,9 @@ func (s *SetupService) Claim(ctx context.Context, token, username, password stri
 	if err = tx.Commit(); err != nil {
 		return User{}, err
 	}
+	// The token is spent. A file that cannot be removed now is removed on the
+	// next start (a user exists by then), so the claim itself still succeeds.
+	_ = s.removeTokenFile()
 	return User{ID: id, Username: username, CreatedAt: now}, nil
 }
 

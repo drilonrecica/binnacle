@@ -74,7 +74,7 @@
   eyebrow={`Step ${step} of 2`}
   title={step === 1 ? 'Set up Binnacle' : 'Create the administrator'}
   description={step === 1
-    ? 'Enter the one-time setup token from the deployment. It is shown in the container logs or the BINNACLE_SETUP_TOKEN variable.'
+    ? 'Enter the one-time setup token: the BINNACLE_SETUP_TOKEN value from your deployment or, on a loopback-only install, the contents of the setup-token file whose path Binnacle logs at startup.'
     : 'This is the only account. It signs in locally with a password; two-factor can be added later.'}
 >
   <ol class="steps" aria-label="Setup progress">
