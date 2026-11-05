@@ -73,8 +73,13 @@ func (m *Manager) RebuildRollups(ctx context.Context, now time.Time) error {
 func (m *Manager) timedRollupPass(ctx context.Context, now time.Time) error {
 	started := time.Now()
 	err := m.rollupPass(ctx, now)
+	elapsed := time.Since(started)
+	m.rollupLatency.Observe(elapsed)
+	if err != nil && ctx.Err() == nil {
+		m.rollupFailures.Inc()
+	}
 	m.mu.Lock()
-	m.rollupDuration = time.Since(started)
+	m.rollupDuration = elapsed
 	m.mu.Unlock()
 	return err
 }
@@ -263,7 +268,7 @@ func (m *Manager) runRollups(ctx context.Context) {
 	defer tick.Stop()
 	for {
 		if err := m.RollupOnce(ctx, time.Now()); err != nil && ctx.Err() == nil {
-			m.logger().Error("rollup pass failed", "error", err)
+			m.errorLog().Error("rollup pass failed", "error", err)
 		}
 		select {
 		case <-ctx.Done():

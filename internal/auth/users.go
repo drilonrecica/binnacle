@@ -147,7 +147,11 @@ func (c *Credentials) ChangePassword(ctx context.Context, userID, current, next 
 	if err != nil {
 		return err
 	}
-	if affected, _ := result.RowsAffected(); affected != 1 {
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != 1 {
 		return ErrInvalidCredentials
 	}
 	return nil

@@ -216,8 +216,10 @@ func (c *APIClient) get(ctx context.Context, path string, dst any) error {
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
-		return fmt.Errorf("Coolify returned HTTP %d", response.StatusCode)
+		// Drain a bounded prefix so the connection can be reused; a failed
+		// drain only costs the connection and is reported with the status.
+		_, drainErr := io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+		return errors.Join(fmt.Errorf("Coolify returned HTTP %d", response.StatusCode), drainErr)
 	}
 	reader := &limitReader{reader: response.Body, remaining: MaxAPIResponseBytes}
 	if err = json.NewDecoder(reader).Decode(dst); err != nil {

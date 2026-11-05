@@ -50,7 +50,31 @@ func New() *Server {
 	s.mux.HandleFunc("/api/v1/", s.notFound)
 	return s
 }
-func (s *Server) SetLogger(l *slog.Logger) { s.logger = l }
+func (s *Server) SetLogger(l *slog.Logger) {
+	s.logger = l
+	packageLog.Store(l)
+}
+
+// packageLog is the logger of the most recent SetLogger, for the package
+// helpers (WriteJSON and friends) that have no Server.
+var packageLog atomic.Pointer[slog.Logger]
+
+// apiLogger is the app logger once SetLogger ran, slog.Default() before.
+func apiLogger() *slog.Logger {
+	if l := packageLog.Load(); l != nil {
+		return l
+	}
+	return slog.Default()
+}
+
+// logResponseWrite records a response body that did not reach the client.
+// The status is already sent, so there is nothing to answer; it is almost
+// always a client that went away, hence Debug.
+func logResponseWrite(err error) {
+	if err != nil {
+		apiLogger().Debug("response body was not written", "error", err)
+	}
+}
 
 // SetTrustedProxies supplies the proxy-aware Secure check that decides whether
 // HSTS is sent; r.TLS alone never fires behind a TLS-terminating proxy (SEC-18).
@@ -197,7 +221,7 @@ func WriteJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	logResponseWrite(json.NewEncoder(w).Encode(value))
 }
 func WriteError(w http.ResponseWriter, status int, e Error) {
 	WriteJSON(w, status, errorEnvelope{Error: e})

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/auth"
+	"github.com/drilonrecica/binnacle/internal/observe"
 	"github.com/drilonrecica/binnacle/internal/outbound"
 )
 
@@ -48,6 +49,11 @@ type Worker struct {
 	queued  map[string]struct{}
 	queueMu sync.Mutex
 	dropped atomic.Int64
+	// failedAttempts counts delivery attempts that did not succeed since
+	// start, retried or permanent (RUN-7).
+	failedAttempts observe.Counter
+	errlog         observe.ErrorLog
+	errlogOnce     sync.Once
 	// TLSConfig is nil in production, which uses the system trust store. Tests
 	// may provide a private CA; the config is cloned for every destination.
 	TLSConfig *tls.Config
@@ -229,8 +235,17 @@ func (w *Worker) logError(ctx context.Context, msg string, err error, attrs ...a
 	if ctx.Err() != nil {
 		return
 	}
-	w.logger().Error(msg, append(attrs, "error", err)...)
+	w.errorLog().Error(msg, append(attrs, "error", err)...)
 }
+
+// errorLog is the worker's rate-limited log; it writes through logger().
+func (w *Worker) errorLog() *observe.ErrorLog {
+	w.errlogOnce.Do(func() { w.errlog.Logger = w.logger })
+	return &w.errlog
+}
+
+// FailedAttempts is the number of delivery attempts that failed since start.
+func (w *Worker) FailedAttempts() uint64 { return w.failedAttempts.Load() }
 
 func (w *Worker) logger() *slog.Logger {
 	if w.Logger != nil {
@@ -344,7 +359,10 @@ func (w *Worker) webhook(ctx context.Context, d deliveryRow, s ChannelSecrets) (
 		return true, classifyNetwork(err), 0
 	}
 	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	// Draining lets the connection be reused; the status decides the outcome.
+	if _, err := io.Copy(io.Discard, io.LimitReader(resp.Body, 4096)); err != nil {
+		w.logger().Debug("webhook response body was not drained", "delivery", d.id, "error", err)
+	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return false, "", 0
 	}
@@ -409,7 +427,11 @@ func (w *Worker) email(ctx context.Context, d deliveryRow, s ChannelSecrets) (bo
 		}
 	}
 	var cfg map[string]any
-	_ = json.Unmarshal([]byte(d.config), &cfg)
+	if d.config != "" {
+		if err := json.Unmarshal([]byte(d.config), &cfg); err != nil {
+			return false, "invalid_configuration"
+		}
+	}
 	mode, _ := cfg["tlsMode"].(string)
 	conn, err := w.Policy.DialContext(ctx, "tcp", s.Host)
 	if err != nil {
@@ -417,7 +439,9 @@ func (w *Worker) email(ctx context.Context, d deliveryRow, s ChannelSecrets) (bo
 	}
 	defer conn.Close()
 	if deadline, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(deadline)
+		if err := conn.SetDeadline(deadline); err != nil {
+			return true, classifyNetwork(err)
+		}
 	}
 	tlsConfig := w.tlsConfig(host)
 	var client *smtp.Client
@@ -522,6 +546,10 @@ func plainText(payload string) string {
 
 func (w *Worker) finish(ctx context.Context, id string, success, retryable bool, code string, retryAfter time.Duration) {
 	now := time.Now().UTC()
+	if !success {
+		w.failedAttempts.Inc()
+		w.errorLog().Warn("notification delivery attempt failed", "delivery", id, "failure_code", code, "retryable", retryable)
+	}
 	var attempts int
 	if err := w.Repo.db.QueryRowContext(ctx, `SELECT attempt_count+1 FROM notification_deliveries WHERE id=?`, id).Scan(&attempts); err != nil {
 		w.release(ctx, id, err)
@@ -555,6 +583,7 @@ func (w *Worker) Health(ctx context.Context) (Health, error) {
 func (w *Worker) HealthSnapshot() (int, int, int64, *time.Time) {
 	h, err := w.Health(context.Background())
 	if err != nil {
+		w.errorLog().Warn("notification health was not read", "error", err)
 		return 0, 0, w.dropped.Load(), nil
 	}
 	return h.QueueDepth, h.PermanentFailures, h.DroppedDeliveries, h.LastSuccess

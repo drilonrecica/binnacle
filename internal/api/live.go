@@ -108,7 +108,10 @@ func stream(w http.ResponseWriter, r *http.Request, hub *liveHub, recheck func()
 			if err != nil {
 				continue
 			}
-			writeFrame(w, liveFrame{kind: "event", id: event.Seq, data: data})
+			if err := writeFrame(w, liveFrame{kind: "event", id: event.Seq, data: data}); err != nil {
+				logResponseWrite(err)
+				return
+			}
 			cursor = event.Seq
 		}
 		f.Flush()
@@ -125,7 +128,10 @@ func stream(w http.ResponseWriter, r *http.Request, hub *liveHub, recheck func()
 				// client re-authenticates instead of reading forever.
 				return
 			}
-			fmt.Fprint(w, ": heartbeat\n\n")
+			if _, err := fmt.Fprint(w, ": heartbeat\n\n"); err != nil {
+				logResponseWrite(err)
+				return
+			}
 			f.Flush()
 		case <-client.notify:
 			frames, closed := client.take()
@@ -140,15 +146,25 @@ func stream(w http.ResponseWriter, r *http.Request, hub *liveHub, recheck func()
 				}
 				cursor = max(cursor, frame.id)
 				frame.id = cursor
-				writeFrame(w, frame)
+				if err := writeFrame(w, frame); err != nil {
+					logResponseWrite(err)
+					return
+				}
 			}
 			f.Flush()
 		}
 	}
 }
 
-func writeFrame(w http.ResponseWriter, frame liveFrame) {
-	fmt.Fprintf(w, "event: %s\nid: %d\ndata: ", frame.kind, frame.id)
-	_, _ = w.Write(frame.data)
-	fmt.Fprint(w, "\n\n")
+// writeFrame writes one SSE frame; an error means the client is gone and the
+// stream should end.
+func writeFrame(w http.ResponseWriter, frame liveFrame) error {
+	if _, err := fmt.Fprintf(w, "event: %s\nid: %d\ndata: ", frame.kind, frame.id); err != nil {
+		return err
+	}
+	if _, err := w.Write(frame.data); err != nil {
+		return err
+	}
+	_, err := fmt.Fprint(w, "\n\n")
+	return err
 }

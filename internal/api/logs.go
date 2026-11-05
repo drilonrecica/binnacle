@@ -93,7 +93,7 @@ func (s *Server) EnableLogs(service *diagnostics.LogService, engine *metrics.Eng
 		cancel()
 		wg.Wait()
 		if readErr == nil {
-			_ = write("event: end\ndata: {}\n\n")
+			logResponseWrite(write("event: end\ndata: {}\n\n"))
 		}
 	}))
 }

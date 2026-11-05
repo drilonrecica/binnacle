@@ -5,8 +5,90 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drilonrecica/binnacle/internal/observe"
 	"github.com/drilonrecica/binnacle/internal/storage"
 )
+
+type observedPersistence struct{ latency observe.Latency }
+
+func (*observedPersistence) Queue() int64                { return 0 }
+func (*observedPersistence) DroppedCount() uint64        { return 2 }
+func (*observedPersistence) WriteLatency() time.Duration { return 0 }
+func (*observedPersistence) WriteFailureCount() uint64   { return 2 }
+func (p *observedPersistence) WriteLatencySummary() observe.LatencySummary {
+	return p.latency.Summary()
+}
+
+type observedChecks struct{}
+
+func (observedChecks) Failures() uint64 { return 0 }
+func (observedChecks) Skipped() int64   { return 4 }
+
+type observedDeliveries struct{ notificationHealth }
+
+func (observedDeliveries) FailedAttempts() uint64 { return 5 }
+
+// RUN-7: monitor-health reports every worker's failure counter and the
+// latency windows; a slow p95 is a warning, a window with no run unavailable.
+func TestMonitorReportsWorkerFailuresAndLatency(t *testing.T) {
+	persistence := &observedPersistence{}
+	for _, ms := range []int{10, 20, 30, 200} {
+		persistence.latency.Observe(time.Duration(ms) * time.Millisecond)
+	}
+	monitor := &Monitor{DatabasePath: "/missing", Persistence: persistence, Checks: observedChecks{}, Notifications: observedDeliveries{}, DockerFailures: func() uint64 { return 7 }}
+	snapshot := monitor.Snapshot()
+	failures := map[string]FailureMetric{}
+	for _, f := range snapshot.Failures {
+		failures[f.ID] = f
+	}
+	want := map[string]uint64{"persistence_write": 2, "docker": 7, "checks": 0, "checks_skipped": 4, "deliveries": 5}
+	if len(failures) != len(want) {
+		t.Fatalf("failures=%+v", snapshot.Failures)
+	}
+	for id, count := range want {
+		status := "normal"
+		if count > 0 {
+			status = "warning"
+		}
+		if failures[id].Count != count || failures[id].Status != status {
+			t.Errorf("%s = %+v, want count %d status %s", id, failures[id], count, status)
+		}
+	}
+	if len(snapshot.Latency) != 1 {
+		t.Fatalf("latency=%+v", snapshot.Latency)
+	}
+	write := snapshot.Latency[0]
+	if write.ID != "persistence_write" || write.Count != 4 || write.P50 != 20.0 || write.P95 != 200.0 || write.Max != 200.0 || write.Status != "warning" {
+		t.Fatalf("write latency=%+v", write)
+	}
+	empty := (&Monitor{DatabasePath: "/missing", Persistence: &observedPersistence{}}).Snapshot().Latency[0]
+	if empty.P50 != nil || empty.Max != nil || empty.Status != "unavailable" {
+		t.Fatalf("empty window=%+v", empty)
+	}
+}
+
+func TestMonitorReportsStorageFailuresAndLatency(t *testing.T) {
+	health := storage.Health{RollupFailures: 1, RollupLatency: observe.LatencySummary{Count: 1, P50: time.Millisecond, P95: time.Millisecond, Max: time.Millisecond}}
+	snapshot := (&Monitor{DatabasePath: "/missing", Storage: fakeStorageHealth{health: health}}).Snapshot()
+	ids := map[string]bool{}
+	for _, f := range snapshot.Failures {
+		ids["failure:"+f.ID] = true
+		if f.ID == "rollup" && (f.Count != 1 || f.Status != "warning") {
+			t.Errorf("rollup failures=%+v", f)
+		}
+	}
+	for _, l := range snapshot.Latency {
+		ids["latency:"+l.ID] = true
+		if l.ID == "rollup" && (l.P95 != 1.0 || l.Status != "normal") {
+			t.Errorf("rollup latency=%+v", l)
+		}
+	}
+	for _, id := range []string{"failure:rollup", "failure:retention", "failure:vacuum", "latency:rollup", "latency:retention", "latency:vacuum"} {
+		if !ids[id] {
+			t.Errorf("missing %s in %+v", id, snapshot)
+		}
+	}
+}
 
 type notificationHealth struct{}
 

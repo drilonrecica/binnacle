@@ -9,10 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/metrics"
+	"github.com/drilonrecica/binnacle/internal/observe"
 )
 
 type Evaluator struct {
@@ -23,6 +25,16 @@ type Evaluator struct {
 	Logger   *slog.Logger
 	cancel   context.CancelFunc
 	wg       sync.WaitGroup
+	// errlog rate-limits evaluation failures, which repeat every interval
+	// while the cause lasts (RUN-7).
+	errlog     observe.ErrorLog
+	errlogOnce sync.Once
+}
+
+// errorLog is the evaluator's rate-limited log; it writes through logger().
+func (e *Evaluator) errorLog() *observe.ErrorLog {
+	e.errlogOnce.Do(func() { e.errlog.Logger = e.logger })
+	return &e.errlog
 }
 
 func NewEvaluator(repo *Repository, engine *metrics.Engine) *Evaluator {
@@ -44,7 +56,7 @@ func (e *Evaluator) Start(ctx context.Context) error {
 				return
 			case <-ticker.C:
 				if err := e.Evaluate(ctx); err != nil && ctx.Err() == nil {
-					e.logger().Error("alert evaluation failed", "error", err)
+					e.errorLog().Error("alert evaluation failed", "error", err)
 				}
 			}
 		}
@@ -401,7 +413,15 @@ func (e *Evaluator) evaluate(ctx context.Context, rule Rule, targetType, target 
 		}
 		return tx.Commit()
 	}
-	details, _ := json.Marshal(map[string]any{"observed": value})
+	// JSON has no NaN or Inf, so a non-finite observation is stored as null.
+	var observed any = value
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		observed = nil
+	}
+	details, err := json.Marshal(map[string]any{"observed": observed})
+	if err != nil {
+		return fmt.Errorf("encode evaluation details: %w", err)
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO alert_evaluation_state(dedup_key,rule_id,target_type,target_id,phase,phase_since,last_evaluated_at,last_notified_at,cooldown_until,observed_value,details_json)VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(dedup_key) DO UPDATE SET rule_id=excluded.rule_id,phase=excluded.phase,phase_since=excluded.phase_since,last_evaluated_at=excluded.last_evaluated_at,last_notified_at=excluded.last_notified_at,cooldown_until=excluded.cooldown_until,observed_value=excluded.observed_value,details_json=excluded.details_json`, key, rule.ID, targetType, target, tr.State.Phase, tr.State.Since.Unix(), now.Unix(), timePtr(tr.State.LastNotifiedAt), timePtr(tr.State.CooldownUntil), value, string(details))
 	if err != nil {
 		return err

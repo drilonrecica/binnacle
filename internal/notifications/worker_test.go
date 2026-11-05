@@ -186,3 +186,22 @@ func TestReapStaleInProgressDeliveries(t *testing.T) {
 		t.Fatalf("staleAfter=%s want 1m for a 15s delivery timeout", got)
 	}
 }
+
+// RUN-7: a delivery attempt that does not succeed is counted.
+func TestFailedDeliveryAttemptIsCounted(t *testing.T) {
+	store, repo := testRepository(t)
+	defer store.Close()
+	insertDelivery(t, repo, "orphan", "pending", nil, 0)
+	if _, err := repo.db.Exec(`UPDATE notification_channels SET enabled=0`); err != nil {
+		t.Fatal(err)
+	}
+	worker := NewWorker(repo, Config{})
+	worker.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	worker.deliver(context.Background(), "orphan")
+	if got := worker.FailedAttempts(); got != 1 {
+		t.Fatalf("failed attempts=%d, want 1", got)
+	}
+	if status, _ := deliveryState(t, repo, "orphan"); status != "permanent_failure" {
+		t.Fatalf("status=%s", status)
+	}
+}

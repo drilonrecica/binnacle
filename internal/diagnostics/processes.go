@@ -218,7 +218,12 @@ func readProcess(root string, pid int) (processSample, error) {
 			if strings.HasPrefix(line, "Uid:") {
 				parts := strings.Fields(line)
 				if len(parts) > 1 {
-					uid, _ = strconv.ParseUint(parts[1], 10, 64)
+					// A uid that does not parse would otherwise read as root.
+					parsed, err := strconv.ParseUint(parts[1], 10, 64)
+					if err != nil {
+						return processSample{}, fmt.Errorf("invalid process uid: %w", err)
+					}
+					uid = parsed
 				}
 				break
 			}
@@ -260,7 +265,11 @@ func readUptime(root string) float64 {
 	if len(fields) == 0 {
 		return 0
 	}
-	value, _ := strconv.ParseFloat(fields[0], 64)
+	value, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		// Same as an unreadable uptime: process ages are not computed.
+		return 0
+	}
 	return value
 }
 func readBounded(path string) (string, error) {

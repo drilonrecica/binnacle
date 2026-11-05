@@ -27,6 +27,12 @@ writing a large patch. See [GOVERNANCE.md](GOVERNANCE.md) for the ADR process.
 - Use clear, accessible UI behavior and avoid adding large dependencies without
   an ADR.
 - Do not expose Docker mutation endpoints or proxy arbitrary Docker API calls.
+- Never discard an error with `_` in `internal/`: return it, join it, or log
+  it through the component's logger (background workers through their
+  rate-limited `observe.ErrorLog`). `make go-vet` runs `go vet` and then
+  `internal/lint/cmd/errdiscard`, which fails on any error assigned to `_`
+  outside tests. Only calls documented never to fail (`crypto/rand.Read`,
+  `hash.Hash.Write`, `bytes.Buffer` and `strings.Builder` writes) are exempt.
 
 ## Pull requests
 

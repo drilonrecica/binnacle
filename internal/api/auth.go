@@ -69,7 +69,10 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 			return
 		}
 		if previous := auth.TokenFromRequest(r); previous != "" {
-			_ = sessions.Revoke(r.Context(), previous)
+			// The new session is issued regardless; the old one still expires.
+			if err := sessions.Revoke(r.Context(), previous); err != nil {
+				s.logger.Warn("previous session was not revoked at login", "error", err)
+			}
 		}
 		token, csrf, session, err := sessions.IssueWithCSRF(r.Context(), user.ID)
 		if err != nil {
@@ -112,7 +115,11 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 			WriteError(w, 403, Error{Code: "csrf_invalid", Message: "A valid CSRF token is required."})
 			return
 		}
-		_ = sessions.Revoke(r.Context(), auth.TokenFromRequest(r))
+		// The cookies are cleared either way; a session the database did not
+		// revoke still ends at its idle timeout.
+		if err := sessions.Revoke(r.Context(), auth.TokenFromRequest(r)); err != nil {
+			s.logger.Warn("session was not revoked at logout", "error", err)
+		}
 		auth.ClearSessionCookie(w, proxies.Secure(r))
 		auth.ClearCSRFCookie(w, proxies.Secure(r))
 		w.WriteHeader(http.StatusNoContent)
@@ -131,7 +138,11 @@ func (s *Server) EnableAuth(credentials *auth.Credentials, sessions *auth.Sessio
 			WriteError(w, 401, Error{Code: "unauthorized", Message: "Authentication is required."})
 			return
 		}
-		_ = sessions.RevokeAll(r.Context(), session.UserID)
+		if err := sessions.RevokeAll(r.Context(), session.UserID); err != nil {
+			s.logger.Error("sessions were not revoked at logout-all", "error", err)
+			WriteError(w, 500, Error{Code: "session_error", Message: "Could not end every session."})
+			return
+		}
 		auth.ClearSessionCookie(w, proxies.Secure(r))
 		auth.ClearCSRFCookie(w, proxies.Secure(r))
 		w.WriteHeader(http.StatusNoContent)

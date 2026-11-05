@@ -100,6 +100,12 @@ host/resource metrics, health-check state, collector state, and Binnacle
 self-metrics. Unavailable values are omitted. Labels exclude domains and
 secrets; cardinality remains bounded by current resources and checks.
 
+Worker health is exported as `binnacle_self_failures_total{operation="…"}`,
+failures since start, and `binnacle_self_latency_milliseconds{operation="…",
+quantile="0.5|0.95|1"}`, the p50, p95 and max of the latest 256 runs
+(`quantile="1"` is the max). The operations are those listed under
+"Monitoring Binnacle itself" in [recovery](operations/recovery.md).
+
 ## Safe SQLite export
 
 For a portable database backup, use one of these supported approaches:

@@ -180,7 +180,9 @@ func (c OnboardingChecker) outbound(ctx context.Context, include bool) CheckResu
 		var response *http.Response
 		response, err = client.Do(request)
 		if response != nil {
-			_ = response.Body.Close()
+			// A HEAD that answered proves reachability; a failed close is
+			// reported with it.
+			err = errors.Join(err, response.Body.Close())
 		}
 	}
 	if err != nil {

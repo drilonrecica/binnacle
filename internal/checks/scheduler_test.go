@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -192,5 +193,36 @@ func TestSchedulerCountsSkippedChecks(t *testing.T) {
 		if c := <-s.queue; c.ID == "a" {
 			t.Fatal("reserved check queued twice")
 		}
+	}
+}
+
+// RUN-7: a scheduler that cannot load its due checks counts every failure
+// and logs it once per interval, not once per one-second tick.
+func TestSchedulerCountsAndRateLimitsFailures(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store := storage.New(filepath.Join(dir, "db.sqlite"), filepath.Join(dir, "runtime"))
+	if err := store.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := store.Writer().Exec("DROP TABLE health_checks"); err != nil {
+		t.Fatal(err)
+	}
+	var logs strings.Builder
+	s := NewScheduler(NewRepository(store.DB()), &gatedRunner{ran: map[string]int{}, gate: make(chan struct{})}, 1)
+	s.Logger = slog.New(slog.NewTextHandler(&logs, nil))
+	for range 3 {
+		s.tick(ctx)
+	}
+	if s.Failures() != 3 {
+		t.Fatalf("failures=%d, want 3", s.Failures())
+	}
+	if n := strings.Count(logs.String(), "loading due checks failed"); n != 1 {
+		t.Fatalf("logged %d times, want 1:\n%s", n, logs.String())
 	}
 }

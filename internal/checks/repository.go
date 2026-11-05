@@ -42,7 +42,10 @@ func (r *Repository) Update(ctx context.Context, c Check) error {
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
 		return sql.ErrNoRows
 	}

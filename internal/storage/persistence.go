@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/metrics"
+	"github.com/drilonrecica/binnacle/internal/observe"
 )
 
 // maxCarriedEvents bounds the events of lost batches kept for the next batch;
@@ -42,8 +43,12 @@ type Persistence struct {
 	EventsLost     atomic.Uint64
 	QueueDepth     atomic.Int64
 	LastWriteNanos atomic.Int64
-	Paused         atomic.Bool
-	cancel         context.CancelFunc
+	// WriteFailures counts batches whose write failed after its retries, and
+	// writeLatency the duration of the latest writes, retries included (RUN-7).
+	WriteFailures observe.Counter
+	writeLatency  observe.Latency
+	Paused        atomic.Bool
+	cancel        context.CancelFunc
 	// cancelWrites aborts the write in flight; Stop calls it at its deadline.
 	cancelWrites context.CancelFunc
 	// stopping is closed by Stop once no more batches are enqueued; the
@@ -97,9 +102,14 @@ func (g *batchGap) add(at time.Time, batches int, reasons ...string) {
 }
 
 // event is the persistence_gap event of g, dated at its first lost window so
-// it falls inside the gap the history API finds there.
-func (g *batchGap) event() metrics.Event {
-	details, _ := json.Marshal(map[string]any{"from": g.From.UTC(), "to": g.To.UTC(), "batches": g.Batches, "reasons": g.Reasons}) // a map of plain values always marshals
+// it falls inside the gap the history API finds there. Its details are empty
+// when they cannot be encoded (a time beyond year 9999); the event is kept.
+func (g *batchGap) event() (metrics.Event, error) {
+	details, err := json.Marshal(map[string]any{"from": g.From.UTC(), "to": g.To.UTC(), "batches": g.Batches, "reasons": g.Reasons})
+	if err != nil {
+		details = []byte("{}")
+		err = fmt.Errorf("encode persistence gap details: %w", err)
+	}
 	return metrics.Event{
 		ID:       metrics.NewEventID(),
 		At:       g.From.UTC(),
@@ -107,7 +117,7 @@ func (g *batchGap) event() metrics.Event {
 		Severity: "warning",
 		Message:  fmt.Sprintf("History was not stored for %d persistence window(s)", g.Batches),
 		Details:  string(details),
-	}
+	}, err
 }
 
 func NewPersistence(engine *metrics.Engine, store *Manager, interval time.Duration, limit int) *Persistence {
@@ -124,7 +134,10 @@ func (p *Persistence) take(batch metrics.PersistenceBatch) queued {
 		item.batch.Events = append(p.carry.events, batch.Events...)
 	}
 	if p.carry.gap != nil {
-		event := p.carry.gap.event()
+		event, err := p.carry.gap.event()
+		if err != nil && p.Store != nil {
+			p.Store.errorLog().Warn("persistence gap event details were not encoded", "error", err)
+		}
 		item.gap, item.gapID = p.carry.gap, event.ID
 		item.batch.Events = append(item.batch.Events, event)
 	}
@@ -239,14 +252,17 @@ func (p *Persistence) Start(parent context.Context) error {
 func (p *Persistence) write(ctx context.Context, item queued) {
 	started := time.Now()
 	err := Retry(ctx, func() error { return p.Store.WriteBatch(ctx, item.batch) })
-	p.LastWriteNanos.Store(time.Since(started).Nanoseconds())
+	elapsed := time.Since(started)
+	p.LastWriteNanos.Store(elapsed.Nanoseconds())
+	p.writeLatency.Observe(elapsed)
 	if err == nil {
 		return
 	}
 	p.Dropped.Add(1)
 	p.lose(item, gapWriteFailed)
 	if ctx.Err() == nil {
-		p.Store.logger().Error("persistence batch was not stored", "at", item.batch.Snapshot.At, "events", len(item.batch.Events), "error", err)
+		p.WriteFailures.Inc()
+		p.Store.errorLog().Error("persistence batch was not stored", "at", item.batch.Snapshot.At, "events", len(item.batch.Events), "error", err)
 	}
 }
 
@@ -280,8 +296,14 @@ func (p *Persistence) Queue() int64                { return p.QueueDepth.Load() 
 func (p *Persistence) DroppedCount() uint64        { return p.Dropped.Load() }
 func (p *Persistence) EventsLostCount() uint64     { return p.EventsLost.Load() }
 func (p *Persistence) WriteLatency() time.Duration { return time.Duration(p.LastWriteNanos.Load()) }
-func (p *Persistence) Name() string                { return "persistence" }
-func (p *Persistence) StopBudget() time.Duration   { return PersistenceStopBudget }
+
+// WriteFailureCount is the number of batches whose write failed since start.
+func (p *Persistence) WriteFailureCount() uint64 { return p.WriteFailures.Load() }
+
+// WriteLatencySummary is the p50, p95 and max of the latest batch writes.
+func (p *Persistence) WriteLatencySummary() observe.LatencySummary { return p.writeLatency.Summary() }
+func (p *Persistence) Name() string                                { return "persistence" }
+func (p *Persistence) StopBudget() time.Duration                   { return PersistenceStopBudget }
 
 // Stop stops closing windows, then drains the queue within ctx before it
 // returns, so the database is closed only after the last queued batch was

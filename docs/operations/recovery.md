@@ -101,8 +101,30 @@ Besides the sample and rollup tables, retention prunes (ADR 021 §6):
 is `unavailable` until the first pass completes. `database_budget` is the live
 data measured against the target, and `persistence_paused`,
 `retention_shortened`, `retention_incomplete` and `vacuum_pending` carry the
-states described above. A failed pass is logged at `level=ERROR` and retried
-on the next tick.
+states described above. A failed pass is logged at `level=ERROR`, counted (see
+below) and retried on the next tick.
+
+## Monitoring Binnacle itself
+
+Every background worker (persistence, rollups, retention and vacuum, the
+history deletion job, the host and Docker collectors, checks, alert
+evaluation, notification delivery and Coolify sync) logs its errors as JSON
+through the application log on stderr. A worker that keeps failing would
+repeat the same error every tick, so each message is written at most once a
+minute; the next one carries `suppressed=N`, the number of identical messages
+left out in between. The counters below still count every failure.
+
+`/api/v1/monitor-health` and Settings → System add two sections to the
+metrics above:
+
+| Section | Entries | Meaning |
+| --- | --- | --- |
+| `failures` | `persistence_write`, `rollup`, `retention`, `vacuum`, `docker`, `checks`, `checks_skipped`, `deliveries` | Failures since the process started. Any failure marks the entry `warning`; the log has the cause. A check whose target is down is a result, not a `checks` failure. `docker` leaves out calls cancelled by shutdown and is absent in demo mode, like `checks`. |
+| `latency` | `persistence_write`, `rollup`, `retention`, `vacuum` | p50, p95 and max in milliseconds over the latest 256 runs, plus `count`, the runs since start. `warning` when p95 exceeds 50 ms (write), 500 ms (rollup) or 2 s (retention, vacuum); `null` and `unavailable` before the first run. |
+
+The windows cover recent runs only, so a slow hour long ago does not hide a
+healthy present, and memory stays fixed however long Binnacle runs. Counters
+reset at restart; nothing is persisted or sent anywhere.
 
 ## Database integrity
 

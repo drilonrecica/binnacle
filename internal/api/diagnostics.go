@@ -67,6 +67,7 @@ func (s *Server) EnableDiagnostics(service *diagnostics.BundleService, authorize
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(archive)
+		_, err = w.Write(archive)
+		logResponseWrite(err)
 	}))
 }

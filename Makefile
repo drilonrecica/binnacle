@@ -105,9 +105,10 @@ web-check: ## Run Svelte type checking and linting.
 	$(PNPM) --dir web check
 	$(PNPM) --dir web lint
 
-go-vet: web-build ## Run Go vet.
+go-vet: web-build ## Run Go vet and the rule that forbids discarding errors with _ in internal/.
 
 	$(GO) vet ./...
+	$(GO) run ./internal/lint/cmd/errdiscard ./internal/...
 
 benchmark: ## Run a short deterministic benchmark with 30 synthetic containers.
 

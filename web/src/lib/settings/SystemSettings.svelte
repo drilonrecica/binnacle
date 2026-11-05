@@ -8,6 +8,8 @@
     diagnosticsDownloadUrl,
     monitorHealth,
     type DiagnosticsPreview,
+    type MonitorFailure,
+    type MonitorLatency,
     type MonitorMetric,
   } from '../api/access';
   import { errorMessage, isApiError } from '../api/client';
@@ -23,6 +25,8 @@
   let { snapshot }: { snapshot: SettingsSnapshot | null } = $props();
 
   let metrics = $state<MonitorMetric[]>([]);
+  let failures = $state<MonitorFailure[]>([]);
+  let latency = $state<MonitorLatency[]>([]);
   let at = $state('');
   let healthError = $state('');
   let preview = $state<DiagnosticsPreview | null>(null);
@@ -58,10 +62,22 @@
     return `${metric.value}${metric.unit ? ` ${metric.unit}` : ''}`;
   }
 
+  function pillStatus(status: string) {
+    if (status === 'normal') return 'healthy';
+    if (status === 'unavailable') return 'unknown';
+    return status;
+  }
+
+  function milliseconds(value: number | null) {
+    return value == null ? '—' : `${formatNumber(value)} ms`;
+  }
+
   async function loadHealth() {
     try {
       const value = await monitorHealth();
       metrics = value.metrics;
+      failures = value.failures ?? [];
+      latency = value.latency ?? [];
       at = value.at;
       healthError = '';
     } catch (reason) {
@@ -149,6 +165,70 @@
       </ul>
     {/if}
   </Card>
+
+  {#if failures.length || latency.length}
+    <Card
+      title="Background workers"
+      description="Failures since Binnacle started and how long the latest runs took. Every failure is in the log; repeated messages are logged once a minute."
+      padded={false}
+    >
+      {#if failures.length}
+        <ul class="grid" aria-label="Failures since start">
+          {#each failures as failure (failure.id)}
+            <li class={`metric ${failure.status}`}>
+              <div class="metric-head">
+                <span class="metric-label" use:tooltip={failure.help}
+                  >{failure.label}</span
+                >
+                <StatusPill status={pillStatus(failure.status)} size="sm" />
+              </div>
+              <span class="metric-value num">{formatNumber(failure.count)}</span
+              >
+              <span class="metric-help">{failure.help}</span>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+      {#if latency.length}
+        <div class="latency">
+          <table>
+            <caption
+              >Latency of the latest runs (up to 256 per operation)</caption
+            >
+            <thead>
+              <tr>
+                <th scope="col">Operation</th>
+                <th scope="col" class="n">p50</th>
+                <th scope="col" class="n">p95</th>
+                <th scope="col" class="n">Max</th>
+                <th scope="col" class="n runs">Runs</th>
+                <th scope="col"><span class="sr-only">Status</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each latency as row (row.id)}
+                <tr>
+                  <th scope="row">
+                    <span use:tooltip={row.help}>{row.label}</span>
+                  </th>
+                  <td class="n num">{milliseconds(row.p50)}</td>
+                  <td class="n num">{milliseconds(row.p95)}</td>
+                  <td class="n num">{milliseconds(row.max)}</td>
+                  <td class="n num runs">{formatNumber(row.count)}</td>
+                  <td
+                    ><StatusPill
+                      status={pillStatus(row.status)}
+                      size="sm"
+                    /></td
+                  >
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </Card>
+  {/if}
 
   <Card
     title="Diagnostics bundle"
@@ -289,6 +369,44 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .latency {
+    padding: var(--space-3) var(--space-4) var(--space-4);
+  }
+  .latency table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+  }
+  .latency caption {
+    padding-bottom: var(--space-2);
+    color: var(--text-3);
+    font-size: var(--text-xs);
+    text-align: left;
+  }
+  .latency th,
+  .latency td {
+    padding: var(--space-2) var(--space-2);
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    white-space: nowrap;
+  }
+  .latency thead th {
+    color: var(--text-3);
+    font-size: var(--text-xs);
+    font-weight: 500;
+  }
+  .latency tbody th {
+    font-weight: 500;
+    white-space: normal;
+  }
+  .latency .n {
+    text-align: right;
+  }
+  @media (max-width: 480px) {
+    .latency .runs {
+      display: none;
+    }
   }
   .preview {
     display: grid;

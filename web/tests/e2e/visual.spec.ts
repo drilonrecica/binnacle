@@ -92,6 +92,27 @@ test('activity and settings render their sections', async ({ page }) => {
   ).toBeVisible();
 });
 
+test('system settings show worker failures and latency', async ({ page }) => {
+  await mockApp(page);
+  await page.goto('/settings/system');
+  await expect(
+    page.getByRole('heading', { name: 'Background workers', exact: true }),
+  ).toBeVisible();
+  const failures = page.getByRole('list', { name: 'Failures since start' });
+  await expect(failures.getByText('Docker API calls')).toBeVisible();
+  await expect(failures.getByText('2', { exact: true })).toBeVisible();
+  const table = page.getByRole('table', { name: /Latency of the latest runs/ });
+  const write = table.getByRole('row', { name: /Persistence write/ });
+  await expect(write.getByRole('cell', { name: '9.8 ms' })).toBeVisible();
+  await expect(write.getByRole('cell', { name: '41.5 ms' })).toBeVisible();
+  const vacuum = table.getByRole('row', { name: /Incremental vacuum/ });
+  await expect(vacuum.getByRole('cell', { name: '—' }).first()).toBeVisible();
+  const scrollWidth = await page.evaluate(
+    () => document.documentElement.scrollWidth,
+  );
+  expect(scrollWidth).toBeLessThanOrEqual(await viewportWidth(page));
+});
+
 test('first-time users receive the dark theme', async ({ page }) => {
   await mockApp(page);
   await page.goto('/overview');

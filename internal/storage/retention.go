@@ -128,7 +128,7 @@ func (m *Manager) evaluateAt(ctx context.Context, now time.Time, runRetention bo
 	state, err := m.measureBudget(ctx)
 	if err != nil {
 		if ctx.Err() == nil {
-			m.logger().Warn("database budget measurement failed", "error", err)
+			m.errorLog().Warn("database budget measurement failed", "error", err)
 		}
 		return
 	}
@@ -140,12 +140,12 @@ func (m *Manager) evaluateAt(ctx context.Context, now time.Time, runRetention bo
 		state = m.shortenAtEmergency(ctx, now, retention)
 	case runRetention:
 		if err := m.applyRetention(ctx, now, retention, state == BudgetCritical); err != nil && ctx.Err() == nil {
-			m.logger().Error("retention pass failed", "error", err)
+			m.errorLog().Error("retention pass failed", "error", err)
 		}
 		m.setShortened(nil)
 		if state, err = m.measureBudget(ctx); err != nil {
 			if ctx.Err() == nil {
-				m.logger().Warn("database budget measurement failed", "error", err)
+				m.errorLog().Warn("database budget measurement failed", "error", err)
 			}
 			return
 		}
@@ -179,12 +179,12 @@ func (m *Manager) shortenAtEmergency(ctx context.Context, now time.Time, r Reten
 		shortened = append(shortened, step.tier)
 		m.setShortened(shortened)
 		if err := m.applyRetention(ctx, now, effective, true); err != nil && ctx.Err() == nil {
-			m.logger().Error("emergency retention pass failed", "tier", step.tier, "error", err)
+			m.errorLog().Error("emergency retention pass failed", "tier", step.tier, "error", err)
 		}
 		next, err := m.measureBudget(ctx)
 		if err != nil {
 			if ctx.Err() == nil {
-				m.logger().Warn("database budget measurement failed", "error", err)
+				m.errorLog().Warn("database budget measurement failed", "error", err)
 			}
 			break
 		}
@@ -237,7 +237,7 @@ func (m *Manager) updatePause(ctx context.Context, now time.Time, state BudgetSt
 func (m *Manager) writeStorageEvent(ctx context.Context, now time.Time, eventType, severity, message string) {
 	ms := now.UTC().UnixMilli()
 	if _, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO events(id,ts,host_id,type,severity,summary,source,created_at) VALUES(?,?,?,?,?,?,'binnacle',?)", metrics.NewEventID(), ms, hostID, eventType, severity, message, ms); err != nil && ctx.Err() == nil {
-		m.logger().Error("persistence state event was not stored", "type", eventType, "error", err)
+		m.errorLog().Error("persistence state event was not stored", "type", eventType, "error", err)
 	}
 }
 
@@ -250,7 +250,7 @@ func (m *Manager) measureBudget(ctx context.Context) (BudgetState, error) {
 	}
 	free, freeErr := m.diskFree(filepath.Dir(m.Path))
 	if freeErr != nil && ctx.Err() == nil {
-		m.logger().Warn("free disk space measurement failed", "error", freeErr)
+		m.errorLog().Warn("free disk space measurement failed", "error", freeErr)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -294,7 +294,7 @@ type retentionTable struct {
 // incremental vacuum and truncates the WAL. Every cutoff is aligned down to a
 // whole hour, and the raw sample cutoff never passes the final 1h buckets
 // (ADR 021 §5), so a bucket is either complete or untouched.
-func (m *Manager) applyRetention(ctx context.Context, now time.Time, r RetentionCutoffs, aggressive bool) error {
+func (m *Manager) applyRetention(ctx context.Context, now time.Time, r RetentionCutoffs, aggressive bool) (err error) {
 	started := time.Now()
 	m.mu.Lock()
 	budget := m.retentionPassBudget
@@ -305,8 +305,13 @@ func (m *Manager) applyRetention(ctx context.Context, now time.Time, r Retention
 	deadline := started.Add(budget)
 	incomplete := false
 	defer func() {
+		elapsed := time.Since(started)
+		m.retentionLatency.Observe(elapsed)
+		if err != nil && ctx.Err() == nil {
+			m.retentionFailures.Inc()
+		}
 		m.mu.Lock()
-		m.retentionDuration = time.Since(started)
+		m.retentionDuration = elapsed
 		m.retentionIncomplete = incomplete
 		m.mu.Unlock()
 	}()
@@ -377,10 +382,12 @@ func (m *Manager) applyRetention(ctx context.Context, now time.Time, r Retention
 		}
 	}
 	if err := m.incrementalVacuum(ctx, deadline); err != nil && ctx.Err() == nil {
-		m.logger().Warn("incremental vacuum after retention failed", "error", err)
+		m.vacuumFailures.Inc()
+		m.errorLog().Warn("incremental vacuum after retention failed", "error", err)
 	}
 	if err := m.truncateWAL(ctx); err != nil && ctx.Err() == nil {
-		m.logger().Warn("WAL checkpoint after retention failed", "error", err)
+		m.vacuumFailures.Inc()
+		m.errorLog().Warn("WAL checkpoint after retention failed", "error", err)
 	}
 	return nil
 }
@@ -601,8 +608,10 @@ func (m *Manager) rawRetentionCutoff(ctx context.Context, now time.Time, raw tim
 func (m *Manager) incrementalVacuum(ctx context.Context, deadline time.Time) error {
 	started := time.Now()
 	defer func() {
+		elapsed := time.Since(started)
+		m.vacuumLatency.Observe(elapsed)
 		m.mu.Lock()
-		m.vacuumDuration = time.Since(started)
+		m.vacuumDuration = elapsed
 		m.mu.Unlock()
 	}()
 	reclaimed := 0

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/observe"
 )
 
 type Scheduler struct {
@@ -25,7 +27,17 @@ type Scheduler struct {
 	active         map[string]struct{}
 	now            func() time.Time
 	skipped        atomic.Int64
+	// failures counts scheduler errors since start: loading the due checks
+	// or storing a result failed. A check whose target is down is a result,
+	// not a failure (RUN-7).
+	failures   observe.Counter
+	errlog     observe.ErrorLog
+	errlogOnce sync.Once
 }
+
+// Failures reports how many times loading due checks or storing a check
+// result failed since start.
+func (s *Scheduler) Failures() uint64 { return s.failures.Load() }
 
 func NewScheduler(repo *Repository, runner interface {
 	Run(context.Context, Check) Result
@@ -82,7 +94,8 @@ func (s *Scheduler) tick(ctx context.Context) {
 	checks, err := s.Repo.Due(ctx, s.now().UTC(), cap(s.queue), s.reserved()...)
 	if err != nil {
 		if ctx.Err() == nil {
-			s.logger().Error("loading due checks failed", "error", err)
+			s.failures.Inc()
+			s.errorLog().Error("loading due checks failed", "error", err)
 		}
 		return
 	}
@@ -103,7 +116,7 @@ func (s *Scheduler) tick(ctx context.Context) {
 	}
 	if skipped > 0 {
 		total := s.skipped.Add(int64(skipped))
-		s.logger().Warn("check queue full; due checks skipped until the next tick", "skipped", skipped, "total_skipped", total)
+		s.errorLog().Warn("check queue full; due checks skipped until the next tick", "skipped", skipped, "total_skipped", total)
 	}
 }
 
@@ -132,7 +145,8 @@ func (s *Scheduler) worker(ctx context.Context) {
 		case c := <-s.queue:
 			result := s.Runner.Run(ctx, c)
 			if err := s.Repo.SaveResult(ctx, c, result); err != nil && ctx.Err() == nil {
-				s.logger().Error("saving check result failed", "check", c.ID, "error", err)
+				s.failures.Inc()
+				s.errorLog().Error("saving check result failed", "check", c.ID, "error", err)
 			}
 			s.release(c.ID)
 		}
@@ -144,6 +158,12 @@ func (s *Scheduler) logger() *slog.Logger {
 		return s.Logger
 	}
 	return slog.Default()
+}
+
+// errorLog is the scheduler's rate-limited log; it writes through logger().
+func (s *Scheduler) errorLog() *observe.ErrorLog {
+	s.errlogOnce.Do(func() { s.errlog.Logger = s.logger })
+	return &s.errlog
 }
 
 func (s *Scheduler) RunNow(ctx context.Context, id string) (Result, error) {

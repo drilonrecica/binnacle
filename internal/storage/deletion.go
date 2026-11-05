@@ -64,7 +64,11 @@ func (m *Manager) PreviewDeletion(ctx context.Context, request DeletionRequest) 
 		}
 	}
 	now := time.Now().UTC()
-	_, _ = m.db.ExecContext(ctx, "DELETE FROM history_deletion_previews WHERE rowid IN (SELECT rowid FROM history_deletion_previews WHERE expires_at<? OR (used_at IS NOT NULL AND used_at<?) LIMIT 500)", now.UnixMilli(), now.Add(-24*time.Hour).UnixMilli())
+	// Pruning expired previews is housekeeping; a failure must not block a
+	// new preview, so it is logged and the next preview retries it.
+	if _, err := m.db.ExecContext(ctx, "DELETE FROM history_deletion_previews WHERE rowid IN (SELECT rowid FROM history_deletion_previews WHERE expires_at<? OR (used_at IS NOT NULL AND used_at<?) LIMIT 500)", now.UnixMilli(), now.Add(-24*time.Hour).UnixMilli()); err != nil {
+		m.errorLog().Warn("expired history deletion previews were not pruned", "error", err)
+	}
 	fence := now.UnixMilli()
 	before := request.Before.UTC().UnixMilli()
 	if request.Kind == DeleteBefore && before > fence {
@@ -79,7 +83,10 @@ func (m *Manager) PreviewDeletion(ctx context.Context, request DeletionRequest) 
 		return DeletionPreview{}, err
 	}
 	confirmation := confirmationFor(request)
-	summary, _ := json.Marshal(map[string]any{"totalRows": total, "kind": request.Kind, "resourceId": request.ResourceID})
+	summary, err := json.Marshal(map[string]any{"totalRows": total, "kind": request.Kind, "resourceId": request.ResourceID})
+	if err != nil {
+		return DeletionPreview{}, fmt.Errorf("encode deletion preview summary: %w", err)
+	}
 	expires := now.Add(10 * time.Minute)
 	_, err = m.db.ExecContext(ctx, "INSERT INTO history_deletion_previews(id_hash,kind,resource_id,before_ts,fence_ts,confirmation,summary_json,expires_at) VALUES(?,?,?,?,?,?,?,?)", hashDeletionToken(token), request.Kind, nullString(request.ResourceID), nullableBefore(request.Kind, before), fence, confirmation, string(summary), expires.UnixMilli())
 	if err != nil {
@@ -141,7 +148,10 @@ func (m *Manager) CancelDeletion(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	n, _ := r.RowsAffected()
+	n, err := r.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n != 1 {
 		return errors.New("deletion job is not cancellable")
 	}
@@ -152,7 +162,10 @@ func (m *Manager) RetryDeletion(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	n, _ := r.RowsAffected()
+	n, err := r.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n != 1 {
 		return errors.New("deletion job is not retryable")
 	}
@@ -169,6 +182,12 @@ func (m *Manager) RunDeletion(ctx context.Context, id string) error {
 	if _, err := m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='running',started_at=? WHERE id=?", time.Now().UTC().UnixMilli(), id); err != nil {
 		return err
 	}
+	// fail marks the job failed with err; a failure to mark it is joined, and
+	// the job is then re-queued at the next start by recoverDeletionJobs.
+	fail := func(err error) error {
+		_, markErr := m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='failed',error_message=?,finished_at=? WHERE id=?", safeDeletionError(err), time.Now().UTC().UnixMilli(), id)
+		return errors.Join(err, markErr)
+	}
 	var deleted int64
 	for _, table := range deletionTables(kind) {
 		for {
@@ -182,11 +201,12 @@ func (m *Manager) RunDeletion(ctx context.Context, id string) error {
 			}
 			n, err := m.deleteBatch(ctx, table, kind, resource.String, nullableInt(before), fence)
 			if err != nil {
-				_, _ = m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='failed',error_message=?,finished_at=? WHERE id=?", safeDeletionError(err), time.Now().UTC().UnixMilli(), id)
-				return err
+				return fail(err)
 			}
 			deleted += n
-			_, _ = m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET deleted_rows=?,current_table=? WHERE id=?", deleted, table, id)
+			if _, err := m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET deleted_rows=?,current_table=? WHERE id=?", deleted, table, id); err != nil {
+				return fail(fmt.Errorf("record deletion progress: %w", err))
+			}
 			if n == 0 {
 				break
 			}
@@ -204,11 +224,12 @@ func (m *Manager) RunDeletion(ctx context.Context, id string) error {
 			}
 			n, err := m.deleteMetadataBatch(ctx, table, kind, resource.String)
 			if err != nil {
-				_, _ = m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET state='failed',error_message=?,finished_at=? WHERE id=?", safeDeletionError(err), time.Now().UTC().UnixMilli(), id)
-				return err
+				return fail(err)
 			}
 			deleted += n
-			_, _ = m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET deleted_rows=?,current_table=? WHERE id=?", deleted, table, id)
+			if _, err := m.db.ExecContext(ctx, "UPDATE history_deletion_jobs SET deleted_rows=?,current_table=? WHERE id=?", deleted, table, id); err != nil {
+				return fail(fmt.Errorf("record deletion progress: %w", err))
+			}
 			if n == 0 {
 				break
 			}
@@ -224,11 +245,21 @@ func (m *Manager) runDeletionWorker(ctx context.Context) {
 	for {
 		var id string
 		if m.db != nil {
-			_ = m.db.QueryRowContext(ctx, "SELECT id FROM history_deletion_jobs WHERE state='queued' ORDER BY requested_at LIMIT 1").Scan(&id)
+			err := m.db.QueryRowContext(ctx, "SELECT id FROM history_deletion_jobs WHERE state='queued' ORDER BY requested_at LIMIT 1").Scan(&id)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) && ctx.Err() == nil {
+				m.errorLog().Error("history deletion queue was not read", "error", err)
+			}
 		}
 		if id != "" {
-			_ = m.RunDeletion(ctx, id)
-			continue
+			err := m.RunDeletion(ctx, id)
+			if err == nil {
+				continue
+			}
+			// A failed job waits for the next tick, so a job the database keeps
+			// refusing cannot spin the worker.
+			if ctx.Err() == nil {
+				m.errorLog().Error("history deletion job failed", "job", id, "error", err)
+			}
 		}
 		select {
 		case <-ctx.Done():

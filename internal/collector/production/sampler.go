@@ -24,6 +24,7 @@ import (
 	"github.com/drilonrecica/binnacle/internal/dockerapi"
 	"github.com/drilonrecica/binnacle/internal/events"
 	"github.com/drilonrecica/binnacle/internal/metrics"
+	"github.com/drilonrecica/binnacle/internal/observe"
 	"github.com/drilonrecica/binnacle/internal/resources"
 	"github.com/drilonrecica/binnacle/internal/storage"
 	"golang.org/x/sys/unix"
@@ -103,6 +104,10 @@ type Sampler struct {
 	}
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+	// errlog rate-limits the loops' error logs: a failing host read or Docker
+	// daemon fails every tick (RUN-7).
+	errlog     observe.ErrorLog
+	errlogOnce sync.Once
 
 	// mu guards merged, the only state both loops touch.
 	mu     sync.Mutex
@@ -277,6 +282,7 @@ func (s *Sampler) hostTick() {
 	var h metrics.CollectorHealth
 	if err != nil {
 		s.hostFailures++
+		s.errorLog().Error("host collection failed", "consecutive_failures", s.hostFailures, "error", err)
 		h = health("host", s.hostFailures, err, s.hostFreshAt)
 	} else {
 		s.hostFailures = 0
@@ -316,6 +322,10 @@ func (s *Sampler) dockerTick(ctx context.Context) {
 	var h metrics.CollectorHealth
 	if err != nil {
 		s.dockerFailures++
+		// The gate logs an unverified Engine itself, with its retry backoff.
+		if !errors.Is(err, dockerapi.ErrEngineUnverified) {
+			s.errorLog().Error("docker collection failed", "consecutive_failures", s.dockerFailures, "error", err)
+		}
 		h = health("docker", s.dockerFailures, err, s.dockerFreshAt)
 		if errors.Is(err, dockerapi.ErrEngineUnverified) && h.State == metrics.CollectorHealthy {
 			// No supported Engine verified yet: degraded from the first tick
@@ -362,7 +372,7 @@ func (s *Sampler) storeResources(ctx context.Context, resources []metrics.Resour
 	}
 	inventory := storage.Inventory{HostID: "host", HostIdentity: storage.HostIdentity("", "binnacle-local-host"), HostName: "Server", Resources: list, ArchiveBefore: now.Add(-inventoryArchiveAfter)}
 	if err := s.Store.StoreInventory(ctx, inventory); err != nil {
-		s.logger().Warn("storing host and resource identities failed", "resources", len(list), "error", err.Error())
+		s.errorLog().Warn("storing host and resource identities failed", "resources", len(list), "error", err.Error())
 		return
 	}
 	s.storedInventory, s.storedInventoryAt = current, now
@@ -456,7 +466,7 @@ func (s *Sampler) watchEvents(ctx context.Context, queue chan dockerapi.Event) {
 			delay = minimum
 		}
 		wait := jitter(delay)
-		s.logger().Warn("docker events stream closed; resubscribing", "retry_in", wait.String())
+		s.errorLog().Warn("docker events stream closed; resubscribing", "retry_in", wait.String())
 		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
@@ -540,6 +550,13 @@ func (s *Sampler) logger() *slog.Logger {
 		return s.Logger
 	}
 	return slog.Default()
+}
+
+// errorLog is the rate-limited log of the collector loops; it writes through
+// logger().
+func (s *Sampler) errorLog() *observe.ErrorLog {
+	s.errlogOnce.Do(func() { s.errlog.Logger = s.logger })
+	return &s.errlog
 }
 
 // CollectionDuration is the longer of the latest host and Docker tick.
@@ -692,7 +709,11 @@ func (s *Sampler) collectHost(tick time.Time) (metrics.HostObservation, []metric
 	if diskErr != nil {
 		reason = joinReason(reason, "disk I/O unavailable: "+diskErr.Error())
 	}
-	bootRaw, _ := read("sys/kernel/random/boot_id")
+	// Without a boot id the boot boundary is not detected; the tick is kept.
+	bootRaw, bootErr := read("sys/kernel/random/boot_id")
+	if bootErr != nil {
+		s.errorLog().Warn("host boot id unavailable", "error", bootErr)
+	}
 	return observation, fsystems, strings.TrimSpace(string(bootRaw)), reason, nil
 }
 

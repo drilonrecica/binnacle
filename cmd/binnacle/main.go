@@ -126,6 +126,7 @@ func main() {
 		checkRunner = demo.CheckRunner{}
 	}
 	notificationWorker.Logger = log
+	setup.Logger, sessions.Logger, tokenRepository.Logger, mfaService.Logger, coolifyIntegration.Logger = log, log, log, log, log
 	checkScheduler := checks.NewScheduler(checkRepository, checkRunner, config.Checks.MaxConcurrency)
 	checkScheduler.Logger = log
 	alertEvaluator := alerts.NewEvaluator(alertRepository, engine)
@@ -135,6 +136,7 @@ func main() {
 	var dockerLogs dockerapi.LogClient
 	var productionSampler *production.Sampler
 	var dockerSocket func() string
+	var dockerFailures func() uint64
 	if *demoMode || config.Demo {
 		generator := demo.New(*demoSeed, realClock{})
 		generator.Containers = *demoContainers
@@ -153,6 +155,7 @@ func main() {
 			os.Exit(1)
 		}
 		limitedDocker := dockerapi.New(rawEngine, config.Docker.MaxConcurrency)
+		dockerFailures = limitedDocker.FailureCount
 		var socketAccess atomic.Value
 		socketAccess.Store("")
 		dockerSocket = func() string { return socketAccess.Load().(string) }
@@ -274,7 +277,10 @@ func main() {
 	apiServer.EnableMetrics(store, metricsAuthorizer, protection)
 	apiServer.EnableEvents(store, eventsAuthorizer, protection)
 	apiServer.EnableHistoryDeletion(store, authorizer, sessions)
-	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, LiveClients: apiServer.LiveClients, Persistence: persistence, Collector: productionSampler, Notifications: notificationWorker, NotificationQueueCapacity: config.Notifications.QueueCapacity, DockerSocket: dockerSocket, Storage: store}
+	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, LiveClients: apiServer.LiveClients, Persistence: persistence, Collector: productionSampler, Notifications: notificationWorker, NotificationQueueCapacity: config.Notifications.QueueCapacity, DockerSocket: dockerSocket, DockerFailures: dockerFailures, Storage: store}
+	if !*demoMode && !config.Demo {
+		monitor.Checks = checkScheduler
+	}
 	apiServer.EnableMonitorHealth(monitor, authorizer)
 	bundleService := diagnostics.NewBundleService(func(ctx context.Context) diagnostics.BundleData {
 		schema, schemaErr := store.SchemaVersion(ctx)

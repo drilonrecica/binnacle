@@ -42,7 +42,7 @@ func (m *Manager) runOptimize(ctx context.Context) {
 		case <-tick.C:
 		}
 		if err := m.optimize(ctx); err != nil && ctx.Err() == nil {
-			m.logger().Warn("PRAGMA optimize failed", "error", err)
+			m.errorLog().Warn("PRAGMA optimize failed", "error", err)
 		}
 	}
 }

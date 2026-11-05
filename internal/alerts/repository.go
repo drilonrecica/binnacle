@@ -151,7 +151,10 @@ func (r *Repository) DeleteSilence(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
 		return sql.ErrNoRows
 	}
@@ -168,7 +171,10 @@ func (r *Repository) UpdateRule(ctx context.Context, v Rule) error {
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
 		return sql.ErrNoRows
 	}

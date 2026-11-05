@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/drilonrecica/binnacle/internal/observe"
 	containertypes "github.com/moby/moby/api/types/container"
 	eventtypes "github.com/moby/moby/api/types/events"
 	dockerclient "github.com/moby/moby/client"
@@ -88,6 +89,21 @@ type Limited struct {
 	Client Client
 	sem    chan struct{}
 	logs   chan struct{}
+	// failures counts calls that returned an error other than the caller's
+	// cancellation, since start (RUN-7).
+	failures observe.Counter
+}
+
+// FailureCount is the number of Docker calls that failed since start; a call
+// abandoned because its caller cancelled is not a failure.
+func (l *Limited) FailureCount() uint64 { return l.failures.Load() }
+
+// count records err as a failed call unless it is the caller's cancellation.
+func (l *Limited) count(err error) error {
+	if err != nil && !errors.Is(err, context.Canceled) {
+		l.failures.Inc()
+	}
+	return err
 }
 
 // sdkClient is the complete compile-time boundary to the Docker SDK. Keeping
@@ -398,7 +414,7 @@ func New(client Client, max int) *Limited {
 	return &Limited{Client: client, sem: make(chan struct{}, max), logs: make(chan struct{}, LogConcurrency)}
 }
 func (l *Limited) with(ctx context.Context, fn func() error) error {
-	return acquire(ctx, l.sem, fn)
+	return l.count(acquire(ctx, l.sem, fn))
 }
 func acquire(ctx context.Context, sem chan struct{}, fn func() error) error {
 	select {
@@ -460,7 +476,7 @@ func (l *Limited) ReadLogs(ctx context.Context, id string, options LogOptions, e
 	if !ok {
 		return fmt.Errorf("docker log access is unavailable")
 	}
-	return acquire(ctx, l.logs, func() error { return logs.ReadLogs(ctx, id, options, emit) })
+	return l.count(acquire(ctx, l.logs, func() error { return logs.ReadLogs(ctx, id, options, emit) }))
 }
 func (l *Limited) Close() error {
 	if closer, ok := l.Client.(interface{ Close() error }); ok {

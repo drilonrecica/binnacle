@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/metrics"
+	"github.com/drilonrecica/binnacle/internal/observe"
 	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
@@ -22,7 +24,28 @@ type Enricher struct {
 	mu                                   sync.RWMutex
 	byUUID                               map[string]ResourceMetadata
 	state                                SyncStatus
+	// Logger receives sync and storage failures; nil falls back to
+	// slog.Default().
+	Logger *slog.Logger
+	// errlog rate-limits the sync loops' failures, which repeat every
+	// deployment tick while Coolify is unreachable (RUN-7).
+	errlog     observe.ErrorLog
+	errlogOnce sync.Once
 }
+
+func (e *Enricher) logger() *slog.Logger {
+	if e.Logger != nil {
+		return e.Logger
+	}
+	return slog.Default()
+}
+
+// errorLog is the enricher's rate-limited log; it writes through logger().
+func (e *Enricher) errorLog() *observe.ErrorLog {
+	e.errlogOnce.Do(func() { e.errlog.Logger = e.logger })
+	return &e.errlog
+}
+
 type SyncStatus struct {
 	State         string     `json:"state"`
 	LastAttemptAt *time.Time `json:"lastAttemptAt,omitempty"`
@@ -42,7 +65,11 @@ func (e *Enricher) Start(ctx context.Context) error {
 	if e.db == nil {
 		return errors.New("Coolify enrichment storage unavailable")
 	}
-	_ = e.loadCache(ctx)
+	// No cache yet is normal on first sync; anything else is reported, and
+	// the enricher still starts and fetches fresh metadata.
+	if err := e.loadCache(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		e.errorLog().Warn("Coolify metadata cache was not loaded", "error", err)
+	}
 	go e.run(ctx)
 	return nil
 }
@@ -98,34 +125,50 @@ func (e *Enricher) syncMetadata(ctx context.Context) {
 func (e *Enricher) syncDeployments(ctx context.Context) {
 	values, err := e.Client.Deployments(ctx)
 	if err != nil {
+		if ctx.Err() == nil {
+			e.errorLog().Warn("Coolify deployments were not fetched", "error", err)
+		}
 		return
 	}
 	now := time.Now().UTC()
 	for _, value := range values {
 		tx, err := e.db.BeginTx(ctx, nil)
 		if err != nil {
+			if ctx.Err() == nil {
+				e.errorLog().Error("Coolify deployment sync could not begin a transaction", "error", err)
+			}
 			return
 		}
 		var previous string
 		scanErr := tx.QueryRowContext(ctx, "SELECT last_status FROM coolify_deployments WHERE deployment_uuid=?", value.UUID).Scan(&previous)
 		if scanErr != nil && !errors.Is(scanErr, sql.ErrNoRows) {
 			tx.Rollback()
+			e.errorLog().Error("Coolify deployment state was not read", "deployment", value.UUID, "error", scanErr)
 			continue
 		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO coolify_deployments(deployment_uuid,resource_uuid,last_status,commit_sha,commit_message,first_seen_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(deployment_uuid) DO UPDATE SET last_status=excluded.last_status,commit_sha=excluded.commit_sha,commit_message=excluded.commit_message,updated_at=excluded.updated_at`, value.UUID, nullString(value.ResourceUUID), value.Status, nullString(value.Commit), nullString(value.CommitMessage), now.UnixMilli(), now.UnixMilli())
 		if err == nil && previous != "" && previous != value.Status && terminalDeployment(value.Status) {
-			resourceID := localResourceID(ctx, tx, value.ResourceUUID)
-			details, _ := json.Marshal(map[string]string{"deploymentUuid": value.UUID, "status": value.Status, "commit": value.Commit, "commitMessage": value.CommitMessage})
+			var resourceID string
+			var details []byte
+			resourceID, err = localResourceID(ctx, tx, value.ResourceUUID)
+			if err == nil {
+				details, err = json.Marshal(map[string]string{"deploymentUuid": value.UUID, "status": value.Status, "commit": value.Commit, "commitMessage": value.CommitMessage})
+			}
 			eventID := "coolify_deployment_" + safeID(value.UUID) + "_" + safeID(value.Status)
-			_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO events(id,ts,resource_id,type,severity,summary,details_json,correlation_key,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, eventID, now.UnixMilli(), nullString(resourceID), "deployment", "info", "Coolify deployment "+value.Status, string(details), value.UUID, "coolify", now.UnixMilli())
+			if err == nil {
+				_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO events(id,ts,resource_id,type,severity,summary,details_json,correlation_key,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, eventID, now.UnixMilli(), nullString(resourceID), "deployment", "info", "Coolify deployment "+value.Status, string(details), value.UUID, "coolify", now.UnixMilli())
+			}
 			if err == nil {
 				_, err = tx.ExecContext(ctx, "UPDATE coolify_deployments SET event_emitted_at=? WHERE deployment_uuid=?", now.UnixMilli(), value.UUID)
 			}
 		}
-		if err != nil {
-			tx.Rollback()
+		if err == nil {
+			err = tx.Commit()
 		} else {
-			_ = tx.Commit()
+			tx.Rollback()
+		}
+		if err != nil && ctx.Err() == nil {
+			e.errorLog().Error("Coolify deployment was not stored", "deployment", value.UUID, "error", err)
 		}
 	}
 }
@@ -136,10 +179,16 @@ func terminalDeployment(status string) bool {
 	}
 	return false
 }
-func localResourceID(ctx context.Context, tx *sql.Tx, uuid string) string {
+
+// localResourceID is the local resource of a Coolify uuid, "" when Binnacle
+// has not seen it yet.
+func localResourceID(ctx context.Context, tx *sql.Tx, uuid string) (string, error) {
 	var id string
-	_ = tx.QueryRowContext(ctx, "SELECT id FROM resources WHERE stable_key=?", "coolify:"+uuid).Scan(&id)
-	return id
+	err := tx.QueryRowContext(ctx, "SELECT id FROM resources WHERE stable_key=?", "coolify:"+uuid).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
 }
 func safeID(value string) string {
 	return strings.Map(func(r rune) rune {
@@ -165,7 +214,10 @@ func classifyError(err error) string {
 	return "unavailable"
 }
 func (e *Enricher) setFailure(ctx context.Context, now time.Time, code string) {
-	_, _ = e.db.ExecContext(ctx, "UPDATE coolify_sync_state SET state='degraded',last_attempt_at=?,error_code=? WHERE id=1", now.UnixMilli(), code)
+	if _, err := e.db.ExecContext(ctx, "UPDATE coolify_sync_state SET state='degraded',last_attempt_at=?,error_code=? WHERE id=1", now.UnixMilli(), code); err != nil && ctx.Err() == nil {
+		e.errorLog().Error("Coolify sync state was not stored", "error", err)
+	}
+	e.errorLog().Warn("Coolify metadata sync failed", "code", code)
 	e.mu.Lock()
 	e.state.State, e.state.LastAttemptAt, e.state.ErrorCode = "degraded", &now, code
 	e.mu.Unlock()

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/metrics"
+	"github.com/drilonrecica/binnacle/internal/observe"
 	"github.com/drilonrecica/binnacle/internal/storage"
 )
 
@@ -24,12 +25,56 @@ type MonitorMetric struct {
 type MonitorSnapshot struct {
 	At      time.Time       `json:"at"`
 	Metrics []MonitorMetric `json:"metrics"`
+	// Failures and Latency are the background workers' failure counters and
+	// latency windows (RUN-7).
+	Failures []FailureMetric `json:"failures"`
+	Latency  []LatencyMetric `json:"latency"`
+}
+
+// FailureMetric counts one kind of background failure since the process
+// started. Any failure marks it "warning"; the log has the details.
+type FailureMetric struct {
+	ID     string `json:"id"`
+	Label  string `json:"label"`
+	Count  uint64 `json:"count"`
+	Status string `json:"status"`
+	Help   string `json:"help"`
+}
+
+// LatencyMetric is the p50, p95 and max of one operation over its latest
+// observe.LatencyWindow runs, in milliseconds; null before the first run.
+// The status compares p95 with the operation's warning threshold.
+type LatencyMetric struct {
+	ID     string `json:"id"`
+	Label  string `json:"label"`
+	Count  uint64 `json:"count"`
+	P50    any    `json:"p50"`
+	P95    any    `json:"p95"`
+	Max    any    `json:"max"`
+	Status string `json:"status"`
+	Help   string `json:"help"`
 }
 type PersistenceMetrics interface {
 	Queue() int64
 	DroppedCount() uint64
 	WriteLatency() time.Duration
 }
+
+// PersistenceObservability is the persistence writer's failure counter and
+// latency window (RUN-7).
+type PersistenceObservability interface {
+	WriteFailureCount() uint64
+	WriteLatencySummary() observe.LatencySummary
+}
+
+// CheckFailureProvider is the check scheduler's view of its own failures.
+type CheckFailureProvider interface {
+	Failures() uint64
+	Skipped() int64
+}
+
+// DeliveryFailureProvider counts failed notification delivery attempts.
+type DeliveryFailureProvider interface{ FailedAttempts() uint64 }
 
 // EventLossProvider reports events of lost batches that persistence could
 // not keep for the next batch (EVT-6).
@@ -59,10 +104,16 @@ type Monitor struct {
 	// DockerSocket reports the startup probe result: "constrained", "raw" or
 	// "unknown" ("" before the probe ran). Nil omits the metric (demo mode).
 	DockerSocket func() string
-	mu           sync.Mutex
-	previousCPU  time.Duration
-	previousAt   time.Time
-	readCPU      func() time.Duration
+	// DockerFailures counts failed Docker API calls. Nil omits the counter
+	// (demo mode has no Docker client).
+	DockerFailures func() uint64
+	// Checks reports the check scheduler's failures. Nil omits them (demo
+	// mode does not run the scheduler).
+	Checks      CheckFailureProvider
+	mu          sync.Mutex
+	previousCPU time.Duration
+	previousAt  time.Time
+	readCPU     func() time.Duration
 }
 
 func (m *Monitor) Snapshot() MonitorSnapshot {
@@ -148,7 +199,68 @@ func (m *Monitor) Snapshot() MonitorSnapshot {
 			metric("vacuum_pending", "Vacuum conversion pending", health.VacuumPending, "", flagStatus(health.VacuumPending, "warning"), "The database still uses auto_vacuum=none because the one-time conversion found no free disk space; space is not reclaimed until it runs at a later start."),
 		)
 	}
-	return MonitorSnapshot{At: now, Metrics: values}
+	return MonitorSnapshot{At: now, Metrics: values, Failures: m.failures(health), Latency: m.latency(health)}
+}
+
+// failures lists the failure counters of every worker that is running.
+func (m *Monitor) failures(health storage.Health) []FailureMetric {
+	values := []FailureMetric{}
+	add := func(id, label string, count uint64, help string) {
+		values = append(values, FailureMetric{ID: id, Label: label, Count: count, Status: nonzeroStatus(count), Help: help})
+	}
+	if p, ok := m.Persistence.(PersistenceObservability); ok {
+		add("persistence_write", "Persistence writes", p.WriteFailureCount(), "History batches whose SQLite write failed after its retries; each is also a dropped batch and a persistence_gap event.")
+	}
+	if m.Storage != nil {
+		add("rollup", "Rollups", health.RollupFailures, "Incremental rollup passes that failed; the next pass, a minute later, recomputes the same buckets.")
+		add("retention", "Retention", health.RetentionFailures, "Retention passes that failed before deleting everything below the cutoffs; the next pass resumes.")
+		add("vacuum", "Vacuum and checkpoint", health.VacuumFailures, "Incremental vacuums or WAL checkpoints after retention that failed.")
+	}
+	if m.DockerFailures != nil {
+		add("docker", "Docker API calls", m.DockerFailures(), "Docker Engine calls (list, inspect, stats, version, logs) that failed or timed out; calls cancelled by shutdown are not counted.")
+	}
+	if m.Checks != nil {
+		add("checks", "Check scheduler", m.Checks.Failures(), "Times loading the due checks or storing a check result failed. A check whose target is down is a result, not a failure.")
+		skipped := m.Checks.Skipped()
+		if skipped < 0 {
+			skipped = 0
+		}
+		add("checks_skipped", "Checks skipped", uint64(skipped), "Due checks not queued because the worker queue was full; they run on a later tick.")
+	}
+	if d, ok := m.Notifications.(DeliveryFailureProvider); ok {
+		add("deliveries", "Notification deliveries", d.FailedAttempts(), "Delivery attempts that did not succeed, retried or permanent; the delivery list has each failure code.")
+	}
+	return values
+}
+
+// latency lists the latency windows of the persistence writer and the
+// storage workers.
+func (m *Monitor) latency(health storage.Health) []LatencyMetric {
+	values := []LatencyMetric{}
+	add := func(id, label string, s observe.LatencySummary, warning time.Duration, help string) {
+		status := "unavailable"
+		if s.Count > 0 {
+			status = flagStatus(s.P95 > warning, "warning")
+		}
+		values = append(values, LatencyMetric{ID: id, Label: label, Count: s.Count, P50: summaryValue(s, s.P50), P95: summaryValue(s, s.P95), Max: summaryValue(s, s.Max), Status: status, Help: help})
+	}
+	if p, ok := m.Persistence.(PersistenceObservability); ok {
+		add("persistence_write", "Persistence write", p.WriteLatencySummary(), 50*time.Millisecond, "One history batch written to SQLite, retries included.")
+	}
+	if m.Storage != nil {
+		add("rollup", "Rollup pass", health.RollupLatency, 500*time.Millisecond, "One incremental rollup pass over every tier.")
+		add("retention", "Retention pass", health.RetentionLatency, 2*time.Second, "One retention pass, vacuum included; bounded at 30 s.")
+		add("vacuum", "Incremental vacuum", health.VacuumLatency, 2*time.Second, "The incremental vacuum after a retention pass.")
+	}
+	return values
+}
+
+// summaryValue is d in milliseconds, or nil before the first observation.
+func summaryValue(s observe.LatencySummary, d time.Duration) any {
+	if s.Count == 0 {
+		return nil
+	}
+	return float64(d) / float64(time.Millisecond)
 }
 func budgetStateStatus(state storage.BudgetState) string {
 	switch state {
@@ -214,8 +326,13 @@ func processCPUTime() time.Duration {
 	if len(fields) < 15 {
 		return 0
 	}
-	user, _ := strconv.ParseInt(fields[13], 10, 64)
-	system, _ := strconv.ParseInt(fields[14], 10, 64)
+	// A field that does not parse is treated like an unreadable file: no
+	// CPU value, rather than a wrong one.
+	user, userErr := strconv.ParseInt(fields[13], 10, 64)
+	system, systemErr := strconv.ParseInt(fields[14], 10, 64)
+	if userErr != nil || systemErr != nil {
+		return 0
+	}
 	return time.Duration(user+system) * time.Second / 100
 }
 func processRSS() any {

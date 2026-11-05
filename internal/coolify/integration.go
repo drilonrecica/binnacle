@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"strings"
@@ -39,6 +41,9 @@ type Integration struct {
 	enricher                 *Enricher
 	url                      string
 	tokenConfigured          bool
+	// Logger is handed to every enricher the integration starts; nil falls
+	// back to slog.Default().
+	Logger *slog.Logger
 }
 type IntegrationStatus struct {
 	Enabled                  bool       `json:"enabled"`
@@ -85,7 +90,9 @@ func (i *Integration) effectiveConfig(ctx context.Context) (ClientConfig, bool, 
 	var raw string
 	err := i.db.QueryRowContext(ctx, "SELECT value_json FROM settings WHERE key='coolify.url'").Scan(&raw)
 	if err == nil {
-		_ = json.Unmarshal([]byte(raw), &config.BaseURL)
+		if err := json.Unmarshal([]byte(raw), &config.BaseURL); err != nil {
+			return config, false, fmt.Errorf("decode stored Coolify URL: %w", err)
+		}
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return config, false, err
 	}
@@ -104,6 +111,7 @@ func (i *Integration) activate(config ClientConfig) error {
 	}
 	enricher := NewEnricher(client)
 	enricher.SetDB(i.db)
+	enricher.Logger = i.Logger
 	i.mu.Lock()
 	if i.cancel != nil {
 		i.cancel()
@@ -150,7 +158,9 @@ func (i *Integration) storedURL(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	_ = json.Unmarshal([]byte(raw), &stored)
+	if err := json.Unmarshal([]byte(raw), &stored); err != nil {
+		return "", fmt.Errorf("decode stored Coolify URL: %w", err)
+	}
 	return stored, nil
 }
 
@@ -199,7 +209,10 @@ func (i *Integration) Configure(ctx context.Context, url, token string) error {
 	if _, err := NewAPIClient(config); err != nil {
 		return err
 	}
-	raw, _ := json.Marshal(url)
+	raw, err := json.Marshal(url)
+	if err != nil {
+		return fmt.Errorf("encode Coolify URL: %w", err)
+	}
 	tx, err := i.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

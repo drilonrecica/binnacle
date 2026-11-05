@@ -69,7 +69,13 @@ func (s *Server) EnableExports(store *storage.Manager, incidents *notifications.
 		}
 		var buffer bytes.Buffer
 		writer := csv.NewWriter(&buffer)
-		_ = writer.Write([]string{"schema_version", "exported_at", "scope", "id", "resolution", "metric", "unit", "timestamp", "min", "avg", "max", "count"})
+		exportFailed := func() {
+			WriteError(w, 500, Error{Code: "export_failed", Message: "The metrics export could not be generated."})
+		}
+		if err := writer.Write([]string{"schema_version", "exported_at", "scope", "id", "resolution", "metric", "unit", "timestamp", "min", "avg", "max", "count"}); err != nil {
+			exportFailed()
+			return
+		}
 		exported := time.Now().UTC().Format(time.RFC3339Nano)
 		rows := 0
 		for _, series := range response.Series {
@@ -79,12 +85,15 @@ func (s *Server) EnableExports(store *storage.Manager, incidents *notifications.
 					WriteError(w, 413, Error{Code: "export_too_large", Message: "The export exceeds 10,000 rows."})
 					return
 				}
-				_ = writer.Write([]string{strconv.Itoa(exportSchemaVersion), exported, response.Scope, response.ID, string(response.Resolution), string(series.Metric), series.Unit, point.At.UTC().Format(time.RFC3339Nano), floatString(point.Min), floatString(point.Avg), floatString(point.Max), strconv.Itoa(point.Count)})
+				if err := writer.Write([]string{strconv.Itoa(exportSchemaVersion), exported, response.Scope, response.ID, string(response.Resolution), string(series.Metric), series.Unit, point.At.UTC().Format(time.RFC3339Nano), floatString(point.Min), floatString(point.Avg), floatString(point.Max), strconv.Itoa(point.Count)}); err != nil {
+					exportFailed()
+					return
+				}
 			}
 		}
 		writer.Flush()
 		if writer.Error() != nil {
-			WriteError(w, 500, Error{Code: "export_failed", Message: "The metrics export could not be generated."})
+			exportFailed()
 			return
 		}
 		writeAttachment(w, "text/csv; charset=utf-8", "binnacle-metrics.csv", buffer.Bytes())
@@ -222,5 +231,6 @@ func writeAttachment(w http.ResponseWriter, contentType, filename string, body [
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(body)
+	_, err := w.Write(body)
+	logResponseWrite(err)
 }

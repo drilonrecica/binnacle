@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"sync"
@@ -193,11 +194,11 @@ func (h *HTTPServer) readiness(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if r.Method != http.MethodHead {
-		_ = json.NewEncoder(w).Encode(struct {
+		h.logWrite(json.NewEncoder(w).Encode(struct {
 			Ready bool  `json:"ready"`
 			State State `json:"state"`
 			Readiness
-		}{ready, state, report})
+		}{ready, state, report}))
 	}
 }
 
@@ -221,8 +222,21 @@ func (h *HTTPServer) health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if r.Method != http.MethodHead {
-		_ = json.NewEncoder(w).Encode(struct {
+		h.logWrite(json.NewEncoder(w).Encode(struct {
 			State State `json:"state"`
-		}{state})
+		}{state}))
 	}
+}
+
+// logWrite records a probe response that did not reach the client; the
+// status is already sent, so it is logged at Debug.
+func (h *HTTPServer) logWrite(err error) {
+	if err == nil {
+		return
+	}
+	log := slog.Default()
+	if h.app != nil && h.app.log != nil {
+		log = h.app.log
+	}
+	log.Debug("probe response was not written", "error", err)
 }

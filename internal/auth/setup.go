@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -29,6 +30,8 @@ type SetupService struct {
 	now       func() time.Time
 	tokenTTL  time.Duration
 	tokenFile string
+	// Logger receives cleanup failures; nil falls back to slog.Default().
+	Logger *slog.Logger
 }
 
 // SetupTokenFileName is the file inside the runtime directory that holds a
@@ -159,8 +162,7 @@ func writeTokenFile(path, token string) error {
 		err = closeErr
 	}
 	if err != nil {
-		_ = os.Remove(tmp)
-		return err
+		return errors.Join(err, os.Remove(tmp))
 	}
 	return os.Rename(tmp, path)
 }
@@ -258,7 +260,10 @@ func (s *SetupService) Claim(ctx context.Context, token, username, password stri
 	if err != nil {
 		return User{}, err
 	}
-	n, _ := r.RowsAffected()
+	n, err := r.RowsAffected()
+	if err != nil {
+		return User{}, err
+	}
 	if n != 1 {
 		return User{}, ErrSetupUnavailable
 	}
@@ -267,7 +272,9 @@ func (s *SetupService) Claim(ctx context.Context, token, username, password stri
 	}
 	// The token is spent. A file that cannot be removed now is removed on the
 	// next start (a user exists by then), so the claim itself still succeeds.
-	_ = s.removeTokenFile()
+	if err := s.removeTokenFile(); err != nil {
+		fallbackLogger(s.Logger).Warn("spent setup token file was not removed; it is removed at the next start", "error", err)
+	}
 	return User{ID: id, Username: username, CreatedAt: now}, nil
 }
 

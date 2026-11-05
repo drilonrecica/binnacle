@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -47,6 +48,9 @@ type APIToken struct {
 type APITokenRepository struct {
 	db  *storage.DB
 	now func() time.Time
+	// Logger receives best-effort write failures; nil falls back to
+	// slog.Default().
+	Logger *slog.Logger
 }
 
 func NewAPITokenRepository(db *storage.DB) *APITokenRepository {
@@ -93,7 +97,10 @@ func (r *APITokenRepository) Create(ctx context.Context, userID, name string, sc
 	plaintext := "bnk_" + hex.EncodeToString(idBytes) + "_" + base64.RawURLEncoding.EncodeToString(secret)
 	prefix := plaintext[:12]
 	hash := apiTokenHash(plaintext)
-	raw, _ := json.Marshal(scopes)
+	raw, err := json.Marshal(scopes)
+	if err != nil {
+		return APIToken{}, "", fmt.Errorf("encode token scopes: %w", err)
+	}
 	var expiry any
 	if expiresAt != nil {
 		expiry = expiresAt.UnixMilli()
@@ -138,7 +145,10 @@ func (r *APITokenRepository) Revoke(ctx context.Context, userID, id string) erro
 	if err != nil {
 		return err
 	}
-	affected, _ := result.RowsAffected()
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if affected != 1 {
 		return sql.ErrNoRows
 	}
@@ -167,7 +177,10 @@ func (r *APITokenRepository) Authenticate(ctx context.Context, plaintext string,
 	}
 	now := r.now()
 	if !last.Valid || last.Int64 < now.Add(-time.Hour).UnixMilli() {
-		_, _ = r.db.ExecContext(ctx, "UPDATE api_tokens SET last_used_at=? WHERE token_hash=? AND (last_used_at IS NULL OR last_used_at<?)", now.UnixMilli(), apiTokenHash(plaintext), now.Add(-time.Hour).UnixMilli())
+		// last_used_at is advisory: a failed update must not refuse a valid token.
+		if _, err := r.db.ExecContext(ctx, "UPDATE api_tokens SET last_used_at=? WHERE token_hash=? AND (last_used_at IS NULL OR last_used_at<?)", now.UnixMilli(), apiTokenHash(plaintext), now.Add(-time.Hour).UnixMilli()); err != nil && ctx.Err() == nil {
+			fallbackLogger(r.Logger).Warn("API token last-used time was not updated", "error", err)
+		}
 	}
 	return nil
 }

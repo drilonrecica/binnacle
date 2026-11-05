@@ -243,7 +243,9 @@ func (r *Repository) upsertDeliveryTx(ctx context.Context, tx *sql.Tx, incidentI
 	now := time.Now().UTC().Unix()
 	if coalesce && deliveryID != "" && err == nil {
 		var present int
-		_ = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_deliveries WHERE id=?`, deliveryID).Scan(&present)
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_deliveries WHERE id=?`, deliveryID).Scan(&present); err != nil {
+			return err
+		}
 		if present > 0 {
 			_, err = tx.ExecContext(ctx, `UPDATE notification_deliveries SET payload_json=?,next_attempt_at=?,updated_at=? WHERE id=?`, payload, due.Unix(), now, deliveryID)
 			return err
@@ -287,7 +289,9 @@ func (r *Repository) payloadTx(ctx context.Context, tx *sql.Tx, deliveryID, key,
 		i.Alerts = append(i.Alerts, a)
 	}
 	rows.Close()
-	_ = tx.QueryRowContext(ctx, `SELECT COUNT(*),SUM(CASE WHEN a.status='firing' THEN 1 ELSE 0 END) FROM incident_alerts ia JOIN alerts a ON a.id=ia.alert_id WHERE ia.incident_id=?`, incidentID).Scan(&i.AlertCount, &i.FiringCount)
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(CASE WHEN a.status='firing' THEN 1 ELSE 0 END),0) FROM incident_alerts ia JOIN alerts a ON a.id=ia.alert_id WHERE ia.incident_id=?`, incidentID).Scan(&i.AlertCount, &i.FiringCount); err != nil {
+		return "", fmt.Errorf("count incident alerts: %w", err)
+	}
 	v := map[string]any{"schemaVersion": 1, "eventType": eventType, "deliveryId": deliveryID, "idempotencyKey": key, "incident": i}
 	b, err := json.Marshal(v)
 	return string(b), err
@@ -405,7 +409,9 @@ func (r *Repository) Incident(ctx context.Context, id string) (Incident, error) 
 		found.Alerts = append(found.Alerts, a)
 	}
 	rows.Close()
-	found.Deliveries, _ = r.Deliveries(ctx, id, 100, 0)
+	if found.Deliveries, err = r.Deliveries(ctx, id, 100, 0); err != nil {
+		return Incident{}, err
+	}
 	return *found, nil
 }
 
@@ -471,7 +477,11 @@ func (r *Repository) Channels(ctx context.Context) ([]Channel, error) {
 		if err = rows.Scan(&c.ID, &c.Name, &c.Kind, &c.Enabled, &c.MinimumSeverity, &c.NotifyResolved, &config, &ref, &created, &updated, &c.SecretConfigured); err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal([]byte(config), &c.Config)
+		// config_json is written by this repository; a row that does not
+		// decode is corruption worth surfacing, not an empty config.
+		if err = json.Unmarshal([]byte(config), &c.Config); err != nil {
+			return nil, fmt.Errorf("decode config of channel %s: %w", c.ID, err)
+		}
 		c.CreatedAt = time.Unix(created, 0).UTC()
 		c.UpdatedAt = time.Unix(updated, 0).UTC()
 		out = append(out, c)
@@ -539,16 +549,21 @@ func (r *Repository) CreateChannel(ctx context.Context, c Channel, s ChannelSecr
 		return Channel{}, auth.ErrMasterKeyMissing
 	}
 	secretRef := "notification.channel." + c.ID
-	b, _ := json.Marshal(s)
+	b, err := json.Marshal(s)
+	if err != nil {
+		return Channel{}, fmt.Errorf("encode channel secrets: %w", err)
+	}
+	cfg, err := json.Marshal(c.Config)
+	if err != nil {
+		return Channel{}, fmt.Errorf("encode channel config: %w", err)
+	}
 	if err := r.secrets.Put(ctx, secretRef, b); err != nil {
 		return Channel{}, err
 	}
-	cfg, _ := json.Marshal(c.Config)
 	now := time.Now().UTC()
-	_, err := r.db.ExecContext(ctx, `INSERT INTO notification_channels(id,name,kind,enabled,minimum_severity,notify_resolved,config_json,secret_ref,created_at,updated_at)VALUES(?,?,?,?,?,?,?,?,?,?)`, c.ID, c.Name, c.Kind, c.Enabled, c.MinimumSeverity, c.NotifyResolved, string(cfg), secretRef, now.Unix(), now.Unix())
+	_, err = r.db.ExecContext(ctx, `INSERT INTO notification_channels(id,name,kind,enabled,minimum_severity,notify_resolved,config_json,secret_ref,created_at,updated_at)VALUES(?,?,?,?,?,?,?,?,?,?)`, c.ID, c.Name, c.Kind, c.Enabled, c.MinimumSeverity, c.NotifyResolved, string(cfg), secretRef, now.Unix(), now.Unix())
 	if err != nil {
-		_ = r.secrets.Delete(ctx, secretRef)
-		return Channel{}, err
+		return Channel{}, errors.Join(err, r.secrets.Delete(ctx, secretRef))
 	}
 	c.SecretConfigured = true
 	c.CreatedAt = now
@@ -594,11 +609,17 @@ func (r *Repository) PatchChannel(ctx context.Context, id string, c Channel, pat
 	if err = validateChannel(c, current); err != nil {
 		return Channel{}, err
 	}
-	b, _ := json.Marshal(current)
+	b, err := json.Marshal(current)
+	if err != nil {
+		return Channel{}, fmt.Errorf("encode channel secrets: %w", err)
+	}
+	cfg, err := json.Marshal(c.Config)
+	if err != nil {
+		return Channel{}, fmt.Errorf("encode channel config: %w", err)
+	}
 	if err = r.secrets.Put(ctx, ref, b); err != nil {
 		return Channel{}, err
 	}
-	cfg, _ := json.Marshal(c.Config)
 	now := time.Now().UTC()
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -687,7 +708,10 @@ func (r *Repository) DeleteChannel(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
 		return sql.ErrNoRows
 	}
@@ -745,7 +769,10 @@ func (r *Repository) Retry(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
 		return sql.ErrNoRows
 	}
@@ -758,7 +785,10 @@ func (r *Repository) Test(ctx context.Context, channelID string) (string, error)
 	}
 	id := newID("del_")
 	key := newID("idem_")
-	payload, _ := json.Marshal(map[string]any{"schemaVersion": 1, "eventType": "test", "deliveryId": id, "idempotencyKey": key})
+	payload, err := json.Marshal(map[string]any{"schemaVersion": 1, "eventType": "test", "deliveryId": id, "idempotencyKey": key})
+	if err != nil {
+		return "", fmt.Errorf("encode test payload: %w", err)
+	}
 	now := time.Now().Unix()
 	_, err = r.db.ExecContext(ctx, `INSERT INTO notification_deliveries(id,channel_id,event_type,payload_json,idempotency_key,status,next_attempt_at,created_at,updated_at)VALUES(?,?,'test',?,?,'pending',?,?,?)`, id, c.ID, string(payload), key, now, now, now)
 	return id, err

@@ -45,7 +45,10 @@ func (s *Server) enableExternalSession(proxy *auth.ProxyAuthenticator, credentia
 			return
 		}
 		if previous := auth.TokenFromRequest(r); previous != "" {
-			_ = sessions.Revoke(r.Context(), previous)
+			// The new session is issued regardless; the old one still expires.
+			if err := sessions.Revoke(r.Context(), previous); err != nil {
+				s.logger.Warn("previous session was not revoked at proxy login", "error", err)
+			}
 		}
 		token, csrf, session, err := sessions.IssueForProxy(r.Context(), user.ID, subject)
 		if err != nil {

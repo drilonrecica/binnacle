@@ -158,14 +158,40 @@ export interface MonitorMetric {
   help: string;
 }
 
+/** Background failures of one kind since the process started (RUN-7). */
+export interface MonitorFailure {
+  id: string;
+  label: string;
+  count: number;
+  status: string;
+  help: string;
+}
+
+/** p50, p95 and max in milliseconds over the latest runs; null before the first. */
+export interface MonitorLatency {
+  id: string;
+  label: string;
+  count: number;
+  p50: number | null;
+  p95: number | null;
+  max: number | null;
+  status: string;
+  help: string;
+}
+
+export interface MonitorHealth {
+  at: string;
+  metrics: MonitorMetric[];
+  /** Absent from servers older than RUN-7. */
+  failures?: MonitorFailure[];
+  latency?: MonitorLatency[];
+}
+
 export function monitorHealth(signal?: AbortSignal) {
-  return api.get<{ at: string; metrics: MonitorMetric[] }>(
-    '/api/v1/monitor-health',
-    {
-      signal,
-      fallback: 'Monitor health is unavailable.',
-    },
-  );
+  return api.get<MonitorHealth>('/api/v1/monitor-health', {
+    signal,
+    fallback: 'Monitor health is unavailable.',
+  });
 }
 
 export interface DiagnosticsPreview {

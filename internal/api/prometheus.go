@@ -82,7 +82,12 @@ func (p *PrometheusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sample("binnacle_collector_state", 1, promLabels(map[string]string{"collector": name, "state": string(state.State)}))
 	}
 	if p.Checks != nil {
-		states, _ := p.Checks.PrometheusStates(r.Context(), 1000)
+		// A failed read omits the check series from this scrape rather than
+		// failing the host and resource series with it.
+		states, err := p.Checks.PrometheusStates(r.Context(), 1000)
+		if err != nil {
+			apiLogger().Warn("check states were not read for the Prometheus scrape", "error", err)
+		}
 		for _, state := range states {
 			value := 0.0
 			if state.Status == "success" {
@@ -94,8 +99,21 @@ func (p *PrometheusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if p.Monitor != nil {
-		for _, metric := range p.Monitor.Snapshot().Metrics {
+		monitor := p.Monitor.Snapshot()
+		for _, metric := range monitor.Metrics {
 			sample("binnacle_self_"+promMetricName(metric.ID), metric.Value, "")
+		}
+		// Worker failures and latency windows (RUN-7), labelled by operation.
+		for _, failure := range monitor.Failures {
+			sample("binnacle_self_failures_total", failure.Count, promLabels(map[string]string{"operation": failure.ID}))
+		}
+		for _, latency := range monitor.Latency {
+			for _, q := range []struct {
+				quantile string
+				value    any
+			}{{"0.5", latency.P50}, {"0.95", latency.P95}, {"1", latency.Max}} {
+				sample("binnacle_self_latency_milliseconds", q.value, promLabels(map[string]string{"operation": latency.ID, "quantile": q.quantile}))
+			}
 		}
 	}
 	if output.Len() > 4<<20 {
@@ -105,7 +123,8 @@ func (p *PrometheusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(200)
-	_, _ = w.Write(output.Bytes())
+	_, err := w.Write(output.Bytes())
+	logResponseWrite(err)
 }
 func promNumber(value any) (float64, bool) {
 	switch value := value.(type) {

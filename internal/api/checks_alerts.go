@@ -75,8 +75,15 @@ func authorizeMutation(w http.ResponseWriter, r *http.Request, a Authorizer, s *
 	return true
 }
 func pagination(r *http.Request) (int, int) {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	// A missing or malformed value falls back to the defaults below.
+	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+	if err != nil {
+		limit = 0
+	}
+	offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
+	if err != nil {
+		offset = 0
+	}
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}

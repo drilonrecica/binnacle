@@ -20,6 +20,11 @@ func NormalizeDocker(e dockerapi.Event, oomKilled bool) (metrics.Event, bool) {
 	if oomKilled || action == "oom" {
 		kind = "container_oom"
 	}
-	at, _ := time.Parse(time.RFC3339, e.Time)
+	at, err := time.Parse(time.RFC3339, e.Time)
+	if err != nil {
+		// dockerapi always formats Time as RFC 3339; an unparsable value is
+		// kept as the zero time rather than a guessed instant.
+		at = time.Time{}
+	}
 	return metrics.Event{At: at.UTC(), Type: kind, Message: kind + " for container", ContainerInstance: metrics.ContainerID(e.ID), Details: `{"action":"` + e.Action + `"}`, CorrelationKey: e.ID}, true
 }

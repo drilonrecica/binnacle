@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -68,6 +69,9 @@ type Sessions struct {
 	proxies TrustedProxies
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
+	// Logger receives best-effort write failures and cleanup errors; nil
+	// falls back to slog.Default().
+	Logger *slog.Logger
 }
 
 func NewSessions(db *storage.DB, cfg SessionConfig) *Sessions {
@@ -235,7 +239,11 @@ func (s *Sessions) load(ctx context.Context, token string) (Session, string, err
 	}
 	now := s.now().UTC()
 	if !now.Before(session.ExpiresAt) || !now.Before(session.AbsoluteExpires) {
-		_, _ = s.db.ExecContext(ctx, "UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE id_hash=?", now.UnixMilli(), hash)
+		// The session is refused either way; a failed revoke leaves the row to
+		// the hourly cleanup.
+		if _, err := s.db.ExecContext(ctx, "UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE id_hash=?", now.UnixMilli(), hash); err != nil && ctx.Err() == nil {
+			fallbackLogger(s.Logger).Warn("expired session was not marked revoked", "error", err)
+		}
 		return Session{}, "", ErrSessionInvalid
 	}
 	return session, hash, nil
@@ -296,7 +304,13 @@ func (s *Sessions) Start(ctx context.Context) error {
 			case <-ticker.C:
 				for {
 					n, err := s.Cleanup(ctx, 500)
-					if err != nil || n < 500 {
+					if err != nil {
+						if ctx.Err() == nil {
+							fallbackLogger(s.Logger).Error("session cleanup failed", "error", err)
+						}
+						break
+					}
+					if n < 500 {
 						break
 					}
 				}
@@ -360,4 +374,12 @@ func nullString(value string) any {
 		return nil
 	}
 	return value
+}
+
+// fallbackLogger is l, or slog.Default() when l is nil.
+func fallbackLogger(l *slog.Logger) *slog.Logger {
+	if l != nil {
+		return l
+	}
+	return slog.Default()
 }

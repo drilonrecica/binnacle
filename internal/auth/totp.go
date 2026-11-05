@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strconv"
 	"strings"
@@ -48,6 +49,9 @@ type MFA struct {
 	now         func() time.Time
 	mu          sync.Mutex
 	pending     map[string]pendingEnrollment
+	// Logger receives cleanup failures after a change was committed; nil
+	// falls back to slog.Default().
+	Logger *slog.Logger
 }
 
 func NewMFA(db *storage.DB, credentials *Credentials, secrets *SecretStore, sessions *Sessions) *MFA {
@@ -140,8 +144,7 @@ func (m *MFA) Confirm(ctx context.Context, userID, code string) ([]string, error
 	}
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
-		_ = m.secrets.Delete(ctx, key)
-		return nil, err
+		return nil, errors.Join(err, m.secrets.Delete(ctx, key))
 	}
 	defer tx.Rollback()
 	now := m.now().UnixMilli()
@@ -159,10 +162,13 @@ func (m *MFA) Confirm(ctx context.Context, userID, code string) ([]string, error
 		err = tx.Commit()
 	}
 	if err != nil {
-		_ = m.secrets.Delete(ctx, key)
-		return nil, err
+		return nil, errors.Join(err, m.secrets.Delete(ctx, key))
 	}
-	_ = m.sessions.RevokeAll(ctx, userID)
+	// MFA is enabled and the codes must reach the user, so a failed revoke
+	// is logged rather than returned.
+	if err := m.sessions.RevokeAll(ctx, userID); err != nil {
+		fallbackLogger(m.Logger).Error("sessions were not revoked after enabling MFA", "user", userID, "error", err)
+	}
 	return codes, nil
 }
 
@@ -193,7 +199,7 @@ func (m *MFA) Verify(ctx context.Context, userID, code string) error {
 			if err != nil {
 				return ErrMFAInvalid
 			}
-			if affected, _ := result.RowsAffected(); affected != 1 {
+			if affected, err := result.RowsAffected(); err != nil || affected != 1 {
 				return ErrMFAInvalid
 			}
 			return nil
@@ -212,8 +218,8 @@ func (m *MFA) Verify(ctx context.Context, userID, code string) error {
 	if err != nil {
 		return ErrMFAInvalid
 	}
-	affected, _ := result.RowsAffected()
-	if affected != 1 {
+	affected, err := result.RowsAffected()
+	if err != nil || affected != 1 {
 		return ErrMFAInvalid
 	}
 	if tx.Commit() != nil {
@@ -250,10 +256,15 @@ func (m *MFA) Disable(ctx context.Context, user User, password, code string) err
 	if err != nil {
 		return err
 	}
+	// MFA is already disabled; the leftovers are logged, not returned.
 	if key.Valid {
-		_ = m.secrets.Delete(ctx, key.String)
+		if err := m.secrets.Delete(ctx, key.String); err != nil {
+			fallbackLogger(m.Logger).Warn("TOTP secret was not deleted after disabling MFA", "user", user.ID, "error", err)
+		}
 	}
-	_ = m.sessions.RevokeAll(ctx, user.ID)
+	if err := m.sessions.RevokeAll(ctx, user.ID); err != nil {
+		fallbackLogger(m.Logger).Error("sessions were not revoked after disabling MFA", "user", user.ID, "error", err)
+	}
 	return nil
 }
 

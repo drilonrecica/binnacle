@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/drilonrecica/binnacle/internal/observe"
 	"github.com/drilonrecica/binnacle/migrations"
 	"github.com/mattn/go-sqlite3"
 	"golang.org/x/sys/unix"
@@ -125,6 +126,13 @@ type Manager struct {
 	optimizeInterval, optimizeBootDelay time.Duration
 	// freeDisk overrides the free-space measurement in tests; nil uses statfs.
 	freeDisk func(path string) (uint64, error)
+	// Self-observability of the storage workers (RUN-7): failures since
+	// start, the latency of their latest passes, and the rate-limited log
+	// their errors go through.
+	rollupFailures, retentionFailures, vacuumFailures observe.Counter
+	rollupLatency, retentionLatency, vacuumLatency    observe.Latency
+	errlog                                            observe.ErrorLog
+	errlogOnce                                        sync.Once
 }
 
 // RetentionCutoffs configures how long each resolution tier is kept.
@@ -159,8 +167,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	workerCtx, cancel := context.WithCancel(ctx)
 	if err := m.recoverDeletionJobs(ctx); err != nil {
 		cancel()
-		_ = m.Close()
-		return err
+		return errors.Join(err, m.Close())
 	}
 	m.mu.Lock()
 	m.workerCancel = cancel
@@ -222,12 +229,21 @@ type Health struct {
 	// WriteTransactions is the process-wide count of committed row-changing
 	// transactions (see WriteTransactions).
 	WriteTransactions uint64
+	// RollupFailures, RetentionFailures and VacuumFailures count failed
+	// passes since start; VacuumFailures includes the WAL checkpoint that
+	// follows the vacuum (RUN-7).
+	RollupFailures, RetentionFailures, VacuumFailures uint64
+	// RollupLatency, RetentionLatency and VacuumLatency summarise the latest
+	// passes of each worker (RUN-7).
+	RollupLatency, RetentionLatency, VacuumLatency observe.LatencySummary
 }
 
 func (m *Manager) Health() Health {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return Health{UncleanShutdown: m.uncleanShutdown, Writer: poolStats(m.writer), Reader: poolStats(m.reader), RollupDuration: m.rollupDuration, RetentionDuration: m.retentionDuration, VacuumDuration: m.vacuumDuration, RetentionIncomplete: m.retentionIncomplete, VacuumPending: m.vacuumPending, Budget: m.budget.copy(), WriteTransactions: WriteTransactions()}
+	return Health{UncleanShutdown: m.uncleanShutdown, Writer: poolStats(m.writer), Reader: poolStats(m.reader), RollupDuration: m.rollupDuration, RetentionDuration: m.retentionDuration, VacuumDuration: m.vacuumDuration, RetentionIncomplete: m.retentionIncomplete, VacuumPending: m.vacuumPending, Budget: m.budget.copy(), WriteTransactions: WriteTransactions(),
+		RollupFailures: m.rollupFailures.Load(), RetentionFailures: m.retentionFailures.Load(), VacuumFailures: m.vacuumFailures.Load(),
+		RollupLatency: m.rollupLatency.Summary(), RetentionLatency: m.retentionLatency.Summary(), VacuumLatency: m.vacuumLatency.Summary()}
 }
 
 // execQueryer is the writer handle the one-time conversion runs on.
@@ -319,7 +335,7 @@ func (m *Manager) Open(ctx context.Context) error {
 	}
 	writer.SetMaxOpenConns(1)
 	writer.SetMaxIdleConns(1)
-	fail := func(err error) error { _ = writer.Close(); return err }
+	fail := func(err error) error { return errors.Join(err, writer.Close()) }
 	// quick_check is bounded by the tree walk; the O(size) integrity_check is
 	// an operator tool reached through diagnostics (ADR 021 §3).
 	var integrity string
@@ -333,8 +349,7 @@ func (m *Manager) Open(ctx context.Context) error {
 		return fail(err)
 	}
 	if err := m.migrate(ctx, writer); err != nil {
-		_ = writeMarker(marker)
-		return fail(err)
+		return fail(errors.Join(err, writeMarker(marker)))
 	}
 	reader, err := sql.Open(driverName, readerDSN(m.Path))
 	if err != nil {
@@ -343,12 +358,10 @@ func (m *Manager) Open(ctx context.Context) error {
 	reader.SetMaxOpenConns(readerPoolSize)
 	reader.SetMaxIdleConns(readerPoolSize)
 	if err := reader.PingContext(ctx); err != nil {
-		_ = reader.Close()
-		return fail(fmt.Errorf("open read-only pool: %w", err))
+		return fail(errors.Join(fmt.Errorf("open read-only pool: %w", err), reader.Close()))
 	}
 	if err := os.WriteFile(openMarker, []byte("binnacle storage is open; this file is removed on a clean close\n"), 0600); err != nil {
-		_ = reader.Close()
-		return fail(fmt.Errorf("write open marker: %w", err))
+		return fail(errors.Join(fmt.Errorf("write open marker: %w", err), reader.Close()))
 	}
 	m.writer, m.reader, m.db = writer, reader, NewDB(writer, reader)
 	return nil
@@ -377,6 +390,13 @@ func (m *Manager) logger() *slog.Logger {
 		return m.Logger
 	}
 	return slog.Default()
+}
+
+// errorLog is the rate-limited log the storage workers report errors to; it
+// writes through logger(), so it follows a Logger set after New.
+func (m *Manager) errorLog() *observe.ErrorLog {
+	m.errlogOnce.Do(func() { m.errlog.Logger = m.logger })
+	return &m.errlog
 }
 
 // writerDSN and readerDSN carry every connection setting so that each
@@ -429,8 +449,7 @@ func (m *Manager) migrate(ctx context.Context, db *sql.DB) error {
 			_, err = tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(?, datetime('now'))", version)
 		}
 		if err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("migration %03d failed: %w", version, err)
+			return errors.Join(fmt.Errorf("migration %03d failed: %w", version, err), tx.Rollback())
 		}
 		if err = tx.Commit(); err != nil {
 			return fmt.Errorf("migration %03d commit: %w", version, err)

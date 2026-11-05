@@ -216,10 +216,16 @@ func (s *Service) Patch(ctx context.Context, expected int64, changes map[string]
 	next := currentRevision + 1
 	now := time.Now().UTC().UnixMilli()
 	for key, value := range changes {
-		raw, _ := json.Marshal(value)
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return Snapshot{}, fmt.Errorf("encode setting %s: %w", key, err)
+		}
 		var previous any
 		if old, ok := current[key]; ok {
-			encoded, _ := json.Marshal(old)
+			encoded, err := json.Marshal(old)
+			if err != nil {
+				return Snapshot{}, fmt.Errorf("encode previous setting %s: %w", key, err)
+			}
 			previous = string(encoded)
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO settings(key,value_json,updated_at,updated_by) VALUES(?,?,?,?)
