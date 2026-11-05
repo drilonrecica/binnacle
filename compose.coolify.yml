@@ -71,6 +71,7 @@ services:
       BINNACLE_DATA_DIR: /var/lib/binnacle
       BINNACLE_HOST_PROC: /host/proc
       BINNACLE_HOST_SYS: /host/sys
+      BINNACLE_HOST_ROOT: /host/root
       BINNACLE_HOST_PASSWD: /host/etc/passwd
       BINNACLE_SETUP_TOKEN: ${SERVICE_HEX_64_BINNACLE}
       BINNACLE_DOCKER_SOCKET: /var/run/binnacle-docker/docker.sock
@@ -91,6 +92,7 @@ services:
       - binnacle-data:/var/lib/binnacle
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
       - /etc/os-release:/host/etc/os-release:ro
       - /etc/passwd:/host/etc/passwd:ro
       - binnacle-docker-api:/var/run/binnacle-docker:ro

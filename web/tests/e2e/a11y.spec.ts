@@ -200,6 +200,8 @@ test('command palette and dialogs have no detectable a11y violations', async ({
 }) => {
   await mockApp(page);
   await page.goto('/overview');
+  // The shortcut listener mounts with the shell; wait for it before pressing.
+  await expect(page.getByRole('button', { name: 'Search' })).toBeVisible();
   await page.keyboard.press('Control+k');
   await expect(
     page.getByRole('dialog', { name: 'Command palette' }),

@@ -12,7 +12,7 @@ GO_SOURCE_FILES := $(shell find cmd internal -type f -name '*.go' -print)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev dev-demo dev-host test check build web-build image image-multi vuln licenses sbom scan format-check go-test web-test web-check go-vet benchmark benchmark-short benchmark-matrix
+.PHONY: help dev dev-demo dev-host test check build web-build image image-multi vuln licenses sbom scan format-check go-test web-test web-check packaging-check go-vet benchmark benchmark-short benchmark-matrix
 
 help: ## Show the supported local development commands.
 
@@ -40,7 +40,7 @@ dev-host: build ## Run against local host/Docker interfaces (requires appropriat
 
 test: go-test web-test ## Run Go and frontend unit tests.
 
-check: format-check go-vet test web-check ## Run the local CI-quality subset.
+check: format-check go-vet test web-check packaging-check ## Run the local CI-quality subset.
 
 build: web-build ## Build the production frontend and CGO-enabled Binnacle binary.
 
@@ -105,6 +105,10 @@ web-check: ## Run Svelte type checking, linting and the design-token contrast ga
 	$(PNPM) --dir web check
 	$(PNPM) --dir web lint
 	$(PNPM) --dir web contrast
+
+packaging-check: ## Check the Coolify template and Git-backed Compose against the canonical Compose deployment.
+
+	scripts/validate-coolify-template.sh
 
 go-vet: web-build ## Run Go vet and the rule that forbids discarding errors with _ in internal/.
 

@@ -80,6 +80,7 @@ expected_coolify_environment = {
     "BINNACLE_DATA_DIR": "/var/lib/binnacle",
     "BINNACLE_HOST_PROC": "/host/proc",
     "BINNACLE_HOST_SYS": "/host/sys",
+    "BINNACLE_HOST_ROOT": "/host/root",
     "BINNACLE_HOST_PASSWD": "/host/etc/passwd",
     "BINNACLE_SETUP_TOKEN": "${SERVICE_HEX_64_BINNACLE}",
     "BINNACLE_DOCKER_SOCKET": "/var/run/binnacle-docker/docker.sock",

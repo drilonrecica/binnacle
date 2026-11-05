@@ -241,7 +241,6 @@
   }
   .subnav a.active .description {
     color: var(--accent-text);
-    opacity: 0.8;
   }
   .content {
     min-width: 0;

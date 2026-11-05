@@ -507,6 +507,8 @@ test('enrolls two-factor authentication when advanced auth is enabled', async ({
 test('the command palette jumps to a resource', async ({ page }) => {
   await mockApp(page);
   await page.goto('/overview');
+  // The shortcut listener mounts with the shell; wait for it before pressing.
+  await expect(page.getByRole('button', { name: 'Search' })).toBeVisible();
   await page.keyboard.press('Control+k');
   const palette = page.getByRole('dialog', { name: 'Command palette' });
   await expect(palette).toBeVisible();

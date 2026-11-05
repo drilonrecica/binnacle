@@ -57,11 +57,13 @@
   <button
     type="button"
     class="search"
-    aria-label="Search"
     onclick={() => (shell.paletteOpen = true)}
     aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
   >
     <Search aria-hidden="true" />
+    <!-- The label names the button from its content (no aria-label, so the
+         visible shortcut hint cannot contradict the accessible name). At phone
+         width it is visually hidden rather than removed so the name survives. -->
     <span class="search-label">Search</span>
     <span class="keys" aria-hidden="true"
       ><Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd><Kbd>K</Kbd></span
@@ -150,7 +152,14 @@
       padding: 0;
       justify-content: center;
     }
-    .search-label,
+    .search-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
     .keys {
       display: none;
     }
