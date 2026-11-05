@@ -214,6 +214,7 @@ func main() {
 	application.Add(notificationWorker)
 
 	apiServer := api.New()
+	apiServer.SetLogger(log)
 	proxies, err := auth.ParseTrustedProxies(config.HTTP.TrustedProxyCIDRs)
 	if err == nil {
 		proxies, err = proxies.WithPublicURL(config.HTTP.PublicURL)
@@ -320,7 +321,7 @@ func main() {
 	apiServer.EnableLogs(logService, engine, sessions)
 	apiServer.EnableProcesses(diagnostics.NewProcessScanner(config.Paths.HostProc, config.Paths.HostPasswd), sessions)
 	prometheusHandler := &api.PrometheusHandler{Enabled: config.Features.Portability && config.Prometheus.Enabled, Tokens: tokenRepository, Engine: engine, Checks: checkRepository, Monitor: monitor}
-	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, version, application, apiServer.Handler(), webembed.Handler(), prometheusHandler))
+	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, application, app.Routes{API: apiServer.Routes(), Static: webembed.Handler(), Metrics: prometheusHandler, Middleware: apiServer.Middleware}))
 	if err := application.Run(ctx); err != nil {
 		log.Error("application exited with error", "error", err)
 		os.Exit(1)

@@ -54,13 +54,14 @@ type Application struct {
 	components []Component
 	mu         sync.RWMutex
 	state      State
+	failed     chan error
 }
 
 func New(log *slog.Logger, components ...Component) *Application {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Application{log: log, components: components, state: StateStarting}
+	return &Application{log: log, components: components, state: StateStarting, failed: make(chan error, 1)}
 }
 
 // Add registers a component before Run is called.
@@ -71,6 +72,21 @@ func (a *Application) Add(components ...Component) {
 		panic("app: Add after startup")
 	}
 	a.components = append(a.components, components...)
+}
+
+// Fail reports that a running component can no longer serve. Run then stops
+// every component and returns err, so the process exits non-zero instead of
+// running on without, for example, its HTTP listener. Only the first failure
+// is kept; later ones are logged.
+func (a *Application) Fail(err error) {
+	if err == nil {
+		return
+	}
+	select {
+	case a.failed <- err:
+	default:
+		a.log.Error("additional component failure", "error", err)
+	}
 }
 
 func (a *Application) State() State         { a.mu.RLock(); defer a.mu.RUnlock(); return a.state }
@@ -89,10 +105,15 @@ func (a *Application) Run(ctx context.Context) error {
 	}
 	a.setState(StateRunning)
 	a.log.Info("application started")
-	<-ctx.Done()
+	var failure error
+	select {
+	case <-ctx.Done():
+		a.log.Info("application stopping", "reason", ctx.Err())
+	case failure = <-a.failed:
+		a.log.Error("component failed; application stopping", "error", failure)
+	}
 	a.setState(StateStopping)
-	a.log.Info("application stopping", "reason", ctx.Err())
-	return a.stop(started)
+	return errors.Join(failure, a.stop(started))
 }
 
 func (a *Application) stop(started []Component) error {

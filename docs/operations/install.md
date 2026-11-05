@@ -171,6 +171,27 @@ identity allowlist `BINNACLE_AUTH_PROXY_CIDRS` is separate and stays exact.
 `scripts/e2e-tls-proxy.sh` exercises both settings through a TLS-terminating
 Caddy container; CI runs it against the freshly built image.
 
+### HTTP hardening
+
+Every response, including the UI document, its assets, `/healthz` and
+`/metrics`, carries `Content-Security-Policy` (same-origin only,
+`frame-ancestors 'none'`), `X-Frame-Options: DENY`,
+`X-Content-Type-Options: nosniff`, `Referrer-Policy:
+strict-origin-when-cross-origin` and an `X-Request-ID`. Binnacle cannot be
+embedded in a frame. A proxy that adds its own CSP should not loosen these.
+
+The listener waits at most 10 s for request headers, closes idle keep-alive
+connections after 120 s and refuses request headers above 64 KiB. Each request
+other than the live stream (`/api/v1/live`) and followed logs
+(`/api/v1/logs?follow=true`) gets a 60 s budget. If the listener fails, the
+process exits non-zero so the container restarts.
+
+Each request is logged once as an `http request` JSON line on stderr. The line
+carries the client's network prefix (`/24` for IPv4, `/56` for IPv6), never
+the full address, and redacts token query parameters. Health probes and asset
+requests are logged at debug level. `/healthz` returns only `{"state": ...}`
+and does not reveal the version.
+
 ## Environment variables
 
 Key variables you may need to set at deployment time:
