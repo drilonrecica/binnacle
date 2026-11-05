@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/storage"
@@ -113,13 +114,29 @@ func scanCheck(s scanner) (Check, error) {
 	return c, err
 }
 
-func (r *Repository) Due(ctx context.Context, now time.Time, limit int) ([]Check, error) {
+// Due returns up to limit enabled checks whose next run is due, skipping the
+// ids in exclude: checks already queued or running keep a past next_run_at
+// until their result is saved and must not take the slots of other due
+// checks (EVT-4).
+func (r *Repository) Due(ctx context.Context, now time.Time, limit int, exclude ...string) ([]Check, error) {
 	if limit < 1 || limit > 1000 {
 		return nil, fmt.Errorf("invalid due-check limit")
 	}
+	if len(exclude) > 1000 {
+		return nil, fmt.Errorf("too many excluded checks")
+	}
+	excluded := ""
+	args := []any{now.Unix()}
+	if len(exclude) > 0 {
+		excluded = " AND c.id NOT IN (?" + strings.Repeat(",?", len(exclude)-1) + ")"
+		for _, id := range exclude {
+			args = append(args, id)
+		}
+	}
+	args = append(args, limit)
 	rows, err := r.db.QueryContext(ctx, `SELECT c.id,c.resource_id,c.name,c.url,c.method,c.interval_seconds,c.timeout_seconds,c.expected_status_min,c.expected_status_max,COALESCE(c.body_substring,''),c.required,c.enabled,c.created_at,c.updated_at
 	FROM health_checks c JOIN resources r ON r.id=c.resource_id LEFT JOIN health_check_state s ON s.check_id=c.id
-	WHERE c.enabled=1 AND r.archived_at IS NULL AND r.status NOT IN ('paused','archived') AND (s.next_run_at IS NULL OR s.next_run_at<=?) ORDER BY COALESCE(s.next_run_at,0),c.id LIMIT ?`, now.Unix(), limit)
+	WHERE c.enabled=1 AND r.archived_at IS NULL AND r.status NOT IN ('paused','archived') AND (s.next_run_at IS NULL OR s.next_run_at<=?)`+excluded+` ORDER BY COALESCE(s.next_run_at,0),c.id LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}

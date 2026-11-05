@@ -58,6 +58,14 @@ DNS, or TLS failures retry. SMTP 4xx and network failures retry; SMTP 5xx and
 invalid configuration fail permanently. Manual retry preserves the stable
 idempotency key.
 
+A delivery that hits a storage error after it was picked up returns to
+pending and is retried after one minute without counting as an attempt. A
+delivery left in progress for longer than twice the delivery timeout (at least
+one minute), for example because its worker could not record the result, is
+returned to pending by a maintenance pass that runs every minute, so it never
+blocks its channel until a restart. Deliveries are at least once: receivers
+should use the idempotency key to drop duplicates.
+
 ## Outbound security and limits
 
 DNS is checked at configuration and dial time. Environment proxies and webhook

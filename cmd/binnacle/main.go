@@ -124,8 +124,11 @@ func main() {
 	if *demoMode || config.Demo {
 		checkRunner = demo.CheckRunner{}
 	}
+	notificationWorker.Logger = log
 	checkScheduler := checks.NewScheduler(checkRepository, checkRunner, config.Checks.MaxConcurrency)
+	checkScheduler.Logger = log
 	alertEvaluator := alerts.NewEvaluator(alertRepository, engine)
+	alertEvaluator.Logger = log
 
 	var dockerEngine dockerapi.Client
 	var dockerLogs dockerapi.LogClient

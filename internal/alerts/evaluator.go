@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/drilonrecica/binnacle/internal/metrics"
+	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/metrics"
 )
 
 type Evaluator struct {
@@ -18,12 +20,13 @@ type Evaluator struct {
 	Engine   *metrics.Engine
 	Interval time.Duration
 	Now      func() time.Time
+	Logger   *slog.Logger
 	cancel   context.CancelFunc
 	wg       sync.WaitGroup
 }
 
 func NewEvaluator(repo *Repository, engine *metrics.Engine) *Evaluator {
-	return &Evaluator{Repo: repo, Engine: engine, Interval: 10 * time.Second, Now: time.Now}
+	return &Evaluator{Repo: repo, Engine: engine, Interval: 10 * time.Second, Now: time.Now, Logger: slog.Default()}
 }
 func (e *Evaluator) Start(ctx context.Context) error {
 	if e.Repo == nil || e.Engine == nil {
@@ -40,7 +43,9 @@ func (e *Evaluator) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				_ = e.Evaluate(ctx)
+				if err := e.Evaluate(ctx); err != nil && ctx.Err() == nil {
+					e.logger().Error("alert evaluation failed", "error", err)
+				}
 			}
 		}
 	}()
@@ -53,16 +58,25 @@ func (e *Evaluator) Stop(context.Context) error {
 	e.wg.Wait()
 	return nil
 }
+
+// Evaluate runs one evaluation of every alert family. Families are evaluated
+// independently: an error in one is collected and the others still run, so a
+// single broken rule or query cannot silence every alert (EVT-5). The returned
+// error joins every failure, each prefixed with its family.
 func (e *Evaluator) Evaluate(ctx context.Context) error {
 	rules, err := e.Repo.Rules(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("loading alert rules: %w", err)
 	}
 	snap := e.Engine.Snapshot()
 	now := e.Now().UTC()
-	if err := e.Repo.Cleanup(ctx, now); err != nil {
-		return err
+	var errs []error
+	step := func(family string, err error) {
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", family, err))
+		}
 	}
+	step("cleanup", e.Repo.Cleanup(ctx, now))
 	for _, r := range rules {
 		if !r.Enabled {
 			continue
@@ -73,14 +87,14 @@ func (e *Evaluator) Evaluate(ctx context.Context) error {
 				continue
 			}
 			if snap.Host.CPUPercent != nil {
-				err = e.evaluate(ctx, r, "host", "server", *snap.Host.CPUPercent, *snap.Host.CPUPercent > *r.Threshold, *snap.Host.CPUPercent < *r.RecoveryThreshold, now)
+				step(r.Family, e.evaluate(ctx, r, "host", "server", *snap.Host.CPUPercent, *snap.Host.CPUPercent > *r.Threshold, *snap.Host.CPUPercent < *r.RecoveryThreshold, now))
 			}
 		case FamilyHostMemory:
 			if effectiveRule(rules, r.Family, "host", "server").ID != r.ID {
 				continue
 			}
 			if snap.Host.MemoryPercent != nil {
-				err = e.evaluate(ctx, r, "host", "server", *snap.Host.MemoryPercent, *snap.Host.MemoryPercent > *r.Threshold, *snap.Host.MemoryPercent < *r.RecoveryThreshold, now)
+				step(r.Family, e.evaluate(ctx, r, "host", "server", *snap.Host.MemoryPercent, *snap.Host.MemoryPercent > *r.Threshold, *snap.Host.MemoryPercent < *r.RecoveryThreshold, now))
 			}
 		case FamilyDockerDown:
 			if effectiveRule(rules, r.Family, "server", "docker").ID != r.ID {
@@ -88,25 +102,22 @@ func (e *Evaluator) Evaluate(ctx context.Context) error {
 			}
 			h := snap.Collectors["docker"]
 			down := h.State == metrics.CollectorDown
-			err = e.evaluate(ctx, r, "server", "docker", 0, down, h.State == metrics.CollectorHealthy, now)
-		}
-		if err != nil {
-			return err
+			step(r.Family, e.evaluate(ctx, r, "server", "docker", 0, down, h.State == metrics.CollectorHealthy, now))
 		}
 	}
-	if err := e.evaluateFilesystems(ctx, rules, snap.Filesystems, now); err != nil {
-		return err
+	step("filesystems", e.evaluateFilesystems(ctx, rules, snap.Filesystems, now))
+	step("events", e.evaluateEvents(ctx, rules, now))
+	step(FamilyPersistence, e.evaluatePersistence(ctx, rules, now))
+	step("deployments", e.correlateDeployments(ctx, now))
+	step("checks", e.evaluateChecks(ctx, rules, now))
+	return errors.Join(errs...)
+}
+
+func (e *Evaluator) logger() *slog.Logger {
+	if e.Logger != nil {
+		return e.Logger
 	}
-	if err := e.evaluateEvents(ctx, rules, now); err != nil {
-		return err
-	}
-	if err := e.evaluatePersistence(ctx, rules, now); err != nil {
-		return err
-	}
-	if err := e.correlateDeployments(ctx, now); err != nil {
-		return err
-	}
-	return e.evaluateChecks(ctx, rules, now)
+	return slog.Default()
 }
 
 func (e *Evaluator) evaluatePersistence(ctx context.Context, rules []Rule, now time.Time) error {
@@ -149,6 +160,7 @@ func (e *Evaluator) evaluateChecks(ctx context.Context, rules []Rule, now time.T
 		return err
 	}
 	rows.Close()
+	var errs []error
 	for _, v := range observations {
 		family := FamilyOptionalCheck
 		if v.required {
@@ -163,11 +175,11 @@ func (e *Evaluator) evaluateChecks(ctx context.Context, rules []Rule, now time.T
 		if v.successes >= 2 {
 			rule.RecoveryDuration = 0
 		}
-		if err = e.evaluate(ctx, rule, "resource", v.resource, 0, failing, recovered, now); err != nil {
-			return err
+		if err := e.evaluate(ctx, rule, "resource", v.resource, 0, failing, recovered, now); err != nil {
+			errs = append(errs, fmt.Errorf("%s %s: %w", family, v.resource, err))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // evaluateFilesystems reads the current values from the engine snapshot, the
@@ -175,6 +187,7 @@ func (e *Evaluator) evaluateChecks(ctx context.Context, rules []Rule, now time.T
 // scan of filesystem_samples_1m on every tick (STO-7). A mount that is no
 // longer collected is no longer evaluated.
 func (e *Evaluator) evaluateFilesystems(ctx context.Context, rules []Rule, filesystems []metrics.FilesystemObservation, now time.Time) error {
+	var errs []error
 	for _, fs := range filesystems {
 		for _, rule := range rules {
 			if !rule.Enabled || rule.Threshold == nil || rule.RecoveryThreshold == nil {
@@ -194,12 +207,12 @@ func (e *Evaluator) evaluateFilesystems(ctx context.Context, rules []Rule, files
 			}
 			if value != nil {
 				if err := e.evaluate(ctx, rule, "filesystem", fs.MountKey, *value, *value > *rule.Threshold, *value < *rule.RecoveryThreshold, now); err != nil {
-					return err
+					errs = append(errs, fmt.Errorf("%s %s: %w", rule.Family, fs.MountKey, err))
 				}
 			}
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func effectiveRule(rules []Rule, family, targetType, target string) Rule {
@@ -218,69 +231,79 @@ func effectiveRule(rules []Rule, family, targetType, target string) Rule {
 	return global
 }
 
+// evaluateEvents evaluates the restart-storm and OOM-loop rules, each on its
+// own so that a failing rule does not skip the other (EVT-5).
 func (e *Evaluator) evaluateEvents(ctx context.Context, rules []Rule, now time.Time) error {
+	var errs []error
 	for _, rule := range rules {
 		if !rule.Enabled || rule.Threshold == nil || (rule.Family != FamilyRestartStorm && rule.Family != FamilyOOMLoop) {
 			continue
 		}
-		eventType := "container_restart"
-		if rule.Family == FamilyOOMLoop {
-			eventType = "container_oom"
+		if err := e.evaluateEventRule(ctx, rule, now); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", rule.Family, err))
 		}
-		rows, err := e.Repo.db.QueryContext(ctx, `SELECT resource_id,COUNT(*) FROM events WHERE type=? AND resource_id IS NOT NULL AND ts>=? GROUP BY resource_id`, eventType, now.Add(-rule.Window).UnixMilli())
-		if err != nil {
-			return err
-		}
-		seen := map[string]bool{}
-		counts := map[string]float64{}
-		for rows.Next() {
-			var resource string
-			var count float64
-			if err = rows.Scan(&resource, &count); err != nil {
-				rows.Close()
-				return err
-			}
-			counts[resource] = count
-		}
-		if err = rows.Err(); err != nil {
+	}
+	return errors.Join(errs...)
+}
+
+func (e *Evaluator) evaluateEventRule(ctx context.Context, rule Rule, now time.Time) error {
+	eventType := "container_restart"
+	if rule.Family == FamilyOOMLoop {
+		eventType = "container_oom"
+	}
+	rows, err := e.Repo.db.QueryContext(ctx, `SELECT resource_id,COUNT(*) FROM events WHERE type=? AND resource_id IS NOT NULL AND ts>=? GROUP BY resource_id`, eventType, now.Add(-rule.Window).UnixMilli())
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	counts := map[string]float64{}
+	for rows.Next() {
+		var resource string
+		var count float64
+		if err = rows.Scan(&resource, &count); err != nil {
 			rows.Close()
 			return err
 		}
+		counts[resource] = count
+	}
+	if err = rows.Err(); err != nil {
 		rows.Close()
-		for resource, count := range counts {
-			seen[resource] = true
-			failing := count > *rule.Threshold
-			if rule.Family == FamilyOOMLoop {
-				failing = count >= *rule.Threshold
-			}
-			if err = e.evaluate(ctx, rule, "resource", resource, count, failing, count <= 0, now); err != nil {
-				return err
-			}
+		return err
+	}
+	rows.Close()
+	for resource, count := range counts {
+		seen[resource] = true
+		failing := count > *rule.Threshold
+		if rule.Family == FamilyOOMLoop {
+			failing = count >= *rule.Threshold
 		}
-		stateRows, err := e.Repo.db.QueryContext(ctx, `SELECT target_id FROM alert_evaluation_state WHERE rule_id=? AND phase!='healthy'`, rule.ID)
-		if err != nil {
+		if err = e.evaluate(ctx, rule, "resource", resource, count, failing, count <= 0, now); err != nil {
 			return err
 		}
-		unseen := []string{}
-		for stateRows.Next() {
-			var resource string
-			if err = stateRows.Scan(&resource); err != nil {
-				stateRows.Close()
-				return err
-			}
-			if !seen[resource] {
-				unseen = append(unseen, resource)
-			}
-		}
-		if err = stateRows.Err(); err != nil {
+	}
+	stateRows, err := e.Repo.db.QueryContext(ctx, `SELECT target_id FROM alert_evaluation_state WHERE rule_id=? AND phase!='healthy'`, rule.ID)
+	if err != nil {
+		return err
+	}
+	unseen := []string{}
+	for stateRows.Next() {
+		var resource string
+		if err = stateRows.Scan(&resource); err != nil {
 			stateRows.Close()
 			return err
 		}
+		if !seen[resource] {
+			unseen = append(unseen, resource)
+		}
+	}
+	if err = stateRows.Err(); err != nil {
 		stateRows.Close()
-		for _, resource := range unseen {
-			if err = e.evaluate(ctx, rule, "resource", resource, 0, false, true, now); err != nil {
-				return err
-			}
+		return err
+	}
+	stateRows.Close()
+	for _, resource := range unseen {
+		if err = e.evaluate(ctx, rule, "resource", resource, 0, false, true, now); err != nil {
+			return err
 		}
 	}
 	return nil

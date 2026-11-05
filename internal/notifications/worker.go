@@ -97,7 +97,9 @@ func (w *Worker) Start(ctx context.Context) error {
 		return errors.New("notification repository unavailable")
 	}
 	now := time.Now().UTC()
-	if _, err := w.Repo.db.ExecContext(ctx, `UPDATE notification_deliveries SET status='pending',started_at=NULL,next_attempt_at=?,updated_at=? WHERE status='in_progress'`, now.Unix(), now.Unix()); err != nil {
+	// Nothing is in flight before the workers start, so every in_progress
+	// row is left over from the previous process.
+	if _, err := w.reapStale(ctx, now, 0); err != nil {
 		return err
 	}
 	if err := w.Repo.Reconcile(ctx, now); err != nil {
@@ -132,11 +134,21 @@ func (w *Worker) dispatch(ctx context.Context) {
 			return
 		case <-maintenance.C:
 			now := time.Now().UTC()
-			_ = w.Repo.ScheduleReminders(ctx, now, w.Config.ReminderInterval)
-			_ = w.Repo.Cleanup(ctx, now)
+			if n, err := w.reapStale(ctx, now, w.staleAfter()); err != nil {
+				w.logError(ctx, "reaping stale notification deliveries failed", err)
+			} else if n > 0 {
+				w.logger().Warn("stale in-progress notification deliveries returned to pending", "count", n)
+			}
+			if err := w.Repo.ScheduleReminders(ctx, now, w.Config.ReminderInterval); err != nil {
+				w.logError(ctx, "scheduling notification reminders failed", err)
+			}
+			if err := w.Repo.Cleanup(ctx, now); err != nil {
+				w.logError(ctx, "notification cleanup failed", err)
+			}
 		case <-ticker.C:
 			rows, err := w.Repo.db.QueryContext(ctx, `SELECT d.id FROM notification_deliveries d WHERE d.status='pending' AND d.next_attempt_at<=? AND NOT EXISTS (SELECT 1 FROM notification_deliveries active WHERE active.channel_id=d.channel_id AND active.incident_id=d.incident_id AND active.status='in_progress') ORDER BY d.next_attempt_at LIMIT ?`, time.Now().Unix(), w.Config.QueueCapacity+1)
 			if err != nil {
+				w.logError(ctx, "loading due notification deliveries failed", err)
 				continue
 			}
 			var ids []string
@@ -176,7 +188,55 @@ func (w *Worker) enqueueDue(ctx context.Context, ids []string) {
 }
 func (w *Worker) recordOverflow(ctx context.Context) {
 	now := time.Now().UTC()
-	_, _ = w.Repo.db.ExecContext(ctx, `INSERT OR IGNORE INTO events(id,ts,type,severity,summary,correlation_key,source,created_at)VALUES(?,?,?,?,?,?,?,?)`, fmt.Sprintf("notification-overflow-%d", now.Unix()/60), now.UnixMilli(), "notification_queue_overflow", "warning", "Notification queue capacity exceeded", "notifications:overflow", "notifications", now.UnixMilli())
+	if _, err := w.Repo.db.ExecContext(ctx, `INSERT OR IGNORE INTO events(id,ts,type,severity,summary,correlation_key,source,created_at)VALUES(?,?,?,?,?,?,?,?)`, fmt.Sprintf("notification-overflow-%d", now.Unix()/60), now.UnixMilli(), "notification_queue_overflow", "warning", "Notification queue capacity exceeded", "notifications:overflow", "notifications", now.UnixMilli()); err != nil {
+		w.logError(ctx, "recording notification queue overflow failed", err)
+	}
+}
+
+// staleAfter is how long a delivery may stay in_progress before the
+// maintenance pass returns it to pending. A delivery is bounded by
+// DeliveryTimeout, so a row older than twice that (and at least a minute) has
+// lost its worker, for example to a storage error while it was finished.
+func (w *Worker) staleAfter() time.Duration {
+	return max(2*w.Config.DeliveryTimeout, time.Minute)
+}
+
+// reapStale returns in_progress deliveries started more than olderThan ago to
+// pending without charging an attempt, so a lost worker cannot block its
+// channel and incident pair until restart (EVT-7).
+func (w *Worker) reapStale(ctx context.Context, now time.Time, olderThan time.Duration) (int64, error) {
+	res, err := w.Repo.db.ExecContext(ctx, `UPDATE notification_deliveries SET status='pending',started_at=NULL,next_attempt_at=?,updated_at=? WHERE status='in_progress' AND (started_at IS NULL OR started_at<=?)`, now.Unix(), now.Unix(), now.Add(-olderThan).Unix())
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// release returns a claimed delivery to pending after an error that is not
+// the delivery's fault, without charging an attempt (EVT-7). The retry waits
+// for the first retry delay so a persistent storage error does not spin.
+func (w *Worker) release(ctx context.Context, id string, cause error) {
+	w.logError(ctx, "notification delivery returned to pending after an error", cause, "delivery", id)
+	now := time.Now().UTC()
+	if _, err := w.Repo.db.ExecContext(ctx, `UPDATE notification_deliveries SET status='pending',started_at=NULL,next_attempt_at=?,updated_at=? WHERE id=? AND status='in_progress'`, now.Add(retryDelays[0]).Unix(), now.Unix(), id); err != nil {
+		// The maintenance pass reaps the row once it is stale.
+		w.logError(ctx, "returning notification delivery to pending failed", err, "delivery", id)
+	}
+}
+
+// logError logs a worker error unless it was caused by shutdown.
+func (w *Worker) logError(ctx context.Context, msg string, err error, attrs ...any) {
+	if ctx.Err() != nil {
+		return
+	}
+	w.logger().Error(msg, append(attrs, "error", err)...)
+}
+
+func (w *Worker) logger() *slog.Logger {
+	if w.Logger != nil {
+		return w.Logger
+	}
+	return slog.Default()
 }
 func (w *Worker) run(ctx context.Context) {
 	defer w.wg.Done()
@@ -202,10 +262,16 @@ func (w *Worker) deliver(parent context.Context, id string) {
 	now := time.Now().UTC()
 	res, err := w.Repo.db.ExecContext(parent, `UPDATE notification_deliveries SET status='in_progress',started_at=?,updated_at=? WHERE id=? AND status='pending' AND next_attempt_at<=? AND NOT EXISTS (SELECT 1 FROM notification_deliveries active WHERE active.channel_id=notification_deliveries.channel_id AND active.incident_id=notification_deliveries.incident_id AND active.id!=notification_deliveries.id AND active.status='in_progress')`, now.Unix(), now.Unix(), id, now.Unix())
 	if err != nil {
-		w.finish(parent, id, false, true, "storage_error", 0)
+		// The claim did not happen; the row is still pending and is offered
+		// again on the next dispatch tick.
+		w.logError(parent, "claiming notification delivery failed", err, "delivery", id)
 		return
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		w.release(parent, id, err)
+		return
+	}
 	if n == 0 {
 		return
 	}
@@ -216,6 +282,7 @@ func (w *Worker) deliver(parent context.Context, id string) {
 		return
 	}
 	if err != nil {
+		w.release(parent, id, err)
 		return
 	}
 	ctx, cancel := context.WithTimeout(parent, w.Config.DeliveryTimeout)
@@ -457,17 +524,20 @@ func (w *Worker) finish(ctx context.Context, id string, success, retryable bool,
 	now := time.Now().UTC()
 	var attempts int
 	if err := w.Repo.db.QueryRowContext(ctx, `SELECT attempt_count+1 FROM notification_deliveries WHERE id=?`, id).Scan(&attempts); err != nil {
+		w.release(ctx, id, err)
 		return
 	}
+	var err error
 	if success {
-		_, _ = w.Repo.db.ExecContext(ctx, `UPDATE notification_deliveries SET status='succeeded',attempt_count=?,completed_at=?,next_attempt_at=NULL,failure_code=NULL,updated_at=? WHERE id=?`, attempts, now.Unix(), now.Unix(), id)
-		return
+		_, err = w.Repo.db.ExecContext(ctx, `UPDATE notification_deliveries SET status='succeeded',attempt_count=?,completed_at=?,next_attempt_at=NULL,failure_code=NULL,updated_at=? WHERE id=?`, attempts, now.Unix(), now.Unix(), id)
+	} else if delay, retry := retryDelay(attempts, retryable, retryAfter); retry {
+		_, err = w.Repo.db.ExecContext(ctx, `UPDATE notification_deliveries SET status='pending',attempt_count=?,started_at=NULL,next_attempt_at=?,failure_code=?,updated_at=? WHERE id=?`, attempts, now.Add(delay).Unix(), code, now.Unix(), id)
+	} else {
+		_, err = w.Repo.db.ExecContext(ctx, `UPDATE notification_deliveries SET status='permanent_failure',attempt_count=?,completed_at=?,next_attempt_at=NULL,failure_code=?,updated_at=? WHERE id=?`, attempts, now.Unix(), code, now.Unix(), id)
 	}
-	if delay, retry := retryDelay(attempts, retryable, retryAfter); retry {
-		_, _ = w.Repo.db.ExecContext(ctx, `UPDATE notification_deliveries SET status='pending',attempt_count=?,started_at=NULL,next_attempt_at=?,failure_code=?,updated_at=? WHERE id=?`, attempts, now.Add(delay).Unix(), code, now.Unix(), id)
-		return
+	if err != nil {
+		w.release(ctx, id, err)
 	}
-	_, _ = w.Repo.db.ExecContext(ctx, `UPDATE notification_deliveries SET status='permanent_failure',attempt_count=?,completed_at=?,next_attempt_at=NULL,failure_code=?,updated_at=? WHERE id=?`, attempts, now.Unix(), code, now.Unix(), id)
 }
 func retryDelay(attempt int, retryable bool, retryAfter time.Duration) (time.Duration, bool) {
 	if !retryable || attempt < 1 || attempt > len(retryDelays) {
