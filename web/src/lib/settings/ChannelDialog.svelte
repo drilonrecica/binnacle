@@ -176,7 +176,7 @@
         <Field
           label="Bearer token"
           hint={channel?.secretConfigured
-            ? 'Leave blank to keep the stored token.'
+            ? 'Leave blank to keep the stored token. Changing the URL clears it.'
             : 'Optional Authorization header.'}
         >
           {#snippet children({ id, describedBy })}
@@ -192,7 +192,9 @@
         </Field>
         <Field
           label="Signing secret"
-          hint="Optional HMAC-SHA256 signature of the payload."
+          hint={channel?.secretConfigured
+            ? 'Leave blank to keep the stored secret. Changing the URL clears it.'
+            : 'Optional HMAC-SHA256 signature of the payload.'}
         >
           {#snippet children({ id, describedBy })}
             <Input
@@ -258,7 +260,7 @@
         <Field
           label="Password"
           hint={channel?.secretConfigured
-            ? 'Leave blank to keep the stored password.'
+            ? 'Leave blank to keep the stored password. Changing the host clears it.'
             : 'Optional'}
         >
           {#snippet children({ id })}

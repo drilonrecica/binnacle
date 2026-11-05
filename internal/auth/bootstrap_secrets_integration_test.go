@@ -48,7 +48,7 @@ func TestEnvironmentSecretFileAndConflict(t *testing.T) {
 func TestEncryptedSecretRoundTripAndRedactedPersistence(t *testing.T) {
 	ctx := context.Background()
 	manager, _ := setupDatabase(t)
-	key := "0123456789abcdef0123456789abcdef"
+	key := "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
 	store, err := NewSecretStore(manager.DB(), key)
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestEncryptedSecretRoundTripAndRedactedPersistence(t *testing.T) {
 	if bytes.Contains(ciphertext, plaintext) || algorithm != SecretAlgorithm || version != SecretKeyVersion {
 		t.Fatal("plaintext or invalid encryption metadata persisted")
 	}
-	wrong, _ := NewSecretStore(manager.DB(), "abcdef0123456789abcdef0123456789")
+	wrong, _ := NewSecretStore(manager.DB(), "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100")
 	if _, err = wrong.Get(ctx, "integration.webhook"); err == nil {
 		t.Fatal("wrong master key decrypted secret")
 	}

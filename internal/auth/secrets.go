@@ -16,12 +16,16 @@ import (
 )
 
 const (
-	SecretAlgorithm  = "AES-256-GCM"
+	SecretAlgorithm = "AES-256-GCM"
+	// SecretKeyVersion is the version stamped on every secret written with the
+	// configured master key. Rotation (ADR 023) will add further versions to the
+	// keyring; rows keep the version they were written with until rewrapped.
 	SecretKeyVersion = 1
 )
 
 var (
 	ErrMasterKeyMissing = errors.New("master encryption key is not configured")
+	ErrMasterKeyFormat  = errors.New("master encryption key must be 64 hexadecimal characters or the base64 encoding of exactly 32 bytes")
 	ErrSecretNotFound   = errors.New("encrypted secret was not found")
 )
 
@@ -31,12 +35,23 @@ type SecretStatus struct {
 	KeyVersion int    `json:"keyVersion,omitempty"`
 }
 
+// SecretStore encrypts small secrets at rest. Each row records the key version
+// that sealed it, and Get opens it with the matching entry of the keyring.
 type SecretStore struct {
-	db   *sql.DB
-	aead cipher.AEAD
+	db      *sql.DB
+	keys    map[int]cipher.AEAD
+	current int
 }
 
-func (s *SecretStore) Available() bool { return s != nil && s.aead != nil }
+func (s *SecretStore) Available() bool { return s != nil && len(s.keys) > 0 }
+
+// KeyVersion is the version new secrets are written with; 0 without a key.
+func (s *SecretStore) KeyVersion() int {
+	if s == nil {
+		return 0
+	}
+	return s.current
+}
 
 func (s *SecretStore) SetDB(db *sql.DB) { s.db = db }
 
@@ -56,46 +71,47 @@ func NewSecretStore(db *sql.DB, encodedKey string) (*SecretStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &SecretStore{db: db, aead: aead}, nil
+	return &SecretStore{db: db, keys: map[int]cipher.AEAD{SecretKeyVersion: aead}, current: SecretKeyVersion}, nil
 }
 
+// decodeMasterKey accepts exactly two encodings of a 32-byte key: 64 hexadecimal
+// characters, or base64 (standard or URL alphabet, padded or not). Raw ASCII is
+// rejected so that a passphrase or a truncated value never becomes key material.
 func decodeMasterKey(value string) ([]byte, error) {
-	if len(value) == 32 {
-		return []byte(value), nil
-	}
 	if len(value) == 64 {
-		if decoded, err := hex.DecodeString(value); err == nil && len(decoded) == 32 {
+		if decoded, err := hex.DecodeString(value); err == nil {
 			return decoded, nil
 		}
 	}
-	for _, encoding := range []*base64.Encoding{base64.RawURLEncoding, base64.StdEncoding, base64.RawStdEncoding} {
+	for _, encoding := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
 		if decoded, err := encoding.DecodeString(value); err == nil && len(decoded) == 32 {
 			return decoded, nil
 		}
 	}
-	return nil, errors.New("master encryption key must encode exactly 32 bytes")
+	return nil, ErrMasterKeyFormat
 }
 
 func (s *SecretStore) Put(ctx context.Context, key string, plaintext []byte) error {
-	if s == nil || s.db == nil || s.aead == nil {
+	if s == nil || s.db == nil || !s.Available() {
 		return ErrMasterKeyMissing
 	}
 	if key == "" || len(plaintext) == 0 {
 		return errors.New("secret key and value are required")
 	}
-	nonce := make([]byte, s.aead.NonceSize())
+	aead := s.keys[s.current]
+	nonce := make([]byte, aead.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return fmt.Errorf("generate secret nonce: %w", err)
 	}
-	ciphertext := s.aead.Seal(nil, nonce, plaintext, []byte(key))
+	ciphertext := aead.Seal(nil, nonce, plaintext, []byte(key))
 	_, err := s.db.ExecContext(ctx, `INSERT INTO encrypted_secrets(key,ciphertext,nonce,algorithm,key_version,updated_at)
 		VALUES(?,?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET ciphertext=excluded.ciphertext,nonce=excluded.nonce,algorithm=excluded.algorithm,key_version=excluded.key_version,updated_at=excluded.updated_at`,
-		key, ciphertext, nonce, SecretAlgorithm, SecretKeyVersion, time.Now().UTC().UnixMilli())
+		key, ciphertext, nonce, SecretAlgorithm, s.current, time.Now().UTC().UnixMilli())
 	return err
 }
 
 func (s *SecretStore) Get(ctx context.Context, key string) ([]byte, error) {
-	if s == nil || s.db == nil || s.aead == nil {
+	if s == nil || s.db == nil || !s.Available() {
 		return nil, ErrMasterKeyMissing
 	}
 	var ciphertext, nonce []byte
@@ -108,10 +124,11 @@ func (s *SecretStore) Get(ctx context.Context, key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if algorithm != SecretAlgorithm || version != SecretKeyVersion {
-		return nil, errors.New("encrypted secret uses an unsupported algorithm or key version")
+	aead, ok := s.keys[version]
+	if algorithm != SecretAlgorithm || !ok {
+		return nil, fmt.Errorf("encrypted secret was written with %s key version %d, which the configured master key cannot open", algorithm, version)
 	}
-	plaintext, err := s.aead.Open(nil, nonce, ciphertext, []byte(key))
+	plaintext, err := aead.Open(nil, nonce, ciphertext, []byte(key))
 	if err != nil {
 		return nil, errors.New("encrypted secret could not be decrypted")
 	}

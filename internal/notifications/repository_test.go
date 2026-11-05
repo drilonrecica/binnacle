@@ -24,7 +24,7 @@ func testRepository(t *testing.T) (*storage.Manager, *Repository) {
 	if err := store.Open(ctx); err != nil {
 		t.Fatal(err)
 	}
-	secrets, err := auth.NewSecretStore(store.DB(), "0123456789abcdef0123456789abcdef")
+	secrets, err := auth.NewSecretStore(store.DB(), "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,5 +485,95 @@ func TestCleanupRetentionBoundaries(t *testing.T) {
 	}
 	if err = store.DB().QueryRow(`SELECT COUNT(*) FROM incidents`).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("retained incidents=%d err=%v", count, err)
+	}
+}
+
+func storedSecrets(t *testing.T, repo *Repository, id string) ChannelSecrets {
+	t.Helper()
+	b, err := repo.secrets.Get(context.Background(), "notification.channel."+id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s ChannelSecrets
+	if err = json.Unmarshal(b, &s); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func TestChangingWebhookURLClearsStoredSecrets(t *testing.T) {
+	store, repo := testRepository(t)
+	defer store.Close()
+	ctx := context.Background()
+	channel, err := repo.CreateChannel(ctx, Channel{Name: "Hook", Kind: "webhook", Enabled: true}, ChannelSecrets{URL: "https://hooks.example.test/a", BearerToken: "bearer-secret", SigningSecret: "signing-secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	same := "https://hooks.example.test/a"
+	if _, err = repo.PatchChannel(ctx, channel.ID, Channel{Enabled: true}, SecretPatch{URL: &same}); err != nil {
+		t.Fatal(err)
+	}
+	if s := storedSecrets(t, repo, channel.ID); s.BearerToken != "bearer-secret" || s.SigningSecret != "signing-secret" {
+		t.Fatalf("unchanged URL dropped secrets: %+v", s)
+	}
+	moved := "https://attacker.example.test/a"
+	if _, err = repo.PatchChannel(ctx, channel.ID, Channel{Enabled: true}, SecretPatch{URL: &moved}); err != nil {
+		t.Fatal(err)
+	}
+	if s := storedSecrets(t, repo, channel.ID); s.URL != moved || s.BearerToken != "" || s.SigningSecret != "" {
+		t.Fatalf("new URL kept secrets: %+v", s)
+	}
+	again := "https://hooks.example.test/b"
+	token := "new-token"
+	if _, err = repo.PatchChannel(ctx, channel.ID, Channel{Enabled: true}, SecretPatch{URL: &again, BearerToken: &token}); err != nil {
+		t.Fatal(err)
+	}
+	if s := storedSecrets(t, repo, channel.ID); s.URL != again || s.BearerToken != "new-token" || s.SigningSecret != "" {
+		t.Fatalf("re-entered token not kept: %+v", s)
+	}
+}
+
+func TestChangingSMTPHostClearsPassword(t *testing.T) {
+	store, repo := testRepository(t)
+	defer store.Close()
+	ctx := context.Background()
+	channel, err := repo.CreateChannel(ctx, Channel{Name: "Mail", Kind: "smtp", Enabled: true, Config: map[string]any{"tlsMode": "starttls"}}, ChannelSecrets{Host: "mail.example.test:587", Username: "mailer", Password: "mail-secret", Sender: "binnacle@example.test", Recipients: []string{"ops@example.test"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved := "mail.attacker.test:587"
+	candidate, err := repo.PatchedSecrets(ctx, channel.ID, SecretPatch{Host: &moved})
+	if err != nil || candidate.Password != "" {
+		t.Fatalf("candidate secrets kept the password: %+v err=%v", candidate, err)
+	}
+	if _, err = repo.PatchChannel(ctx, channel.ID, Channel{Enabled: true}, SecretPatch{Host: &moved}); err != nil {
+		t.Fatal(err)
+	}
+	if s := storedSecrets(t, repo, channel.ID); s.Host != moved || s.Password != "" || s.Username != "mailer" {
+		t.Fatalf("new host kept the password: %+v", s)
+	}
+	password := "new-secret"
+	if _, err = repo.PatchChannel(ctx, channel.ID, Channel{Enabled: true}, SecretPatch{Password: &password}); err != nil {
+		t.Fatal(err)
+	}
+	if s := storedSecrets(t, repo, channel.ID); s.Password != "new-secret" {
+		t.Fatalf("re-entered password not kept: %+v", s)
+	}
+}
+
+func TestChannelDeleteRemovesEncryptedSecret(t *testing.T) {
+	store, repo := testRepository(t)
+	defer store.Close()
+	ctx := context.Background()
+	channel, err := repo.CreateChannel(ctx, Channel{Name: "Gone", Kind: "webhook", Enabled: true}, ChannelSecrets{URL: "https://hooks.example.test/gone", BearerToken: "bearer-secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = repo.DeleteChannel(ctx, channel.ID); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err = store.DB().QueryRow(`SELECT COUNT(*) FROM encrypted_secrets WHERE key=?`, "notification.channel."+channel.ID).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("secret rows after delete=%d err=%v", n, err)
 	}
 }

@@ -6,6 +6,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net"
+	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/drilonrecica/binnacle/internal/auth"
@@ -13,6 +16,15 @@ import (
 )
 
 const coolifyTokenSecret = "coolify.api_token"
+
+var (
+	// ErrTokenRequired is returned when a request needs the API token typed again:
+	// a connection test, or a save that moves the URL to another origin.
+	ErrTokenRequired = errors.New("Coolify API token is required")
+	// ErrTokenBoundToOrigin is returned when a save keeps the stored token but the
+	// URL points at a different scheme, host or port than the one it was saved for.
+	ErrTokenBoundToOrigin = errors.New("Coolify API token must be entered again when the URL moves to another host")
+)
 
 type Integration struct {
 	db                       *sql.DB
@@ -99,6 +111,46 @@ func (i *Integration) activate(config ClientConfig) error {
 	i.mu.Unlock()
 	return enricher.Start(ctx)
 }
+
+// clientConfig binds a URL and token to the deployment's transport settings.
+func (i *Integration) clientConfig(url, token string) ClientConfig {
+	return ClientConfig{BaseURL: url, Token: token, AllowInsecureHTTP: i.env.AllowInsecureHTTP, HTTPClient: i.env.HTTPClient}
+}
+
+// storedURL is the URL the stored token was saved with, or "" when none is saved.
+func (i *Integration) storedURL(ctx context.Context) (string, error) {
+	var raw, stored string
+	err := i.db.QueryRowContext(ctx, "SELECT value_json FROM settings WHERE key='coolify.url'").Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	_ = json.Unmarshal([]byte(raw), &stored)
+	return stored, nil
+}
+
+// origin reduces a URL to scheme://host[:port] with default ports dropped, so
+// that path or trailing-slash edits keep the stored token while any change of
+// scheme, host or port requires it again.
+func origin(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	scheme := strings.ToLower(u.Scheme)
+	host := strings.ToLower(u.Hostname())
+	port := u.Port()
+	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
+		port = ""
+	}
+	if port != "" {
+		host = net.JoinHostPort(host, port)
+	}
+	return scheme + "://" + host
+}
+
 func (i *Integration) Configure(ctx context.Context, url, token string) error {
 	if i.environmentAuthoritative {
 		return errors.New("environment configuration is authoritative")
@@ -106,11 +158,18 @@ func (i *Integration) Configure(ctx context.Context, url, token string) error {
 	if token != "" && !i.secrets.Available() {
 		return auth.ErrMasterKeyMissing
 	}
-	config := ClientConfig{BaseURL: url, Token: token, AllowInsecureHTTP: i.env.AllowInsecureHTTP}
+	config := i.clientConfig(url, token)
 	if token == "" {
+		stored, err := i.storedURL(ctx)
+		if err != nil {
+			return err
+		}
+		if stored == "" || origin(stored) == "" || origin(stored) != origin(url) {
+			return ErrTokenBoundToOrigin
+		}
 		existing, err := i.secrets.Get(ctx, coolifyTokenSecret)
 		if err != nil {
-			return errors.New("Coolify API token is required")
+			return ErrTokenRequired
 		}
 		config.Token = string(existing)
 	}
@@ -137,22 +196,22 @@ func (i *Integration) Configure(ctx context.Context, url, token string) error {
 	}
 	return i.activate(config)
 }
+
+// Test connects with exactly the submitted token. The stored token is never
+// used here, so a test can not carry it to a URL it was not saved for. With
+// environment-authoritative configuration the environment pair is tested.
 func (i *Integration) Test(ctx context.Context, url, token string) error {
-	config := ClientConfig{BaseURL: url, Token: token, AllowInsecureHTTP: i.env.AllowInsecureHTTP}
+	config := i.clientConfig(url, token)
 	if i.environmentAuthoritative {
 		config = i.env
 	} else {
+		if strings.TrimSpace(token) == "" {
+			return ErrTokenRequired
+		}
 		if config.BaseURL == "" {
 			i.mu.RLock()
 			config.BaseURL = i.url
 			i.mu.RUnlock()
-		}
-		if config.Token == "" {
-			value, err := i.secrets.Get(ctx, coolifyTokenSecret)
-			if err != nil {
-				return err
-			}
-			config.Token = string(value)
 		}
 	}
 	client, err := NewAPIClient(config)

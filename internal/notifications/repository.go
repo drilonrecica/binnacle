@@ -585,42 +585,15 @@ func (r *Repository) PatchChannel(ctx context.Context, id string, c Channel, pat
 	c.ID = id
 	c.Kind = old.Kind
 	ref := "notification.channel." + id
-	var current ChannelSecrets
-	b, err := r.secrets.Get(ctx, ref)
+	current, err := r.channelSecrets(ctx, id)
 	if err != nil {
 		return Channel{}, err
 	}
-	if json.Unmarshal(b, &current) != nil {
-		return Channel{}, errors.New("invalid stored channel secret")
-	}
-	if patch.URL != nil {
-		current.URL = *patch.URL
-	}
-	if patch.BearerToken != nil {
-		current.BearerToken = *patch.BearerToken
-	}
-	if patch.SigningSecret != nil {
-		current.SigningSecret = *patch.SigningSecret
-	}
-	if patch.Host != nil {
-		current.Host = *patch.Host
-	}
-	if patch.Username != nil {
-		current.Username = *patch.Username
-	}
-	if patch.Password != nil {
-		current.Password = *patch.Password
-	}
-	if patch.Sender != nil {
-		current.Sender = *patch.Sender
-	}
-	if patch.Recipients != nil {
-		current.Recipients = *patch.Recipients
-	}
+	current = current.apply(patch)
 	if err = validateChannel(c, current); err != nil {
 		return Channel{}, err
 	}
-	b, _ = json.Marshal(current)
+	b, _ := json.Marshal(current)
 	if err = r.secrets.Put(ctx, ref, b); err != nil {
 		return Channel{}, err
 	}
@@ -645,7 +618,17 @@ func (r *Repository) PatchChannel(ctx context.Context, id string, c Channel, pat
 	}
 	return r.Channel(ctx, id)
 }
+
+// PatchedSecrets returns the secrets a patch would store, without storing them.
 func (r *Repository) PatchedSecrets(ctx context.Context, id string, patch SecretPatch) (ChannelSecrets, error) {
+	current, err := r.channelSecrets(ctx, id)
+	if err != nil {
+		return current, err
+	}
+	return current.apply(patch), nil
+}
+
+func (r *Repository) channelSecrets(ctx context.Context, id string) (ChannelSecrets, error) {
 	var current ChannelSecrets
 	b, err := r.secrets.Get(ctx, "notification.channel."+id)
 	if err != nil {
@@ -654,32 +637,44 @@ func (r *Repository) PatchedSecrets(ctx context.Context, id string, patch Secret
 	if err = json.Unmarshal(b, &current); err != nil {
 		return current, errors.New("invalid stored channel secret")
 	}
-	if patch.URL != nil {
-		current.URL = *patch.URL
-	}
-	if patch.BearerToken != nil {
-		current.BearerToken = *patch.BearerToken
-	}
-	if patch.SigningSecret != nil {
-		current.SigningSecret = *patch.SigningSecret
-	}
-	if patch.Host != nil {
-		current.Host = *patch.Host
-	}
-	if patch.Username != nil {
-		current.Username = *patch.Username
-	}
-	if patch.Password != nil {
-		current.Password = *patch.Password
-	}
-	if patch.Sender != nil {
-		current.Sender = *patch.Sender
-	}
-	if patch.Recipients != nil {
-		current.Recipients = *patch.Recipients
-	}
 	return current, nil
 }
+
+// apply merges a patch into stored secrets. Credentials are bound to the target
+// they were entered for: a different webhook URL drops the bearer token and
+// signing secret, and a different SMTP host drops the password, unless the same
+// patch enters them again. The target change itself is still applied.
+func (s ChannelSecrets) apply(patch SecretPatch) ChannelSecrets {
+	if patch.URL != nil && *patch.URL != s.URL {
+		s.URL = *patch.URL
+		s.BearerToken = ""
+		s.SigningSecret = ""
+	}
+	if patch.Host != nil && *patch.Host != s.Host {
+		s.Host = *patch.Host
+		s.Password = ""
+	}
+	if patch.BearerToken != nil {
+		s.BearerToken = *patch.BearerToken
+	}
+	if patch.SigningSecret != nil {
+		s.SigningSecret = *patch.SigningSecret
+	}
+	if patch.Username != nil {
+		s.Username = *patch.Username
+	}
+	if patch.Password != nil {
+		s.Password = *patch.Password
+	}
+	if patch.Sender != nil {
+		s.Sender = *patch.Sender
+	}
+	if patch.Recipients != nil {
+		s.Recipients = *patch.Recipients
+	}
+	return s
+}
+
 func (r *Repository) DeleteChannel(ctx context.Context, id string) error {
 	now := time.Now().UTC().Unix()
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -696,6 +691,10 @@ func (r *Repository) DeleteChannel(ctx context.Context, id string) error {
 		return sql.ErrNoRows
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE notification_deliveries SET status='cancelled',completed_at=?,next_attempt_at=NULL,updated_at=? WHERE channel_id=? AND status='pending'`, now, now, id); err != nil {
+		return err
+	}
+	// The channel row is kept for delivery history; its credentials are not.
+	if _, err = tx.ExecContext(ctx, `DELETE FROM encrypted_secrets WHERE key=(SELECT secret_ref FROM notification_channels WHERE id=?)`, id); err != nil {
 		return err
 	}
 	return tx.Commit()

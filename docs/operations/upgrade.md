@@ -55,9 +55,19 @@ image: ghcr.io/drilonrecica/binnacle:stable
    docker cp binnacle:/var/lib/binnacle/binnacle.db ./binnacle-backup.db
    ```
 
-3. Update the image tag and redeploy. If a master key is configured directly in
-   the environment, migrate it to a Docker/Coolify secret and set
-   `BINNACLE_MASTER_KEY_FILE=/run/secrets/binnacle_master_key`:
+3. Check the master key format. Releases after v0.3 accept the key only as 64
+   hexadecimal characters or as base64 of 32 bytes; a raw 32-character value
+   stops the container at startup with `master encryption key is invalid`.
+   Re-encode the same bytes as hex so existing secrets stay readable:
+
+   ```bash
+   printf '%s' "$BINNACLE_MASTER_KEY" | od -An -tx1 | tr -d ' \n'
+   ```
+
+   Hex and base64 encodings of the same bytes open the same secrets, so no
+   re-encryption is needed. Update the image tag and redeploy. If a master key
+   is configured directly in the environment, migrate it to a Docker/Coolify
+   secret and set `BINNACLE_MASTER_KEY_FILE=/run/secrets/binnacle_master_key`:
 
    ```bash
    docker compose -f packaging/docker/docker-compose.yml pull

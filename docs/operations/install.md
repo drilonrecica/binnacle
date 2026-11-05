@@ -133,9 +133,12 @@ secrets:
     file: ./secrets/binnacle-master-key
 ```
 
-The file must contain a raw or encoded 32-byte key and should be readable only
-by the Binnacle container. `BINNACLE_MASTER_KEY` remains supported for upgrades,
-but do not configure it together with `BINNACLE_MASTER_KEY_FILE`.
+The file must contain a 32-byte key written as 64 hexadecimal characters or as
+base64, for example from `openssl rand -hex 32`, and should be readable only by
+the Binnacle container. Binnacle refuses to start with a key in any other form
+and names the accepted formats in the error. `BINNACLE_MASTER_KEY` remains
+supported for upgrades, but do not configure it together with
+`BINNACLE_MASTER_KEY_FILE`.
 
 ## Reverse proxies and HTTPS
 
@@ -205,7 +208,7 @@ Key variables you may need to set at deployment time:
 - `BINNACLE_LOGS_MAX_RESPONSE_BYTES` — bounded log byte ceiling; defaults to `1048576`.
 - `BINNACLE_LOGS_REDACTION_PATTERNS` — up to 16 additional RE2 patterns separated by `||`.
 - `BINNACLE_DOCKER_SOCKET` — the packaged default is the filtered socket at `/var/run/binnacle-docker/docker.sock`; standalone binaries default to `/var/run/docker.sock`.
-- `BINNACLE_MASTER_KEY` — raw/base64 32-byte key or 64-character hex key for notification secrets.
+- `BINNACLE_MASTER_KEY` — 64-character hex or base64 encoding of a 32-byte key that encrypts notification, Coolify and MFA secrets.
 - `BINNACLE_MASTER_KEY_FILE` — absolute path to a file containing the master key; preferred for production secrets.
 - `BINNACLE_COOLIFY_URL` and `BINNACLE_COOLIFY_API_TOKEN[_FILE]` — optional read-only Coolify enrichment.
 - `BINNACLE_FEATURE_ADVANCED_AUTH` — enables TOTP and trusted-proxy authentication; defaults to `false` pending qualification.

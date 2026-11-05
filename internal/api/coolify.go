@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -63,6 +64,10 @@ func (s *Server) EnableCoolify(integration *coolify.Integration, sessions Author
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 		if err := integration.Test(ctx, body.URL, body.Token); err != nil {
+			if errors.Is(err, coolify.ErrTokenRequired) {
+				WriteError(w, 400, Error{Code: "coolify_invalid", Message: err.Error()})
+				return
+			}
 			WriteError(w, 502, Error{Code: "coolify_unavailable", Message: "Coolify connection test failed."})
 			return
 		}

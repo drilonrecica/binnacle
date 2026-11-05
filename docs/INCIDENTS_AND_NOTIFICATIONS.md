@@ -17,11 +17,20 @@ support an optional bearer token and HMAC-SHA256 signature. SMTP requires
 STARTTLS or implicit TLS, one sender, and 1–20 recipients.
 
 Set `BINNACLE_MASTER_KEY_FILE` before creating channels and point it to a
-Docker/Coolify secret containing a raw 32-byte value, a base64 encoding of 32
-bytes, or a 64-character hexadecimal key. The legacy `BINNACLE_MASTER_KEY`
-environment variable accepts the same formats, but must not be configured at
-the same time. If neither is present, monitoring and incidents continue, but
-channel creation and delivery report `master_key_missing`.
+Docker/Coolify secret containing a 32-byte key written as 64 hexadecimal
+characters or as base64 (`openssl rand -hex 32` produces one). Raw 32-character
+values are rejected at startup with a clear error; see the upgrade guide for
+re-encoding an existing key. The legacy `BINNACLE_MASTER_KEY` environment
+variable accepts the same formats, but must not be configured at the same
+time. If neither is present, monitoring and incidents continue, but channel
+creation and delivery report `master_key_missing`. Every stored secret records
+the key version that sealed it (ADR 023).
+
+Channel credentials are bound to the target they were entered for. Changing a
+webhook URL clears its bearer token and signing secret, and changing the SMTP
+host clears the password, unless the same save enters them again; the form
+asks for them when a target changes. Deleting a channel deletes its encrypted
+secrets immediately, while the channel row stays for delivery history.
 
 New channels receive only later updates or reminders. Open and update events
 wait 15 seconds to coalesce simultaneous alerts. If an incident resolves

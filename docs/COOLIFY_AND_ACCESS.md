@@ -10,6 +10,12 @@ Settings; UI token storage requires `BINNACLE_MASTER_KEY` or
 `BINNACLE_MASTER_KEY_FILE` and the token is never returned. Prefer a Coolify
 secret mounted under `/run/secrets` and point `BINNACLE_MASTER_KEY_FILE` to it.
 
+The stored token is bound to the origin (scheme, host and port) it was saved
+with. Saving a URL on the same origin keeps it; moving the URL to another
+origin requires the token again, so a stored token is never sent to a host it
+was not entered for. "Test connection" always uses the token typed into the
+form and never the stored one.
+
 The integration follows Coolify's [team-scoped authorization
 model](https://coolify.io/docs/api-reference/authorization) and the pinned
 [v4.1.2 OpenAPI contract](https://github.com/coollabsio/coolify/blob/v4.1.2/openapi.json).

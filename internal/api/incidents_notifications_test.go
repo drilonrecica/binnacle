@@ -55,7 +55,7 @@ func newNotificationAPIFixture(t *testing.T, withKey bool) *notificationAPIFixtu
 	}
 	key := ""
 	if withKey {
-		key = "0123456789abcdef0123456789abcdef"
+		key = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
 	}
 	secretStore, err := auth.NewSecretStore(manager.DB(), key)
 	if err != nil {

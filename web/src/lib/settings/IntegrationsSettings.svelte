@@ -278,7 +278,7 @@
         <Field
           label="API token"
           hint={coolify?.tokenConfigured
-            ? 'A token is stored. Leave blank to keep it.'
+            ? 'A token is stored for this host. Leave blank to keep it; a new host or a connection test needs it typed again.'
             : 'Create a read-only token in Coolify.'}
         >
           {#snippet children({ id, describedBy })}
@@ -311,7 +311,7 @@
           <Button
             onclick={() => runCoolify('test')}
             loading={coolifyBusy === 'test'}
-            disabled={!coolifyUrl}>Test connection</Button
+            disabled={!coolifyUrl || !coolifyToken}>Test connection</Button
           >
           <Button
             variant="primary"

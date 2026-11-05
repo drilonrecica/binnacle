@@ -48,7 +48,7 @@ func TestMFAEnrollmentAndAtomicRecoveryConsumption(t *testing.T) {
 		t.Fatal(err)
 	}
 	sessions := NewSessions(store.DB(), SessionConfig{IdleTimeout: time.Hour, AbsoluteLifetime: 24 * time.Hour})
-	secrets, err := NewSecretStore(store.DB(), "01234567890123456789012345678901")
+	secrets, err := NewSecretStore(store.DB(), "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
 	if err != nil {
 		t.Fatal(err)
 	}
