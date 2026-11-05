@@ -125,6 +125,15 @@ Downgrades are not supported. If you need to revert, restore from a backup taken
 - Outbound checks and notifications additionally refuse carrier-grade NAT,
   NAT64, 6to4 and reserved ranges; see
   [Checks and alerts](../CHECKS_AND_ALERTS.md).
+- Three settings that never had any effect were removed:
+  `database.warning_ratio`, `database.critical_ratio` and
+  `database.emergency_pause_ratio` (the budget thresholds are fixed at 80 %,
+  95 % and 98 %, see [Recovery](recovery.md)), and `charts.max_points_per_series`
+  (charts use the resolution of the retention tier that covers the range).
+  Their `BINNACLE_DATABASE_*_RATIO` and `BINNACLE_CHARTS_MAX_POINTS`
+  environment variables are ignored, and stored values are ignored too, so
+  nothing needs changing before the upgrade. Settings → General no longer
+  shows "Chart points per series".
 
 ## Coolify upgrades
 

@@ -15,8 +15,8 @@ retention pass. When the free space on the database's filesystem drops under
 64 MiB the state is emergency regardless of the budget, because SQLite needs
 disk to recover.
 
-The thresholds are 80 % (warning), 95 % (critical) and 98 % (emergency) of
-the target:
+The thresholds are fixed at 80 % (warning), 95 % (critical) and 98 % (emergency)
+of the target; they are not configurable:
 
 - **Warning** — reported only.
 - **Critical** — retention passes delete in larger batches (2,000 rows).

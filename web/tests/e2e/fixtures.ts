@@ -134,7 +134,6 @@ export function settingsValues() {
     'collection.host_interval': live('10s'),
     'collection.container_interval': live('10s'),
     'persistence.raw_interval': live('10s'),
-    'charts.max_points_per_series': live('1000'),
     'retention.preset': live('balanced'),
     'retention.raw': live('48h'),
     'retention.one_minute': live('720h'),

@@ -131,8 +131,8 @@ var editable = map[string]ApplyMode{
 	"persistence.raw_interval": ApplyLive, "retention.preset": ApplyLive,
 	"retention.raw": ApplyLive, "retention.one_minute": ApplyLive,
 	"retention.fifteen_minute": ApplyLive, "retention.one_hour": ApplyLive,
-	"database.target_budget_bytes": ApplyLive, "charts.max_points_per_series": ApplyLive,
-	"sessions.idle_timeout": ApplyLive, "sessions.absolute_lifetime": ApplyLive,
+	"database.target_budget_bytes": ApplyLive,
+	"sessions.idle_timeout":        ApplyLive, "sessions.absolute_lifetime": ApplyLive,
 }
 var visible = func() map[string]ApplyMode {
 	result := map[string]ApplyMode{

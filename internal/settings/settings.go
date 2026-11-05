@@ -22,7 +22,6 @@ type Config struct {
 	Persistence   Persistence   `toml:"persistence"`
 	Retention     Retention     `toml:"retention"`
 	Database      Database      `toml:"database"`
-	Charts        Charts        `toml:"charts"`
 	Docker        Docker        `toml:"docker"`
 	Checks        Checks        `toml:"checks"`
 	Notifications Notifications `toml:"notifications"`
@@ -71,14 +70,12 @@ type Retention struct {
 	FifteenMinute time.Duration `toml:"fifteen_minute"`
 	OneHour       time.Duration `toml:"one_hour"`
 }
+
+// Database holds the storage budget. The warning, critical and emergency
+// thresholds are fixed at 80 %, 95 % and 98 % of the target (ADR 021 §7); they
+// are not configurable.
 type Database struct {
-	TargetBudgetBytes   int64   `toml:"target_budget_bytes"`
-	WarningRatio        float64 `toml:"warning_ratio"`
-	CriticalRatio       float64 `toml:"critical_ratio"`
-	EmergencyPauseRatio float64 `toml:"emergency_pause_ratio"`
-}
-type Charts struct {
-	MaxPointsPerSeries int `toml:"max_points_per_series"`
+	TargetBudgetBytes int64 `toml:"target_budget_bytes"`
 }
 type Docker struct {
 	SocketPath     string `toml:"socket_path"`
@@ -131,7 +128,7 @@ func Defaults() Config {
 	return Config{
 		Paths: Paths{DataDir: "/var/lib/binnacle", HostProc: "/proc", HostSys: "/sys", HostRoot: "/", HostPasswd: "/host/etc/passwd"}, HTTP: HTTP{ListenAddress: ":8080"}, Auth: Auth{Mode: "local", IdentityHeader: "X-Forwarded-User"},
 		Collection: Collection{HostInterval: 2 * time.Second, ContainerInterval: 2 * time.Second, MinimumInterval: time.Second}, Live: Live{SSEInterval: 2 * time.Second, MaxClients: 8}, Persistence: Persistence{RawInterval: 10 * time.Second, QueueBatchLimit: 60},
-		Retention: Retention{Preset: "balanced", Raw: 48 * time.Hour, OneMinute: 30 * 24 * time.Hour, FifteenMinute: 365 * 24 * time.Hour, OneHour: 0}, Database: Database{TargetBudgetBytes: 1073741824, WarningRatio: .80, CriticalRatio: .95, EmergencyPauseRatio: .98}, Charts: Charts{MaxPointsPerSeries: 1000}, Docker: Docker{SocketPath: "/var/run/docker.sock", MaxConcurrency: 4}, Checks: Checks{MaxConcurrency: 8}, Notifications: Notifications{MaxConcurrency: 4, QueueCapacity: 1000, DeliveryTimeout: 15 * time.Second, ReminderInterval: 2 * time.Hour}, Logs: Logs{MaxResponseBytes: 1048576, MaxLines: 5000}, Sessions: Sessions{IdleTimeout: 12 * time.Hour, AbsoluteLifetime: 720 * time.Hour},
+		Retention: Retention{Preset: "balanced", Raw: 48 * time.Hour, OneMinute: 30 * 24 * time.Hour, FifteenMinute: 365 * 24 * time.Hour, OneHour: 0}, Database: Database{TargetBudgetBytes: 1073741824}, Docker: Docker{SocketPath: "/var/run/docker.sock", MaxConcurrency: 4}, Checks: Checks{MaxConcurrency: 8}, Notifications: Notifications{MaxConcurrency: 4, QueueCapacity: 1000, DeliveryTimeout: 15 * time.Second, ReminderInterval: 2 * time.Hour}, Logs: Logs{MaxResponseBytes: 1048576, MaxLines: 5000}, Sessions: Sessions{IdleTimeout: 12 * time.Hour, AbsoluteLifetime: 720 * time.Hour},
 	}
 }
 func RetentionPreset(name string) (Retention, bool) {
@@ -217,7 +214,7 @@ func (c Config) Validate() error {
 	if c.Sessions.AbsoluteLifetime > auth.MaxSessionAbsoluteLifetime {
 		return fmt.Errorf("sessions.absolute_lifetime must be at most %s", auth.MaxSessionAbsoluteLifetime)
 	}
-	if c.Persistence.QueueBatchLimit <= 0 || c.Charts.MaxPointsPerSeries <= 0 || c.Docker.MaxConcurrency <= 0 || c.Checks.MaxConcurrency <= 0 || c.Logs.MaxResponseBytes <= 0 || c.Logs.MaxLines <= 0 || c.Database.TargetBudgetBytes <= 0 {
+	if c.Persistence.QueueBatchLimit <= 0 || c.Docker.MaxConcurrency <= 0 || c.Checks.MaxConcurrency <= 0 || c.Logs.MaxResponseBytes <= 0 || c.Logs.MaxLines <= 0 || c.Database.TargetBudgetBytes <= 0 {
 		return fmt.Errorf("limits and budgets must be positive")
 	}
 	if c.Logs.MaxResponseBytes > 1<<20 || c.Logs.MaxLines > 5000 || len(c.Logs.RedactionPatterns) > 16 {
@@ -231,9 +228,6 @@ func (c Config) Validate() error {
 	}
 	if c.Notifications.MaxConcurrency < 1 || c.Notifications.MaxConcurrency > 32 || c.Notifications.QueueCapacity < 1 || c.Notifications.QueueCapacity > 10000 || c.Notifications.DeliveryTimeout < time.Second || c.Notifications.DeliveryTimeout > time.Minute || c.Notifications.ReminderInterval < time.Minute || c.Notifications.ReminderInterval > 24*time.Hour {
 		return fmt.Errorf("notification limits are outside supported bounds")
-	}
-	if !(0 < c.Database.WarningRatio && c.Database.WarningRatio < c.Database.CriticalRatio && c.Database.CriticalRatio < c.Database.EmergencyPauseRatio && c.Database.EmergencyPauseRatio <= 1) {
-		return fmt.Errorf("database ratios must be ordered between zero and one")
 	}
 	if c.Retention.Preset != "minimal" && c.Retention.Preset != "balanced" && c.Retention.Preset != "long-term" && c.Retention.Preset != "advanced" {
 		return fmt.Errorf("retention.preset must be minimal, balanced, long-term, or advanced")

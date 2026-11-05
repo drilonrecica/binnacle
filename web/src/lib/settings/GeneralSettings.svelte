@@ -30,7 +30,6 @@
       'collection.host_interval',
       'collection.container_interval',
       'persistence.raw_interval',
-      'charts.max_points_per_series',
     ],
     snapshot: () => snapshot,
     apply: (changes) => apply(changes),
@@ -38,10 +37,6 @@
       'collection.host_interval': duration(1000, 300_000),
       'collection.container_interval': duration(1000, 300_000),
       'persistence.raw_interval': duration(5000, 600_000),
-      'charts.max_points_per_series': (value) =>
-        /^\d+$/.test(value) && Number(value) >= 100 && Number(value) <= 5000
-          ? null
-          : 'Between 100 and 5000 points.',
     },
   });
 
@@ -120,26 +115,6 @@
         {/snippet}
       </Field>
       <SettingMeta setting={snapshot?.values['persistence.raw_interval']} />
-    </div>
-    <div class="row">
-      <Field
-        label="Chart points per series"
-        hint="Longer ranges are downsampled to this many points."
-        error={form.errors['charts.max_points_per_series']}
-      >
-        {#snippet children({ id, invalid, describedBy })}
-          <Input
-            {id}
-            type="number"
-            inputmode="numeric"
-            bind:value={form.values['charts.max_points_per_series']}
-            {invalid}
-            mono
-            aria-describedby={describedBy}
-          />
-        {/snippet}
-      </Field>
-      <SettingMeta setting={snapshot?.values['charts.max_points_per_series']} />
     </div>
   </SettingsSection>
 </div>

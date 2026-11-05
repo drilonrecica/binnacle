@@ -199,6 +199,10 @@ func readTOML(path string) (map[string]string, error) {
 	}
 	flatten("", raw)
 	for k := range out {
+		if retiredKeys[k] {
+			delete(out, k) // accepted so an upgrade does not break an existing file
+			continue
+		}
 		if _, ok := supported[k]; !ok {
 			return nil, fmt.Errorf("unknown key %s in %s", k, path)
 		}
@@ -207,7 +211,7 @@ func readTOML(path string) (map[string]string, error) {
 }
 
 var environment = map[string]string{
-	"BINNACLE_DATA_DIR": "paths.data_dir", "BINNACLE_DATABASE_PATH": "paths.database_path", "BINNACLE_RUNTIME_DIR": "paths.runtime_dir", "BINNACLE_HOST_PROC": "paths.host_proc", "BINNACLE_HOST_SYS": "paths.host_sys", "BINNACLE_HOST_ROOT": "paths.host_root", "BINNACLE_MASTER_KEY": "paths.master_key", "BINNACLE_MASTER_KEY_FILE": "paths.master_key_file", "BINNACLE_LISTEN_ADDRESS": "http.listen_address", "BINNACLE_TRUSTED_PROXY_CIDRS": "http.trusted_proxy_cidrs", "BINNACLE_PUBLIC_URL": "http.public_url", "BINNACLE_HOST_INTERVAL": "collection.host_interval", "BINNACLE_CONTAINER_INTERVAL": "collection.container_interval", "BINNACLE_MINIMUM_INTERVAL": "collection.minimum_interval", "BINNACLE_SSE_INTERVAL": "live.sse_interval", "BINNACLE_SSE_MAX_CLIENTS": "live.max_clients", "BINNACLE_RAW_INTERVAL": "persistence.raw_interval", "BINNACLE_QUEUE_BATCH_LIMIT": "persistence.queue_batch_limit", "BINNACLE_RETENTION_PRESET": "retention.preset", "BINNACLE_RETENTION_RAW": "retention.raw", "BINNACLE_RETENTION_ONE_MINUTE": "retention.one_minute", "BINNACLE_RETENTION_FIFTEEN_MINUTE": "retention.fifteen_minute", "BINNACLE_RETENTION_ONE_HOUR": "retention.one_hour", "BINNACLE_DATABASE_TARGET_BUDGET_BYTES": "database.target_budget_bytes", "BINNACLE_DATABASE_WARNING_RATIO": "database.warning_ratio", "BINNACLE_DATABASE_CRITICAL_RATIO": "database.critical_ratio", "BINNACLE_DATABASE_EMERGENCY_PAUSE_RATIO": "database.emergency_pause_ratio", "BINNACLE_CHARTS_MAX_POINTS": "charts.max_points_per_series", "BINNACLE_DOCKER_SOCKET": "docker.socket_path", "BINNACLE_DOCKER_MAX_CONCURRENCY": "docker.max_concurrency", "BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS": "checks.allow_private_targets", "BINNACLE_CHECKS_MAX_CONCURRENCY": "checks.max_concurrency", "BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS": "coolify.allow_private_targets", "BINNACLE_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS": "notifications.allow_private_targets", "BINNACLE_NOTIFICATIONS_MAX_CONCURRENCY": "notifications.max_concurrency", "BINNACLE_NOTIFICATIONS_QUEUE_CAPACITY": "notifications.queue_capacity", "BINNACLE_NOTIFICATIONS_DELIVERY_TIMEOUT": "notifications.delivery_timeout", "BINNACLE_NOTIFICATIONS_REMINDER_INTERVAL": "notifications.reminder_interval", "BINNACLE_LOGS_MAX_RESPONSE_BYTES": "logs.max_response_bytes", "BINNACLE_LOGS_MAX_LINES": "logs.max_lines", "BINNACLE_LOGS_REDACTION_PATTERNS": "logs.redaction_patterns", "BINNACLE_SESSION_IDLE_TIMEOUT": "sessions.idle_timeout", "BINNACLE_SESSION_ABSOLUTE_LIFETIME": "sessions.absolute_lifetime", "BINNACLE_DEMO": "demo"}
+	"BINNACLE_DATA_DIR": "paths.data_dir", "BINNACLE_DATABASE_PATH": "paths.database_path", "BINNACLE_RUNTIME_DIR": "paths.runtime_dir", "BINNACLE_HOST_PROC": "paths.host_proc", "BINNACLE_HOST_SYS": "paths.host_sys", "BINNACLE_HOST_ROOT": "paths.host_root", "BINNACLE_MASTER_KEY": "paths.master_key", "BINNACLE_MASTER_KEY_FILE": "paths.master_key_file", "BINNACLE_LISTEN_ADDRESS": "http.listen_address", "BINNACLE_TRUSTED_PROXY_CIDRS": "http.trusted_proxy_cidrs", "BINNACLE_PUBLIC_URL": "http.public_url", "BINNACLE_HOST_INTERVAL": "collection.host_interval", "BINNACLE_CONTAINER_INTERVAL": "collection.container_interval", "BINNACLE_MINIMUM_INTERVAL": "collection.minimum_interval", "BINNACLE_SSE_INTERVAL": "live.sse_interval", "BINNACLE_SSE_MAX_CLIENTS": "live.max_clients", "BINNACLE_RAW_INTERVAL": "persistence.raw_interval", "BINNACLE_QUEUE_BATCH_LIMIT": "persistence.queue_batch_limit", "BINNACLE_RETENTION_PRESET": "retention.preset", "BINNACLE_RETENTION_RAW": "retention.raw", "BINNACLE_RETENTION_ONE_MINUTE": "retention.one_minute", "BINNACLE_RETENTION_FIFTEEN_MINUTE": "retention.fifteen_minute", "BINNACLE_RETENTION_ONE_HOUR": "retention.one_hour", "BINNACLE_DATABASE_TARGET_BUDGET_BYTES": "database.target_budget_bytes", "BINNACLE_DOCKER_SOCKET": "docker.socket_path", "BINNACLE_DOCKER_MAX_CONCURRENCY": "docker.max_concurrency", "BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS": "checks.allow_private_targets", "BINNACLE_CHECKS_MAX_CONCURRENCY": "checks.max_concurrency", "BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS": "coolify.allow_private_targets", "BINNACLE_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS": "notifications.allow_private_targets", "BINNACLE_NOTIFICATIONS_MAX_CONCURRENCY": "notifications.max_concurrency", "BINNACLE_NOTIFICATIONS_QUEUE_CAPACITY": "notifications.queue_capacity", "BINNACLE_NOTIFICATIONS_DELIVERY_TIMEOUT": "notifications.delivery_timeout", "BINNACLE_NOTIFICATIONS_REMINDER_INTERVAL": "notifications.reminder_interval", "BINNACLE_LOGS_MAX_RESPONSE_BYTES": "logs.max_response_bytes", "BINNACLE_LOGS_MAX_LINES": "logs.max_lines", "BINNACLE_LOGS_REDACTION_PATTERNS": "logs.redaction_patterns", "BINNACLE_SESSION_IDLE_TIMEOUT": "sessions.idle_timeout", "BINNACLE_SESSION_ABSOLUTE_LIFETIME": "sessions.absolute_lifetime", "BINNACLE_DEMO": "demo"}
 var supported = func() map[string]bool {
 	m := map[string]bool{}
 	for _, k := range environment {
@@ -226,11 +230,23 @@ var supported = func() map[string]bool {
 	return m
 }()
 
+// retiredKeys were once settings that never had any effect (RUN-8). They are
+// still accepted in a config file and in stored overrides so an upgrade never
+// fails on them, but their values are ignored. The budget thresholds are fixed
+// at 80/95/98 % (ADR 021 §7).
+var retiredKeys = map[string]bool{
+	"database.warning_ratio": true, "database.critical_ratio": true,
+	"database.emergency_pause_ratio": true, "charts.max_points_per_series": true,
+}
+
 func apply(c *Config, values map[string]string) error {
 	if value, ok := values["retention.preset"]; ok {
 		c.Retention.Preset = strings.ToLower(value)
 	}
 	for key, value := range values {
+		if retiredKeys[key] {
+			continue
+		}
 		var err error
 		d := func(dst *time.Duration) {
 			var v time.Duration
@@ -249,13 +265,6 @@ func apply(c *Config, values map[string]string) error {
 		i64 := func(dst *int64) {
 			var v int64
 			v, err = strconv.ParseInt(value, 10, 64)
-			if err == nil {
-				*dst = v
-			}
-		}
-		f := func(dst *float64) {
-			var v float64
-			v, err = strconv.ParseFloat(value, 64)
 			if err == nil {
 				*dst = v
 			}
@@ -352,14 +361,6 @@ func apply(c *Config, values map[string]string) error {
 			d(&c.Retention.OneHour)
 		case "database.target_budget_bytes":
 			i64(&c.Database.TargetBudgetBytes)
-		case "database.warning_ratio":
-			f(&c.Database.WarningRatio)
-		case "database.critical_ratio":
-			f(&c.Database.CriticalRatio)
-		case "database.emergency_pause_ratio":
-			f(&c.Database.EmergencyPauseRatio)
-		case "charts.max_points_per_series":
-			i(&c.Charts.MaxPointsPerSeries)
 		case "docker.socket_path":
 			c.Docker.SocketPath = value
 		case "docker.max_concurrency":
@@ -441,9 +442,7 @@ func lookup(c Config, key string) string {
 		"persistence.raw_interval": c.Persistence.RawInterval.String(), "persistence.queue_batch_limit": strconv.Itoa(c.Persistence.QueueBatchLimit),
 		"retention.preset": c.Retention.Preset, "retention.raw": c.Retention.Raw.String(), "retention.one_minute": c.Retention.OneMinute.String(),
 		"retention.fifteen_minute": c.Retention.FifteenMinute.String(), "retention.one_hour": c.Retention.OneHour.String(),
-		"database.target_budget_bytes": strconv.FormatInt(c.Database.TargetBudgetBytes, 10), "database.warning_ratio": strconv.FormatFloat(c.Database.WarningRatio, 'f', -1, 64),
-		"database.critical_ratio": strconv.FormatFloat(c.Database.CriticalRatio, 'f', -1, 64), "database.emergency_pause_ratio": strconv.FormatFloat(c.Database.EmergencyPauseRatio, 'f', -1, 64),
-		"charts.max_points_per_series": strconv.Itoa(c.Charts.MaxPointsPerSeries), "docker.max_concurrency": strconv.Itoa(c.Docker.MaxConcurrency),
+		"database.target_budget_bytes": strconv.FormatInt(c.Database.TargetBudgetBytes, 10), "docker.max_concurrency": strconv.Itoa(c.Docker.MaxConcurrency),
 		"checks.allow_private_targets": strconv.FormatBool(c.Checks.AllowPrivateTargets), "checks.max_concurrency": strconv.Itoa(c.Checks.MaxConcurrency), "logs.max_response_bytes": strconv.FormatInt(c.Logs.MaxResponseBytes, 10),
 		"notifications.allow_private_targets": strconv.FormatBool(c.Notifications.AllowPrivateTargets), "notifications.max_concurrency": strconv.Itoa(c.Notifications.MaxConcurrency), "notifications.queue_capacity": strconv.Itoa(c.Notifications.QueueCapacity), "notifications.delivery_timeout": c.Notifications.DeliveryTimeout.String(), "notifications.reminder_interval": c.Notifications.ReminderInterval.String(),
 		"logs.max_lines": strconv.Itoa(c.Logs.MaxLines), "sessions.idle_timeout": c.Sessions.IdleTimeout.String(),
