@@ -205,7 +205,7 @@ func (m *Manager) metricPoints(ctx context.Context, q MetricQuery, metric Metric
 	var query string
 	args := []any{}
 	if res == ResolutionRaw {
-		query = "SELECT ts," + avgColumn + " FROM " + table + " WHERE ts>=? AND ts<=?"
+		query = "SELECT ts," + minColumn + "," + avgColumn + "," + maxColumn + " FROM " + table + " WHERE ts>=? AND ts<=?"
 		args = []any{q.From.UnixMilli(), q.To.UnixMilli()}
 		if q.Scope == "resource" {
 			query += " AND resource_id=?"
@@ -231,11 +231,9 @@ func (m *Manager) metricPoints(ctx context.Context, q MetricQuery, metric Metric
 		var ms int64
 		var p Point
 		if res == ResolutionRaw {
-			if err = rows.Scan(&ms, &p.Avg); err != nil {
+			if err = rows.Scan(&ms, &p.Min, &p.Avg, &p.Max); err != nil {
 				return nil, err
 			}
-			p.Min = p.Avg
-			p.Max = p.Avg
 			if p.Avg != nil {
 				p.Count = 1
 			}
@@ -284,7 +282,13 @@ func metricSource(scope string, metric Metric, res Resolution) (string, string, 
 				column = "memory_working_set_bytes"
 			}
 		}
-		return column, column, column, "", table, nil
+		// A raw sample is its window's mean; the window range columns
+		// (COL-9) hold its extremes, NULL on rows older than migration 024.
+		rangeBase := column
+		if metric == MetricDiskIOPS {
+			rangeBase = "disk_iops"
+		}
+		return "COALESCE(" + rangeBase + "_min," + column + ")", column, "COALESCE(" + rangeBase + "_max," + column + ")", "", table, nil
 	}
 	if prefix == "" {
 		return "", "", "", "", "", fmt.Errorf("unsupported metric for rollup resolution")

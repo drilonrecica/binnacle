@@ -18,12 +18,20 @@ type Engine struct {
 	live        map[uint64]chan LiveMessage
 	nextSub     uint64
 	nextMessage Sequence
+	// window accumulates the ticks published since the last PersistenceBatch.
+	window window
 }
 
+// PersistenceBatch returns the persistence window ending now and starts the
+// next one: the aggregate of every tick published since the previous call
+// (COL-9), so history and rollups see bursts between two batches.
 func (e *Engine) PersistenceBatch() PersistenceBatch {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return PersistenceBatch{Snapshot: clone(e.snapshot), Events: append([]Event(nil), e.events...), Filesystems: append([]FilesystemObservation(nil), e.filesystems...)}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	batch := e.window.drain(clone(e.snapshot))
+	batch.Events = append([]Event(nil), e.events...)
+	batch.Filesystems = append([]FilesystemObservation(nil), e.filesystems...)
+	return batch
 }
 
 func NewEngine(maxEvents int) *Engine {
@@ -62,6 +70,7 @@ func (e *Engine) Publish(snapshot Snapshot, events ...Event) {
 	snapshot.Collectors = copyCollectors(snapshot.Collectors)
 	snapshot.Filesystems = append([]FilesystemObservation(nil), e.filesystems...)
 	e.snapshot = snapshot
+	e.window.observe(snapshot)
 	for _, event := range events {
 		if event.ID == 0 {
 			e.nextMessage++

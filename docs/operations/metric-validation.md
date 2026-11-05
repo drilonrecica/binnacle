@@ -55,6 +55,38 @@ call limited to 5 s and the whole tick to 20 s.
 
 `freshAt` of a collector is the time of its last successful tick.
 
+## Stored samples
+
+The live view shows every tick. History stores one raw sample per
+`persistence.raw_interval` (10 s by default), built from **every** tick
+published in that window rather than the single snapshot at the end of it,
+so a burst shorter than the window still reaches history:
+
+| Field kind | Examples | Stored value |
+| --- | --- | --- |
+| Rates and gauges | CPU percent, memory and swap used, load, network and disk bytes/s, IOPS, packets/s, container CPU, memory and I/O | Mean of the window's ticks, each tick weighted equally. Ticks run at the collection interval, so the mean of the per-tick rates equals the rate over the window; a tick that ran late counts like any other. |
+| Counter deltas | network errors and drops | Sum over the window's ticks. |
+| Totals and identity | memory and swap total, uptime, status, PIDs | Value of the last tick. |
+
+Each raw sample also stores the smallest and largest tick of the window
+(`<column>_min` and `<column>_max`) for every metric that has rollup
+statistics: host CPU (busy and per mode), load, memory and swap used, network
+and disk bytes/s, disk IOPS (read plus write of the same tick), and resource
+CPU, memory, network and block I/O. Raw history returns them as each point's
+`min` and `max`, and the 1 m, 15 m and 1 h rollups take their `min` and `max`
+from them, so a spike between two samples is the rollup maximum. Their `avg`
+is the mean of the raw samples. Rows written before this change have no
+ranges and fall back to the sample value.
+
+A tick counts once: the host and Docker loops each republish the other's
+latest result, so a host tick is identified by `host.at` and a Docker tick by
+the resource's `lastSeenAt`. Stale resources are never counted. A resource
+that no tick measured during the window is not stored for it, and a container
+replaced during the window keeps the samples it reported before it went away,
+so `active_instance_count` is the number of containers seen in the window.
+A window without a host tick (a stuck host loop) stores the last host
+observation unchanged.
+
 ## Known semantic differences
 
 - **Memory working set:** Binnacle uses `usage - inactive_file`, the same convention

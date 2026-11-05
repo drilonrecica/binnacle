@@ -30,7 +30,7 @@ type Manager struct {
 	workerCancel     context.CancelFunc
 	workerWG         sync.WaitGroup
 	prevCollectors   map[string]string
-	// lastSampleAt is the snapshot time of the newest committed batch;
+	// lastSampleAt is the newest resource observation (LastSeenAt) committed;
 	// resources observed at or before it were already stored.
 	lastSampleAt   time.Time
 	retention      RetentionCutoffs

@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/metrics"
@@ -29,17 +30,19 @@ func (m *Manager) WriteBatch(ctx context.Context, b metrics.PersistenceBatch) er
 			swap_used_bytes,swap_total_bytes,swap_used_pct,
 			network_rx_bps,network_tx_bps,network_rx_packets_ps,network_tx_packets_ps,
 			network_rx_errors_delta,network_tx_errors_delta,network_rx_drops_delta,network_tx_drops_delta,
-			disk_read_bps,disk_write_bps,disk_read_iops,disk_write_iops
-		) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			s.At.UnixMilli(), hostID, string(s.BootIdentity),
-			s.Host.CPUPercent, s.Host.CPUUserPercent, s.Host.CPUSystemPercent, s.Host.CPUIOWaitPercent, s.Host.CPUStealPercent,
-			s.Host.Load1, s.Host.Load5, s.Host.Load15,
-			s.Host.MemoryUsedBytes, s.Host.MemoryAvailableBytes, s.Host.MemoryTotalBytes, s.Host.MemoryPercent,
-			s.Host.MemoryCachedBytes, s.Host.MemoryBuffersBytes,
-			s.Host.SwapUsedBytes, s.Host.SwapTotalBytes, s.Host.SwapPercent,
-			s.Host.NetworkRXBPS, s.Host.NetworkTXBPS, s.Host.NetworkRXPacketsPS, s.Host.NetworkTXPacketsPS,
-			s.Host.NetworkRXErrorsDelta, s.Host.NetworkTXErrorsDelta, s.Host.NetworkRXDropsDelta, s.Host.NetworkTXDropsDelta,
-			s.Host.DiskReadBPS, s.Host.DiskWriteBPS, s.Host.DiskReadIOPS, s.Host.DiskWriteIOPS,
+			disk_read_bps,disk_write_bps,disk_read_iops,disk_write_iops,
+			`+hostRangeColumns+`
+		) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,`+placeholders(2*len(hostRangeNames))+`)`,
+			append([]any{s.At.UnixMilli(), hostID, string(s.BootIdentity),
+				s.Host.CPUPercent, s.Host.CPUUserPercent, s.Host.CPUSystemPercent, s.Host.CPUIOWaitPercent, s.Host.CPUStealPercent,
+				s.Host.Load1, s.Host.Load5, s.Host.Load15,
+				s.Host.MemoryUsedBytes, s.Host.MemoryAvailableBytes, s.Host.MemoryTotalBytes, s.Host.MemoryPercent,
+				s.Host.MemoryCachedBytes, s.Host.MemoryBuffersBytes,
+				s.Host.SwapUsedBytes, s.Host.SwapTotalBytes, s.Host.SwapPercent,
+				s.Host.NetworkRXBPS, s.Host.NetworkTXBPS, s.Host.NetworkRXPacketsPS, s.Host.NetworkTXPacketsPS,
+				s.Host.NetworkRXErrorsDelta, s.Host.NetworkTXErrorsDelta, s.Host.NetworkRXDropsDelta, s.Host.NetworkTXDropsDelta,
+				s.Host.DiskReadBPS, s.Host.DiskWriteBPS, s.Host.DiskReadIOPS, s.Host.DiskWriteIOPS,
+			}, hostRangeArgs(b.HostRanges)...)...,
 		)
 		if e != nil {
 			return e
@@ -48,7 +51,9 @@ func (m *Manager) WriteBatch(ctx context.Context, b metrics.PersistenceBatch) er
 			if !m.freshResource(resource) {
 				continue
 			}
-			_, e = tx.ExecContext(ctx, "INSERT OR REPLACE INTO resource_samples_10s(ts,resource_id,cpu_host_pct,memory_working_set_bytes,network_rx_bps,network_tx_bps,block_read_bps,block_write_bps,active_instance_count,status) VALUES(?,?,?,?,?,?,?,?,?,?)", s.At.UnixMilli(), resource.ID, resource.CPUHostPercent, resource.MemoryBytes, resource.RXBPS, resource.TXBPS, resource.BlockReadBPS, resource.BlockWriteBPS, len(resource.Components), resource.Status)
+			args := []any{s.At.UnixMilli(), resource.ID, resource.CPUHostPercent, resource.MemoryBytes, resource.RXBPS, resource.TXBPS, resource.BlockReadBPS, resource.BlockWriteBPS, len(resource.Components), resource.Status}
+			args = append(args, resourceRangeArgs(b.ResourceRanges, resource.ID)...)
+			_, e = tx.ExecContext(ctx, "INSERT OR REPLACE INTO resource_samples_10s(ts,resource_id,cpu_host_pct,memory_working_set_bytes,network_rx_bps,network_tx_bps,block_read_bps,block_write_bps,active_instance_count,status,"+resourceRangeColumns+") VALUES(?,?,?,?,?,?,?,?,?,?,"+placeholders(2*len(resourceRangeNames))+")", args...)
 			if e != nil {
 				return e
 			}
@@ -81,22 +86,75 @@ func (m *Manager) WriteBatch(ctx context.Context, b metrics.PersistenceBatch) er
 	if e = tx.Commit(); e != nil {
 		return e
 	}
-	if s.Sequence > 0 && s.At.After(m.lastSampleAt) {
-		m.lastSampleAt = s.At
+	if s.Sequence > 0 {
+		for _, resource := range s.Resources {
+			if !resource.Stale && resource.LastSeenAt.After(m.lastSampleAt) {
+				m.lastSampleAt = resource.LastSeenAt
+			}
+		}
 	}
 	return nil
 }
 
 // freshResource reports whether a resource of the batch is a measurement not
 // stored yet. A stale resource (a failed Docker tick) and one whose
-// observation is not newer than the previous stored batch (a Docker tick still
+// observation is not newer than the newest stored one (a Docker tick still
 // running while the host loop republished) are skipped, so an outage leaves a
-// gap in the history instead of a flat line (COL-5, ADR 022 §3).
+// gap in the history instead of a flat line (COL-5, ADR 022 §3). Comparing
+// with the newest stored observation, not the batch time, keeps a tick that
+// started before one batch and finished after it (COL-9).
 func (m *Manager) freshResource(resource metrics.ResourceSnapshot) bool {
 	if resource.Stale {
 		return false
 	}
 	return m.lastSampleAt.IsZero() || resource.LastSeenAt.After(m.lastSampleAt)
+}
+
+// Window range columns (COL-9, migration 024), each stored as <name>_min and
+// <name>_max in this order.
+var (
+	hostRangeNames = []string{
+		"cpu_busy_pct", "cpu_user_pct", "cpu_system_pct", "cpu_iowait_pct", "cpu_steal_pct",
+		"load_1", "load_5", "load_15", "memory_used_bytes", "swap_used_bytes",
+		"network_rx_bps", "network_tx_bps", "disk_read_bps", "disk_write_bps", "disk_iops",
+	}
+	resourceRangeNames   = []string{"cpu_host_pct", "memory_working_set_bytes", "network_rx_bps", "network_tx_bps", "block_read_bps", "block_write_bps"}
+	hostRangeColumns     = rangeColumns(hostRangeNames)
+	resourceRangeColumns = rangeColumns(resourceRangeNames)
+)
+
+func rangeColumns(names []string) string {
+	columns := make([]string, 0, 2*len(names))
+	for _, name := range names {
+		columns = append(columns, name+"_min", name+"_max")
+	}
+	return strings.Join(columns, ",")
+}
+
+func placeholders(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
+}
+
+func rangeArgs(ranges ...metrics.Range) []any {
+	args := make([]any, 0, 2*len(ranges))
+	for _, r := range ranges {
+		args = append(args, r.Min, r.Max)
+	}
+	return args
+}
+
+// hostRangeArgs follows hostRangeNames; a batch without ranges stores NULL.
+func hostRangeArgs(r *metrics.HostRanges) []any {
+	if r == nil {
+		r = &metrics.HostRanges{}
+	}
+	return rangeArgs(r.CPU, r.CPUUser, r.CPUSystem, r.CPUIOWait, r.CPUSteal, r.Load1, r.Load5, r.Load15, r.MemoryUsed, r.SwapUsed, r.NetworkRX, r.NetworkTX, r.DiskRead, r.DiskWrite, r.DiskIOPS)
+}
+
+// resourceRangeArgs follows resourceRangeNames.
+func resourceRangeArgs(ranges map[metrics.ResourceID]metrics.ResourceRanges, id metrics.ResourceID) []any {
+	r := ranges[id]
+	return rangeArgs(r.CPU, r.Memory, r.RX, r.TX, r.BlockRead, r.BlockWrite)
 }
 
 func (m *Manager) writeCollectorStateEvents(ctx context.Context, tx querier, at time.Time, collectors map[string]metrics.CollectorHealth) error {

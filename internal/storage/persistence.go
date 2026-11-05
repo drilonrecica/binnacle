@@ -10,8 +10,10 @@ import (
 	"github.com/drilonrecica/binnacle/internal/metrics"
 )
 
-// Persistence schedules immutable current snapshots into a bounded writer
-// queue. Storage failure never blocks collectors or the live Metrics Engine.
+// Persistence closes one sample window every Interval and schedules it into a
+// bounded writer queue. A window is the aggregate of every tick the engine
+// published since the previous one (COL-9, see metrics.Engine.PersistenceBatch).
+// Storage failure never blocks collectors or the live Metrics Engine.
 type Persistence struct {
 	Engine         *metrics.Engine
 	Store          *Manager

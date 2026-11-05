@@ -195,10 +195,21 @@ type FilesystemObservation struct {
 	InodesUsedPercent *float64  `json:"inodesUsedPct"`
 }
 
+// PersistenceBatch is one persistence window. Snapshot carries the window
+// aggregate of every tick published since the previous batch (means for rates
+// and gauges, sums for counter deltas, the last value otherwise); the ranges
+// carry each metric's minimum and maximum over those ticks. Ranges are nil
+// when the window saw no tick of that kind; storage then falls back to the
+// snapshot value.
 type PersistenceBatch struct {
-	Snapshot    Snapshot
-	Events      []Event
-	Filesystems []FilesystemObservation
+	Snapshot       Snapshot
+	Events         []Event
+	Filesystems    []FilesystemObservation
+	HostRanges     *HostRanges
+	ResourceRanges map[ResourceID]ResourceRanges
+	// HostTicks is the number of host ticks aggregated into Snapshot.Host;
+	// zero means none, and Snapshot.Host is the last published observation.
+	HostTicks int
 }
 
 type TimeRange struct{ From, To time.Time }
