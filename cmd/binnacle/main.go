@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -103,7 +102,7 @@ func main() {
 	}
 	mfaService := auth.NewMFA(nil, credentials, secretStore, sessions)
 	notificationRepository := notifications.NewRepository(nil, secretStore)
-	coolifyIntegration := coolify.NewIntegration(secretStore, coolify.ClientConfig{BaseURL: config.Coolify.URL, Token: config.Coolify.APIToken, AllowInsecureHTTP: config.Coolify.AllowInsecureHTTP})
+	coolifyIntegration := coolify.NewIntegration(secretStore, coolify.ClientConfig{BaseURL: config.Coolify.URL, Token: config.Coolify.APIToken, AllowInsecureHTTP: config.Coolify.AllowInsecureHTTP, AllowPrivateTargets: config.Coolify.AllowPrivateTargets})
 	notificationWorker := notifications.NewWorker(notificationRepository, notifications.Config{
 		MaxConcurrency:   config.Notifications.MaxConcurrency,
 		QueueCapacity:    config.Notifications.QueueCapacity,
@@ -112,10 +111,9 @@ func main() {
 		AllowPrivate:     config.Notifications.AllowPrivateTargets,
 	})
 	alertRepository.SetIncidentSink(notificationRepository)
-	allowPrivate, _ := strconv.ParseBool(os.Getenv("BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS"))
 	var checkRunner interface {
 		Run(context.Context, checks.Check) checks.Result
-	} = &checks.Runner{AllowPrivate: allowPrivate}
+	} = &checks.Runner{AllowPrivate: config.Checks.AllowPrivateTargets}
 	if *demoMode || config.Demo {
 		checkRunner = demo.CheckRunner{}
 	}
@@ -319,7 +317,9 @@ func main() {
 		os.Exit(1)
 	}
 	apiServer.EnableLogs(logService, engine, sessions)
-	apiServer.EnableProcesses(diagnostics.NewProcessScanner(config.Paths.HostProc, config.Paths.HostPasswd), sessions)
+	processScanner := diagnostics.NewProcessScanner(config.Paths.HostProc, config.Paths.HostPasswd)
+	processScanner.Redact = logService.Redact
+	apiServer.EnableProcesses(processScanner, sessions)
 	prometheusHandler := &api.PrometheusHandler{Enabled: config.Features.Portability && config.Prometheus.Enabled, Tokens: tokenRepository, Engine: engine, Checks: checkRepository, Monitor: monitor}
 	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, application, app.Routes{API: apiServer.Routes(), Static: webembed.Handler(), Metrics: prometheusHandler, Middleware: apiServer.Middleware}))
 	if err := application.Run(ctx); err != nil {

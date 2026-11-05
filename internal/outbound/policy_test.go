@@ -51,3 +51,37 @@ func TestPolicyRevalidatesDNSAtDialTime(t *testing.T) {
 		t.Fatal("DNS rebinding target was accepted")
 	}
 }
+
+func TestPolicyBlocksReservedAndTranslatedRanges(t *testing.T) {
+	cases := []struct {
+		name, address  string
+		private, allow bool
+	}{
+		{"cgnat without opt-in", "100.64.0.1", false, false},
+		{"cgnat with opt-in", "100.64.0.1", true, true},
+		{"this network", "0.1.2.3", true, false},
+		{"ietf protocol assignments", "192.0.0.1", true, false},
+		{"benchmarking low", "198.18.0.1", true, false},
+		{"benchmarking high", "198.19.255.255", true, false},
+		{"reserved class e", "240.0.0.1", true, false},
+		{"nat64 loopback", "64:ff9b::7f00:1", true, false},
+		{"nat64 metadata", "64:ff9b::a9fe:a9fe", true, false},
+		{"nat64 private without opt-in", "64:ff9b::a00:1", false, false},
+		{"nat64 public without opt-in", "64:ff9b::cb00:7101", false, false},
+		{"nat64 public with opt-in", "64:ff9b::cb00:7101", true, true},
+		{"6to4 loopback", "2002:7f00:1::", true, false},
+		{"6to4 reserved", "2002:f000:1::", true, false},
+		{"6to4 public without opt-in", "2002:cb00:7101::", false, false},
+		{"6to4 public with opt-in", "2002:cb00:7101::", true, true},
+		{"ipv4 compatible loopback", "::7f00:1", true, false},
+		{"public", "203.0.113.1", false, true},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			p := Policy{AllowPrivate: tt.private}
+			if got := p.Allowed(netip.MustParseAddr(tt.address)); got != tt.allow {
+				t.Fatalf("Allowed(%s) private=%v = %v, want %v", tt.address, tt.private, got, tt.allow)
+			}
+		})
+	}
+}

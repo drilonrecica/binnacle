@@ -83,7 +83,8 @@ type Docker struct {
 	MaxConcurrency int    `toml:"max_concurrency"`
 }
 type Checks struct {
-	MaxConcurrency int `toml:"max_concurrency"`
+	AllowPrivateTargets bool `toml:"allow_private_targets"`
+	MaxConcurrency      int  `toml:"max_concurrency"`
 }
 type Notifications struct {
 	AllowPrivateTargets bool          `toml:"allow_private_targets"`
@@ -106,6 +107,9 @@ type Coolify struct {
 	APIToken          string `toml:"-"`
 	APITokenFile      string `toml:"api_token_file"`
 	AllowInsecureHTTP bool   `toml:"allow_insecure_http"`
+	// AllowPrivateTargets lets a UI-configured Coolify URL point at a private
+	// address. A URL configured from the environment never needs it.
+	AllowPrivateTargets bool `toml:"allow_private_targets"`
 }
 type Auth struct {
 	Mode           string   `toml:"mode"`
@@ -238,7 +242,7 @@ func (c Config) Validate() error {
 // UIOverridable reports whether a key can be changed without a deployment change.
 func UIOverridable(key string) bool {
 	switch key {
-	case "paths.data_dir", "paths.database_path", "paths.runtime_dir", "paths.master_key", "paths.master_key_file", "http.listen_address", "http.trusted_proxy_cidrs", "http.public_url", "docker.socket_path", "paths.host_proc", "paths.host_sys", "paths.host_passwd", "coolify.url", "coolify.api_token_file", "coolify.allow_insecure_http", "auth.mode", "auth.proxy_cidrs", "auth.identity_header", "auth.allowed_subject", "features.advanced_auth", "features.portability", "prometheus.enabled", "notifications.allow_private_targets", "notifications.max_concurrency", "notifications.queue_capacity", "notifications.delivery_timeout", "notifications.reminder_interval":
+	case "paths.data_dir", "paths.database_path", "paths.runtime_dir", "paths.master_key", "paths.master_key_file", "http.listen_address", "http.trusted_proxy_cidrs", "http.public_url", "docker.socket_path", "paths.host_proc", "paths.host_sys", "paths.host_passwd", "coolify.url", "coolify.api_token_file", "coolify.allow_insecure_http", "coolify.allow_private_targets", "checks.allow_private_targets", "auth.mode", "auth.proxy_cidrs", "auth.identity_header", "auth.allowed_subject", "features.advanced_auth", "features.portability", "prometheus.enabled", "notifications.allow_private_targets", "notifications.max_concurrency", "notifications.queue_capacity", "notifications.delivery_timeout", "notifications.reminder_interval":
 		return false
 	}
 	return true

@@ -81,7 +81,7 @@ func LoadWith(getenv func(string) string, exists func(string) bool, provider Ove
 		}
 		sources["paths.host_passwd"] = SourceEnvironment
 	}
-	for env, key := range map[string]string{"BINNACLE_COOLIFY_URL": "coolify.url", "BINNACLE_COOLIFY_API_TOKEN_FILE": "coolify.api_token_file", "BINNACLE_COOLIFY_ALLOW_INSECURE_HTTP": "coolify.allow_insecure_http"} {
+	for env, key := range map[string]string{"BINNACLE_COOLIFY_URL": "coolify.url", "BINNACLE_COOLIFY_API_TOKEN_FILE": "coolify.api_token_file", "BINNACLE_COOLIFY_ALLOW_INSECURE_HTTP": "coolify.allow_insecure_http", "BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS": "coolify.allow_private_targets"} {
 		if value := getenv(env); value != "" {
 			if err := apply(&c, map[string]string{key: value}); err != nil {
 				return Config{}, nil, fmt.Errorf("%s: %w", env, err)
@@ -207,14 +207,14 @@ func readTOML(path string) (map[string]string, error) {
 }
 
 var environment = map[string]string{
-	"BINNACLE_DATA_DIR": "paths.data_dir", "BINNACLE_DATABASE_PATH": "paths.database_path", "BINNACLE_RUNTIME_DIR": "paths.runtime_dir", "BINNACLE_HOST_PROC": "paths.host_proc", "BINNACLE_HOST_SYS": "paths.host_sys", "BINNACLE_MASTER_KEY": "paths.master_key", "BINNACLE_MASTER_KEY_FILE": "paths.master_key_file", "BINNACLE_LISTEN_ADDRESS": "http.listen_address", "BINNACLE_TRUSTED_PROXY_CIDRS": "http.trusted_proxy_cidrs", "BINNACLE_PUBLIC_URL": "http.public_url", "BINNACLE_HOST_INTERVAL": "collection.host_interval", "BINNACLE_CONTAINER_INTERVAL": "collection.container_interval", "BINNACLE_MINIMUM_INTERVAL": "collection.minimum_interval", "BINNACLE_SSE_INTERVAL": "live.sse_interval", "BINNACLE_RAW_INTERVAL": "persistence.raw_interval", "BINNACLE_QUEUE_BATCH_LIMIT": "persistence.queue_batch_limit", "BINNACLE_RETENTION_PRESET": "retention.preset", "BINNACLE_RETENTION_RAW": "retention.raw", "BINNACLE_RETENTION_ONE_MINUTE": "retention.one_minute", "BINNACLE_RETENTION_FIFTEEN_MINUTE": "retention.fifteen_minute", "BINNACLE_RETENTION_ONE_HOUR": "retention.one_hour", "BINNACLE_DATABASE_TARGET_BUDGET_BYTES": "database.target_budget_bytes", "BINNACLE_DATABASE_WARNING_RATIO": "database.warning_ratio", "BINNACLE_DATABASE_CRITICAL_RATIO": "database.critical_ratio", "BINNACLE_DATABASE_EMERGENCY_PAUSE_RATIO": "database.emergency_pause_ratio", "BINNACLE_CHARTS_MAX_POINTS": "charts.max_points_per_series", "BINNACLE_DOCKER_SOCKET": "docker.socket_path", "BINNACLE_DOCKER_MAX_CONCURRENCY": "docker.max_concurrency", "BINNACLE_CHECKS_MAX_CONCURRENCY": "checks.max_concurrency", "BINNACLE_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS": "notifications.allow_private_targets", "BINNACLE_NOTIFICATIONS_MAX_CONCURRENCY": "notifications.max_concurrency", "BINNACLE_NOTIFICATIONS_QUEUE_CAPACITY": "notifications.queue_capacity", "BINNACLE_NOTIFICATIONS_DELIVERY_TIMEOUT": "notifications.delivery_timeout", "BINNACLE_NOTIFICATIONS_REMINDER_INTERVAL": "notifications.reminder_interval", "BINNACLE_LOGS_MAX_RESPONSE_BYTES": "logs.max_response_bytes", "BINNACLE_LOGS_MAX_LINES": "logs.max_lines", "BINNACLE_LOGS_REDACTION_PATTERNS": "logs.redaction_patterns", "BINNACLE_SESSION_IDLE_TIMEOUT": "sessions.idle_timeout", "BINNACLE_SESSION_ABSOLUTE_LIFETIME": "sessions.absolute_lifetime", "BINNACLE_DEMO": "demo"}
+	"BINNACLE_DATA_DIR": "paths.data_dir", "BINNACLE_DATABASE_PATH": "paths.database_path", "BINNACLE_RUNTIME_DIR": "paths.runtime_dir", "BINNACLE_HOST_PROC": "paths.host_proc", "BINNACLE_HOST_SYS": "paths.host_sys", "BINNACLE_MASTER_KEY": "paths.master_key", "BINNACLE_MASTER_KEY_FILE": "paths.master_key_file", "BINNACLE_LISTEN_ADDRESS": "http.listen_address", "BINNACLE_TRUSTED_PROXY_CIDRS": "http.trusted_proxy_cidrs", "BINNACLE_PUBLIC_URL": "http.public_url", "BINNACLE_HOST_INTERVAL": "collection.host_interval", "BINNACLE_CONTAINER_INTERVAL": "collection.container_interval", "BINNACLE_MINIMUM_INTERVAL": "collection.minimum_interval", "BINNACLE_SSE_INTERVAL": "live.sse_interval", "BINNACLE_RAW_INTERVAL": "persistence.raw_interval", "BINNACLE_QUEUE_BATCH_LIMIT": "persistence.queue_batch_limit", "BINNACLE_RETENTION_PRESET": "retention.preset", "BINNACLE_RETENTION_RAW": "retention.raw", "BINNACLE_RETENTION_ONE_MINUTE": "retention.one_minute", "BINNACLE_RETENTION_FIFTEEN_MINUTE": "retention.fifteen_minute", "BINNACLE_RETENTION_ONE_HOUR": "retention.one_hour", "BINNACLE_DATABASE_TARGET_BUDGET_BYTES": "database.target_budget_bytes", "BINNACLE_DATABASE_WARNING_RATIO": "database.warning_ratio", "BINNACLE_DATABASE_CRITICAL_RATIO": "database.critical_ratio", "BINNACLE_DATABASE_EMERGENCY_PAUSE_RATIO": "database.emergency_pause_ratio", "BINNACLE_CHARTS_MAX_POINTS": "charts.max_points_per_series", "BINNACLE_DOCKER_SOCKET": "docker.socket_path", "BINNACLE_DOCKER_MAX_CONCURRENCY": "docker.max_concurrency", "BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS": "checks.allow_private_targets", "BINNACLE_CHECKS_MAX_CONCURRENCY": "checks.max_concurrency", "BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS": "coolify.allow_private_targets", "BINNACLE_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS": "notifications.allow_private_targets", "BINNACLE_NOTIFICATIONS_MAX_CONCURRENCY": "notifications.max_concurrency", "BINNACLE_NOTIFICATIONS_QUEUE_CAPACITY": "notifications.queue_capacity", "BINNACLE_NOTIFICATIONS_DELIVERY_TIMEOUT": "notifications.delivery_timeout", "BINNACLE_NOTIFICATIONS_REMINDER_INTERVAL": "notifications.reminder_interval", "BINNACLE_LOGS_MAX_RESPONSE_BYTES": "logs.max_response_bytes", "BINNACLE_LOGS_MAX_LINES": "logs.max_lines", "BINNACLE_LOGS_REDACTION_PATTERNS": "logs.redaction_patterns", "BINNACLE_SESSION_IDLE_TIMEOUT": "sessions.idle_timeout", "BINNACLE_SESSION_ABSOLUTE_LIFETIME": "sessions.absolute_lifetime", "BINNACLE_DEMO": "demo"}
 var supported = func() map[string]bool {
 	m := map[string]bool{}
 	for _, k := range environment {
 		m[k] = true
 	}
 	m["paths.host_passwd"] = true
-	for _, key := range []string{"coolify.url", "coolify.api_token", "coolify.api_token_file", "coolify.allow_insecure_http"} {
+	for _, key := range []string{"coolify.url", "coolify.api_token", "coolify.api_token_file", "coolify.allow_insecure_http", "coolify.allow_private_targets"} {
 		m[key] = true
 	}
 	for _, key := range []string{"auth.mode", "auth.proxy_cidrs", "auth.identity_header", "auth.allowed_subject"} {
@@ -260,6 +260,13 @@ func apply(c *Config, values map[string]string) error {
 				*dst = v
 			}
 		}
+		b := func(dst *bool) {
+			var v bool
+			v, err = strconv.ParseBool(value)
+			if err == nil {
+				*dst = v
+			}
+		}
 		switch key {
 		case "paths.data_dir":
 			c.Paths.DataDir = value
@@ -283,6 +290,10 @@ func apply(c *Config, values map[string]string) error {
 			c.Coolify.APITokenFile = value
 		case "coolify.allow_insecure_http":
 			c.Coolify.AllowInsecureHTTP, err = strconv.ParseBool(value)
+		case "coolify.allow_private_targets":
+			b(&c.Coolify.AllowPrivateTargets)
+		case "checks.allow_private_targets":
+			b(&c.Checks.AllowPrivateTargets)
 		case "auth.mode":
 			c.Auth.Mode = strings.ToLower(strings.TrimSpace(value))
 		case "auth.proxy_cidrs":
@@ -415,7 +426,7 @@ func lookup(c Config, key string) string {
 	values := map[string]string{
 		"paths.data_dir": c.Paths.DataDir, "paths.database_path": c.Paths.DatabasePath, "paths.runtime_dir": c.Paths.RuntimeDir,
 		"paths.host_proc": c.Paths.HostProc, "paths.host_sys": c.Paths.HostSys, "http.listen_address": c.HTTP.ListenAddress,
-		"paths.host_passwd": c.Paths.HostPasswd, "paths.master_key_file": c.Paths.MasterKeyFile, "coolify.url": c.Coolify.URL, "coolify.api_token_file": c.Coolify.APITokenFile, "coolify.allow_insecure_http": strconv.FormatBool(c.Coolify.AllowInsecureHTTP),
+		"paths.host_passwd": c.Paths.HostPasswd, "paths.master_key_file": c.Paths.MasterKeyFile, "coolify.url": c.Coolify.URL, "coolify.api_token_file": c.Coolify.APITokenFile, "coolify.allow_insecure_http": strconv.FormatBool(c.Coolify.AllowInsecureHTTP), "coolify.allow_private_targets": strconv.FormatBool(c.Coolify.AllowPrivateTargets),
 		"auth.mode": c.Auth.Mode, "auth.proxy_cidrs": strings.Join(c.Auth.ProxyCIDRs, ","), "auth.identity_header": c.Auth.IdentityHeader, "auth.allowed_subject": c.Auth.AllowedSubject,
 		"prometheus.enabled":       strconv.FormatBool(c.Prometheus.Enabled),
 		"features.advanced_auth":   strconv.FormatBool(c.Features.AdvancedAuth),
@@ -429,7 +440,7 @@ func lookup(c Config, key string) string {
 		"database.target_budget_bytes": strconv.FormatInt(c.Database.TargetBudgetBytes, 10), "database.warning_ratio": strconv.FormatFloat(c.Database.WarningRatio, 'f', -1, 64),
 		"database.critical_ratio": strconv.FormatFloat(c.Database.CriticalRatio, 'f', -1, 64), "database.emergency_pause_ratio": strconv.FormatFloat(c.Database.EmergencyPauseRatio, 'f', -1, 64),
 		"charts.max_points_per_series": strconv.Itoa(c.Charts.MaxPointsPerSeries), "docker.max_concurrency": strconv.Itoa(c.Docker.MaxConcurrency),
-		"checks.max_concurrency": strconv.Itoa(c.Checks.MaxConcurrency), "logs.max_response_bytes": strconv.FormatInt(c.Logs.MaxResponseBytes, 10),
+		"checks.allow_private_targets": strconv.FormatBool(c.Checks.AllowPrivateTargets), "checks.max_concurrency": strconv.Itoa(c.Checks.MaxConcurrency), "logs.max_response_bytes": strconv.FormatInt(c.Logs.MaxResponseBytes, 10),
 		"notifications.allow_private_targets": strconv.FormatBool(c.Notifications.AllowPrivateTargets), "notifications.max_concurrency": strconv.Itoa(c.Notifications.MaxConcurrency), "notifications.queue_capacity": strconv.Itoa(c.Notifications.QueueCapacity), "notifications.delivery_timeout": c.Notifications.DeliveryTimeout.String(), "notifications.reminder_interval": c.Notifications.ReminderInterval.String(),
 		"logs.max_lines": strconv.Itoa(c.Logs.MaxLines), "sessions.idle_timeout": c.Sessions.IdleTimeout.String(),
 		"sessions.absolute_lifetime": c.Sessions.AbsoluteLifetime.String(), "demo": strconv.FormatBool(c.Demo),

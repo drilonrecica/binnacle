@@ -12,7 +12,12 @@ the browser session is signed out or expires; the session is re-checked on
 every 20-second heartbeat.
 
 Redaction covers common authorization headers, password/token/API-key
-assignments, credential-bearing URLs, and private-key blocks. It is
+assignments, credential-bearing URLs, and private-key blocks. A PEM block that
+spans several log lines is tracked across those lines: the `BEGIN` line is
+replaced, the lines up to the `END` marker are dropped, and a block that never
+ends stops hiding lines after 256. Terminal escape sequences (colours, cursor
+moves, titles) are stripped on the server before redaction, so they can neither
+split a secret nor reach the browser or the clipboard. Redaction is
 best-effort, not a guarantee. Applications should never write secrets to logs.
 Up to 16 additional Go RE2 expressions can be supplied with
 `BINNACLE_LOGS_REDACTION_PATTERNS`, separated by `||`.
@@ -20,7 +25,10 @@ Up to 16 additional Go RE2 expressions can be supplied with
 The Host page samples host processes only when requested. It uses two bounded
 reads of the host `/proc`, serializes scans, returns 25 rows by default (100
 maximum), and does not persist results. `/etc/passwd` is mounted read-only only
-to display usernames; numeric UIDs are used when it is unavailable.
+to display usernames; numeric UIDs are used when it is unavailable. Process
+command lines pass through the same redaction rules as logs, so credential
+URLs and `--password=` style arguments are masked; the glued short forms
+`mysql -pSECRET`, `mariadb -pSECRET` and `redis-cli -aSECRET` are masked too.
 
 There are deliberately no process signals, exec, shell, renice, container
 mutation, server-wide log search, indexing, or log persistence endpoints.

@@ -211,6 +211,8 @@ Key variables you may need to set at deployment time:
 - `BINNACLE_MASTER_KEY` — 64-character hex or base64 encoding of a 32-byte key that encrypts notification, Coolify and MFA secrets.
 - `BINNACLE_MASTER_KEY_FILE` — absolute path to a file containing the master key; preferred for production secrets.
 - `BINNACLE_COOLIFY_URL` and `BINNACLE_COOLIFY_API_TOKEN[_FILE]` — optional read-only Coolify enrichment.
+- `BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS` — lets a Coolify URL entered in Settings resolve to a private address; a URL from `BINNACLE_COOLIFY_URL` never needs it. Defaults to `false` and requires restart.
+- `BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS` — private HTTP check target opt-in; defaults to `false` and requires restart.
 - `BINNACLE_FEATURE_ADVANCED_AUTH` — enables TOTP and trusted-proxy authentication; defaults to `false` pending qualification.
 - `BINNACLE_FEATURE_PORTABILITY` — enables personal API tokens, exports, and eligibility for Prometheus; defaults to `false` pending qualification.
 - `BINNACLE_PROMETHEUS_ENABLED` — enables token-authenticated `/metrics` only when portability is also enabled; defaults to `false`.

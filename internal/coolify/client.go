@@ -31,8 +31,16 @@ type APIClient struct {
 type ClientConfig struct {
 	BaseURL, Token    string
 	AllowInsecureHTTP bool
-	HTTPClient        *http.Client
+	// AllowPrivateTargets lets the client reach private-network addresses. The
+	// integration sets it when the URL comes from the environment or when the
+	// deployment opted in with BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS.
+	AllowPrivateTargets bool
+	HTTPClient          *http.Client
 }
+
+// ErrPrivateTarget explains a blocked dial to an operator configuring the URL
+// from the UI, where the private-target opt-in is a deployment setting.
+var ErrPrivateTarget = errors.New("Coolify URL resolves to a private or reserved address; configure it from the environment or set BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS=true")
 
 func NewAPIClient(config ClientConfig) (*APIClient, error) {
 	if strings.TrimSpace(config.Token) == "" {
@@ -50,7 +58,7 @@ func NewAPIClient(config ClientConfig) (*APIClient, error) {
 	}
 	httpClient := config.HTTPClient
 	if httpClient == nil {
-		policy := outbound.Policy{AllowPrivate: true}
+		policy := outbound.Policy{AllowPrivate: config.AllowPrivateTargets}
 		httpClient = &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{Proxy: nil, DialContext: policy.DialContext, TLSHandshakeTimeout: 5 * time.Second, ResponseHeaderTimeout: 10 * time.Second, DisableCompression: true}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	}
 	return &APIClient{base: base, token: config.Token, http: httpClient, sem: make(chan struct{}, 2)}, nil

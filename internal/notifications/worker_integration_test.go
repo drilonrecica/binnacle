@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -77,11 +78,11 @@ func TestWebhookTLSAuthenticationSigningAndRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer listener.Close()
-	type received struct{ auth, key, sig, body string }
+	type received struct{ auth, key, sig, timestamp, body string }
 	got := make(chan received, 1)
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		got <- received{r.Header.Get("Authorization"), r.Header.Get("Idempotency-Key"), r.Header.Get("X-Binnacle-Signature"), string(body)}
+		got <- received{r.Header.Get("Authorization"), r.Header.Get("Idempotency-Key"), r.Header.Get("X-Binnacle-Signature"), r.Header.Get("X-Binnacle-Timestamp"), string(body)}
 		w.WriteHeader(http.StatusNoContent)
 	})}
 	go server.Serve(listener)
@@ -94,8 +95,12 @@ func TestWebhookTLSAuthenticationSigningAndRetry(t *testing.T) {
 	}
 	select {
 	case value := <-got:
+		sent, err := strconv.ParseInt(value.timestamp, 10, 64)
+		if err != nil || time.Since(time.Unix(sent, 0)).Abs() > time.Minute {
+			t.Fatalf("X-Binnacle-Timestamp=%q is not a current unix time: %v", value.timestamp, err)
+		}
 		mac := hmac.New(sha256.New, []byte("sign"))
-		mac.Write([]byte(d.payload))
+		mac.Write([]byte(value.timestamp + "." + d.payload))
 		want := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 		if value.auth != "Bearer token" || value.key != "stable-key" || value.sig != want || value.body != d.payload {
 			t.Fatalf("unexpected webhook request: %+v", value)

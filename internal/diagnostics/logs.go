@@ -15,6 +15,9 @@ const (
 	DefaultLogLines   = 500
 	MaxLogComponents  = 32
 	MaxFollowDuration = 30 * time.Minute
+	// maxPEMLines bounds how many lines an unterminated private-key block may
+	// hide; real keys fit comfortably, and a missing END cannot blank a stream.
+	maxPEMLines = 256
 )
 
 type LogEntry struct {
@@ -87,11 +90,65 @@ func NewLogService(client dockerapi.LogClient, maxLines int, maxBytes int64, cus
 	return &LogService{Docker: client, MaxLines: maxLines, MaxBytes: maxBytes, redactors: compiled}, nil
 }
 
+// Redact applies every redaction rule to one self-contained message. Streams
+// of lines go through lineRedactor instead, which also tracks a private-key
+// block that spans several lines.
 func (s *LogService) Redact(message string) string {
 	for _, r := range s.redactors {
 		message = r.pattern.ReplaceAllString(message, r.replacement)
 	}
 	return message
+}
+
+var (
+	// ansiEscape matches CSI sequences (colours, cursor moves), OSC sequences
+	// (window titles, hyperlinks) and two-byte escapes such as charset selects.
+	ansiEscape = regexp.MustCompile("\x1b\\[[0-?]*[ -/]*[@-~]|\x1b\\][^\x07\x1b]*(?:\x07|\x1b\\\\)|\x1b[ -/]*[0-~]")
+	pemBegin   = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----.*$`)
+	pemEnd     = regexp.MustCompile(`^.*?-----END [A-Z ]*PRIVATE KEY-----`)
+)
+
+// stripANSI removes terminal escape sequences so that colour codes can neither
+// hide a secret from the redactor nor reach the browser and the clipboard.
+func stripANSI(line string) string {
+	if !strings.ContainsRune(line, 0x1b) {
+		return line
+	}
+	return ansiEscape.ReplaceAllString(line, "")
+}
+
+// lineRedactor redacts one log stream line by line. A private key that
+// starts on one line is hidden until its END marker or maxPEMLines, whichever
+// comes first; the lines in between are dropped rather than emitted empty.
+type lineRedactor struct {
+	service *LogService
+	open    bool
+	hidden  int
+}
+
+func (r *lineRedactor) next(raw string) (string, bool) {
+	line := stripANSI(raw)
+	if r.open {
+		if idx := pemEnd.FindStringIndex(line); idx != nil {
+			r.open = false
+			rest := strings.TrimLeft(line[idx[1]:], " \t")
+			if rest == "" {
+				return "", false
+			}
+			return r.service.Redact(rest), true
+		}
+		if r.hidden < maxPEMLines {
+			r.hidden++
+			return "", false
+		}
+		r.open = false
+	}
+	message := r.service.Redact(line)
+	if idx := pemBegin.FindStringIndex(message); idx != nil {
+		r.open, r.hidden = true, 0
+		message = message[:idx[0]] + "[REDACTED PRIVATE KEY]"
+	}
+	return message, true
 }
 
 func (s *LogService) Read(ctx context.Context, request LogRequest, emit func(LogEntry) error) (LogResult, error) {
@@ -116,8 +173,13 @@ func (s *LogService) Read(ctx context.Context, request LogRequest, emit func(Log
 	result := LogResult{Entries: make([]LogEntry, 0, min(limit, 256)), Redaction: "best-effort"}
 	var bytes int64
 	for _, component := range request.Components {
+		redactor := &lineRedactor{service: s}
 		err := s.Docker.ReadLogs(ctx, component, dockerapi.LogOptions{Since: request.From, Until: request.To, Tail: limit + 1, Follow: request.Follow}, func(stream, raw string) error {
-			entry := parseLogEntry(component, stream, s.Redact(raw))
+			message, keep := redactor.next(raw)
+			if !keep {
+				return nil
+			}
+			entry := parseLogEntry(component, stream, message)
 			if request.Search != "" && !strings.Contains(entry.Message, request.Search) {
 				return nil
 			}

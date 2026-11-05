@@ -3,12 +3,16 @@ package coolify
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/drilonrecica/binnacle/internal/outbound"
 )
 
 func TestClientSelectsSafeMetadataAndUsesReadBearerToken(t *testing.T) {
@@ -87,5 +91,25 @@ func TestClientRejectsRedirectAndOversizedResponse(t *testing.T) {
 func TestClientRequiresHTTPSByDefault(t *testing.T) {
 	if _, err := NewAPIClient(ClientConfig{BaseURL: "http://coolify.example.test", Token: "token"}); err == nil {
 		t.Fatal("insecure HTTP accepted")
+	}
+}
+
+func TestClientBlocksPrivateTargetsUnlessAllowed(t *testing.T) {
+	client, err := NewAPIClient(ClientConfig{BaseURL: "https://10.255.255.1", Token: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = client.get(context.Background(), "/projects", &[]string{})
+	if !errors.Is(err, outbound.ErrBlocked) {
+		t.Fatalf("private Coolify target without opt-in: err=%v, want blocked", err)
+	}
+	allowed, err := NewAPIClient(ClientConfig{BaseURL: "https://10.255.255.1", Token: "token", AllowPrivateTargets: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if err = allowed.get(ctx, "/projects", &[]string{}); errors.Is(err, outbound.ErrBlocked) {
+		t.Fatalf("private Coolify target with opt-in was blocked: %v", err)
 	}
 }

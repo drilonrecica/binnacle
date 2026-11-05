@@ -130,3 +130,26 @@ func TestTestUsesOnlyTheSubmittedToken(t *testing.T) {
 		t.Fatalf("tokens seen by the new URL: %v", other.tokens)
 	}
 }
+
+func TestPrivateCoolifyTargetsFollowConfigurationSource(t *testing.T) {
+	fromEnvironment := NewIntegration(nil, ClientConfig{BaseURL: "https://coolify.internal", Token: "token"})
+	config, configured, err := fromEnvironment.effectiveConfig(context.Background())
+	if err != nil || !configured {
+		t.Fatalf("configured=%v err=%v", configured, err)
+	}
+	if !config.AllowPrivateTargets {
+		t.Fatal("environment-configured Coolify must reach private targets")
+	}
+	if !fromEnvironment.testConfig("", "").AllowPrivateTargets {
+		t.Fatal("environment-configured connection test must reach private targets")
+	}
+
+	fromUI := NewIntegration(nil, ClientConfig{})
+	if fromUI.clientConfig("https://coolify.internal", "token").AllowPrivateTargets {
+		t.Fatal("UI-configured Coolify reached private targets without opt-in")
+	}
+	optedIn := NewIntegration(nil, ClientConfig{AllowPrivateTargets: true})
+	if !optedIn.clientConfig("https://coolify.internal", "token").AllowPrivateTargets {
+		t.Fatal("explicit opt-in was ignored for UI-configured Coolify")
+	}
+}

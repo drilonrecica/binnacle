@@ -72,6 +72,7 @@ services:
       BINNACLE_COOLIFY_URL: ${BINNACLE_COOLIFY_URL:-}
       BINNACLE_COOLIFY_API_TOKEN: ${BINNACLE_COOLIFY_API_TOKEN:-}
       BINNACLE_COOLIFY_ALLOW_INSECURE_HTTP: ${BINNACLE_COOLIFY_ALLOW_INSECURE_HTTP:-false}
+      BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS: ${BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS:-false}
       # Set both when a TLS-terminating reverse proxy fronts Binnacle:
       # BINNACLE_PUBLIC_URL=https://binnacle.example.com and the proxy's
       # network, e.g. BINNACLE_TRUSTED_PROXY_CIDRS=172.18.0.0/16. Leave them

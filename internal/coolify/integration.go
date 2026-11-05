@@ -13,6 +13,7 @@ import (
 
 	"github.com/drilonrecica/binnacle/internal/auth"
 	"github.com/drilonrecica/binnacle/internal/metrics"
+	"github.com/drilonrecica/binnacle/internal/outbound"
 )
 
 const coolifyTokenSecret = "coolify.api_token"
@@ -75,6 +76,9 @@ func (i *Integration) Stop(context.Context) error {
 func (i *Integration) effectiveConfig(ctx context.Context) (ClientConfig, bool, error) {
 	config := i.env
 	if i.environmentAuthoritative {
+		// The operator chose this URL at deployment time, so a private
+		// Coolify address is an explicit decision rather than a UI input.
+		config.AllowPrivateTargets = true
 		return config, config.BaseURL != "" && config.Token != "", nil
 	}
 	var raw string
@@ -114,7 +118,25 @@ func (i *Integration) activate(config ClientConfig) error {
 
 // clientConfig binds a URL and token to the deployment's transport settings.
 func (i *Integration) clientConfig(url, token string) ClientConfig {
-	return ClientConfig{BaseURL: url, Token: token, AllowInsecureHTTP: i.env.AllowInsecureHTTP, HTTPClient: i.env.HTTPClient}
+	return ClientConfig{BaseURL: url, Token: token, AllowInsecureHTTP: i.env.AllowInsecureHTTP, AllowPrivateTargets: i.env.AllowPrivateTargets, HTTPClient: i.env.HTTPClient}
+}
+
+// testConfig is the configuration a connection test runs with: the
+// environment pair when it is authoritative, otherwise the submitted URL and
+// token bound to the deployment's transport settings.
+func (i *Integration) testConfig(url, token string) ClientConfig {
+	if i.environmentAuthoritative {
+		config := i.env
+		config.AllowPrivateTargets = true
+		return config
+	}
+	config := i.clientConfig(url, token)
+	if config.BaseURL == "" {
+		i.mu.RLock()
+		config.BaseURL = i.url
+		i.mu.RUnlock()
+	}
+	return config
 }
 
 // storedURL is the URL the stored token was saved with, or "" when none is saved.
@@ -201,24 +223,16 @@ func (i *Integration) Configure(ctx context.Context, url, token string) error {
 // used here, so a test can not carry it to a URL it was not saved for. With
 // environment-authoritative configuration the environment pair is tested.
 func (i *Integration) Test(ctx context.Context, url, token string) error {
-	config := i.clientConfig(url, token)
-	if i.environmentAuthoritative {
-		config = i.env
-	} else {
-		if strings.TrimSpace(token) == "" {
-			return ErrTokenRequired
-		}
-		if config.BaseURL == "" {
-			i.mu.RLock()
-			config.BaseURL = i.url
-			i.mu.RUnlock()
-		}
+	if !i.environmentAuthoritative && strings.TrimSpace(token) == "" {
+		return ErrTokenRequired
 	}
-	client, err := NewAPIClient(config)
+	client, err := NewAPIClient(i.testConfig(url, token))
 	if err != nil {
 		return err
 	}
-	_, err = client.Metadata(ctx)
+	if _, err = client.Metadata(ctx); errors.Is(err, outbound.ErrBlocked) {
+		return ErrPrivateTarget
+	}
 	return err
 }
 func (i *Integration) Status() IntegrationStatus {

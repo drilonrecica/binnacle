@@ -38,7 +38,10 @@ type Process struct {
 type ProcessScanner struct {
 	ProcRoot, PasswdPath string
 	SampleInterval       time.Duration
-	sem                  chan struct{}
+	// Redact runs over every returned command line, normally the log
+	// redactor, so secrets passed as arguments never reach the UI.
+	Redact func(string) string
+	sem    chan struct{}
 }
 
 func NewProcessScanner(procRoot, passwdPath string) *ProcessScanner {
@@ -117,7 +120,40 @@ func (s *ProcessScanner) Scan(ctx context.Context, limit int) ([]Process, error)
 	if len(values) > limit {
 		values = values[:limit]
 	}
+	for i := range values {
+		values[i].Command = s.redactCommand(values[i].Command)
+	}
 	return values, nil
+}
+
+// inlineSecretFlags lists clients that take a secret glued to a short flag,
+// such as "mysql -pSECRET" or "redis-cli -aSECRET", keyed by the executable
+// name prefix. Long "--password=" forms are already covered by the redactor.
+var inlineSecretFlags = []struct{ program, flag string }{{"mysql", "-p"}, {"mariadb", "-p"}, {"redis-cli", "-a"}}
+
+func (s *ProcessScanner) redactCommand(command string) string {
+	fields := strings.Fields(command)
+	if len(fields) > 1 {
+		program := fields[0]
+		if i := strings.LastIndexByte(program, '/'); i >= 0 {
+			program = program[i+1:]
+		}
+		for _, rule := range inlineSecretFlags {
+			if !strings.HasPrefix(program, rule.program) {
+				continue
+			}
+			for i, field := range fields[1:] {
+				if strings.HasPrefix(field, rule.flag) && len(field) > len(rule.flag) {
+					fields[i+1] = rule.flag + "[REDACTED]"
+				}
+			}
+			command = strings.Join(fields, " ")
+		}
+	}
+	if s.Redact != nil {
+		command = s.Redact(command)
+	}
+	return command
 }
 
 func (s *ProcessScanner) sample(ctx context.Context) (uint64, map[int]processSample, error) {

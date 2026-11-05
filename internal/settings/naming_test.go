@@ -66,3 +66,37 @@ func TestNotificationDeploymentSettings(t *testing.T) {
 		t.Fatal("unbounded notification configuration was accepted")
 	}
 }
+
+func TestPrivateTargetOptInsAreDeploymentSettings(t *testing.T) {
+	config := Defaults()
+	if config.Checks.AllowPrivateTargets || config.Coolify.AllowPrivateTargets {
+		t.Fatalf("private targets allowed by default: checks=%+v coolify=%+v", config.Checks, config.Coolify)
+	}
+	for env, key := range map[string]string{"BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS": "checks.allow_private_targets", "BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS": "coolify.allow_private_targets"} {
+		if environment[env] != key {
+			t.Fatalf("%s maps to %q, want %q", env, environment[env], key)
+		}
+		if UIOverridable(key) {
+			t.Fatalf("%s must require restart", key)
+		}
+		if err := apply(&config, map[string]string{key: "true"}); err != nil {
+			t.Fatal(err)
+		}
+		if got := lookup(config, key); got != "true" {
+			t.Fatalf("lookup(%s)=%q after opt-in", key, got)
+		}
+		if err := apply(&config, map[string]string{key: "sometimes"}); err == nil {
+			t.Fatalf("%s accepted a non-boolean", key)
+		}
+	}
+	if !config.Checks.AllowPrivateTargets || !config.Coolify.AllowPrivateTargets {
+		t.Fatalf("opt-ins not applied: checks=%+v coolify=%+v", config.Checks, config.Coolify)
+	}
+	effective := effective(config, map[string]Source{"checks.allow_private_targets": SourceEnvironment})
+	if value := effective["checks.allow_private_targets"]; value.Value != "true" || value.Source != SourceEnvironment || !value.RestartRequired {
+		t.Fatalf("effective checks opt-in=%+v", value)
+	}
+	if _, ok := effective["coolify.allow_private_targets"]; !ok {
+		t.Fatal("coolify opt-in missing from effective settings")
+	}
+}

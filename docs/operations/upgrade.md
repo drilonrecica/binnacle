@@ -90,6 +90,20 @@ migration chain through schema 21 remains intact.
 
 Downgrades are not supported. If you need to revert, restore from a backup taken before the upgrade.
 
+## Behaviour changes to check
+
+- Webhook signatures in releases after v0.6.0 cover `<X-Binnacle-Timestamp>.<body>` instead
+  of the body alone. Update receivers that verify `X-Binnacle-Signature`
+  before upgrading, or deliveries fail with their HTTP error until they are
+  retried. See [Incidents and notifications](../INCIDENTS_AND_NOTIFICATIONS.md).
+- A Coolify URL saved in Settings that resolves to a private address stops
+  working unless the deployment sets `BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS=true`
+  or moves the URL to `BINNACLE_COOLIFY_URL`. Settings → Coolify reports the
+  failed connection test with the setting name.
+- Outbound checks and notifications additionally refuse carrier-grade NAT,
+  NAT64, 6to4 and reserved ranges; see
+  [Checks and alerts](../CHECKS_AND_ALERTS.md).
+
 ## Coolify upgrades
 
 In Coolify, change the image tag in the service settings and redeploy. Coolify will recreate the container while reattaching the persistent volume.

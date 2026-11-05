@@ -27,8 +27,13 @@ API logs, private keys, or secrets.
 Metadata is polled every five minutes and active deployments every 30 seconds.
 Requests have a 10-second timeout, two-request concurrency, response/count
 limits, redirect rejection, DNS revalidation, and cloud-metadata blocking.
-Private Coolify targets are supported. HTTPS is required unless the deployment
-explicitly sets `BINNACLE_COOLIFY_ALLOW_INSECURE_HTTP=true`.
+A Coolify URL configured from the environment (`BINNACLE_COOLIFY_URL`) may
+point at a private address; the operator chose it at deployment time. A URL
+entered in Settings is held to the same outbound policy as checks and
+notifications and reaches a private address only when the deployment sets
+`BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS=true`; otherwise the connection test
+fails with a message naming that setting. HTTPS is required unless the
+deployment explicitly sets `BINNACLE_COOLIFY_ALLOW_INSECURE_HTTP=true`.
 
 The last successful safe metadata cache remains available during an outage.
 Coolify degradation is separate from Docker collection. Display precedence is

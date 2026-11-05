@@ -2,10 +2,12 @@
 package diagnostics
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestReadProcessParsesStatStatusAndCgroup(t *testing.T) {
@@ -44,5 +46,52 @@ func TestProcessHelpersHandleMalformedAndUsers(t *testing.T) {
 	}
 	if containerFromCgroup("0::/user.slice") != "" {
 		t.Fatal("associated host process with a container")
+	}
+}
+
+func TestProcessScanRedactsCommandLines(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"stat":       "cpu 100 0 100 1000 0 0 0 0 0 0\n",
+		"uptime":     "500.00 400.00\n",
+		"42/stat":    "42 (mysql) S 1 1 1 0 0 0 0 0 0 0 20 10 0 0 0 0 1 0 500 0 25",
+		"42/cmdline": "mysql\x00-phunter2\x00--host=db\x00",
+		"42/status":  "Name:\tmysql\nUid:\t1001\t1001\t1001\t1001\n",
+		"43/stat":    "43 (app) S 1 1 1 0 0 0 0 0 0 0 20 10 0 0 0 0 1 0 500 0 25",
+		"43/cmdline": "app\x00--database-url=postgres://app:correct-horse@db/app\x00",
+		"43/status":  "Name:\tapp\nUid:\t1001\t1001\t1001\t1001\n",
+	}
+	for name, body := range files {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	scanner := NewProcessScanner(root, filepath.Join(root, "passwd"))
+	scanner.SampleInterval = time.Millisecond
+	service, err := NewLogService(fakeLogs{}, 5000, 1<<20, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanner.Redact = service.Redact
+	values, err := scanner.Scan(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(values) != 2 {
+		t.Fatalf("processes=%+v", values)
+	}
+	commands := map[int]string{}
+	for _, value := range values {
+		commands[value.PID] = value.Command
+	}
+	if commands[42] != "mysql -p[REDACTED] --host=db" {
+		t.Fatalf("mysql command=%q", commands[42])
+	}
+	if commands[43] != "app --database-url=postgres://app:[REDACTED]@db/app" {
+		t.Fatalf("app command=%q", commands[43])
 	}
 }

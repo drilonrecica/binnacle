@@ -266,9 +266,11 @@ func (w *Worker) webhook(ctx context.Context, d deliveryRow, s ChannelSecrets) (
 		req.Header.Set("Authorization", "Bearer "+s.BearerToken)
 	}
 	if s.SigningSecret != "" {
-		mac := hmac.New(sha256.New, []byte(s.SigningSecret))
-		_, _ = mac.Write([]byte(d.payload))
-		req.Header.Set("X-Binnacle-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+		// The timestamp is part of the signed message so that a captured
+		// delivery cannot be replayed once the receiver's tolerance has passed.
+		timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+		req.Header.Set("X-Binnacle-Timestamp", timestamp)
+		req.Header.Set("X-Binnacle-Signature", signWebhook(s.SigningSecret, timestamp, d.payload))
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -285,6 +287,16 @@ func (w *Worker) webhook(ctx context.Context, d deliveryRow, s ChannelSecrets) (
 		after = parseRetryAfter(resp.Header.Get("Retry-After"))
 	}
 	return retry, fmt.Sprintf("http_%d", resp.StatusCode), after
+}
+
+// signWebhook returns the X-Binnacle-Signature value: an HMAC-SHA256 over
+// "<unix timestamp>.<body>" keyed with the channel's signing secret.
+func signWebhook(secret, timestamp, body string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(timestamp))
+	_, _ = mac.Write([]byte("."))
+	_, _ = mac.Write([]byte(body))
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
 func parseRetryAfter(v string) time.Duration {
 	if seconds, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && seconds > 0 {

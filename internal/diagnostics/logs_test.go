@@ -80,3 +80,65 @@ func TestLogServiceReportsTruncation(t *testing.T) {
 		t.Fatalf("result=%+v", result)
 	}
 }
+
+func TestLogServiceRedactsPrivateKeySpreadAcrossLines(t *testing.T) {
+	service, err := NewLogService(fakeLogs{[]string{
+		`2026-01-02T03:04:05Z starting`,
+		`2026-01-02T03:04:06Z key: -----BEGIN RSA PRIVATE KEY-----`,
+		`2026-01-02T03:04:06Z MIIEowIBAAKCAQEAsecretmaterial`,
+		`2026-01-02T03:04:06Z moresecretmaterial==`,
+		`2026-01-02T03:04:06Z -----END RSA PRIVATE KEY----- loaded`,
+		`2026-01-02T03:04:07Z ready`,
+	}}, 5000, 1<<20, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.Read(context.Background(), LogRequest{Components: []string{"container"}, Limit: 10}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var messages []string
+	for _, entry := range result.Entries {
+		messages = append(messages, entry.Message)
+	}
+	want := []string{"starting", "key: [REDACTED PRIVATE KEY]", "loaded", "ready"}
+	if strings.Join(messages, "|") != strings.Join(want, "|") {
+		t.Fatalf("messages=%q, want %q", messages, want)
+	}
+}
+
+func TestLogServiceClosesUnterminatedPrivateKeyAfterBound(t *testing.T) {
+	lines := []string{"-----BEGIN PRIVATE KEY-----"}
+	for i := 0; i < maxPEMLines+5; i++ {
+		lines = append(lines, "material")
+	}
+	lines = append(lines, "after")
+	service, _ := NewLogService(fakeLogs{lines}, 5000, 1<<20, nil)
+	result, err := service.Read(context.Background(), LogRequest{Components: []string{"container"}, Limit: 5000}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(result.Entries); n != 1+5+1 {
+		t.Fatalf("entries=%d: an unterminated block must stop hiding lines after %d", n, maxPEMLines)
+	}
+	if last := result.Entries[len(result.Entries)-1].Message; last != "after" {
+		t.Fatalf("last=%q", last)
+	}
+}
+
+func TestLogServiceStripsANSIEscapesBeforeRedaction(t *testing.T) {
+	service, _ := NewLogService(fakeLogs{[]string{
+		"\x1b[31mERROR\x1b[0m password=\x1b[1mhunter2\x1b[0m",
+		"\x1b]0;title\x07plain \x1b(Bline",
+	}}, 5000, 1<<20, nil)
+	result, err := service.Read(context.Background(), LogRequest{Components: []string{"container"}, Limit: 10}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Entries[0]; got.Message != "ERROR password=[REDACTED]" || got.Severity != "error" {
+		t.Fatalf("entry=%+v", got)
+	}
+	if got := result.Entries[1].Message; got != "plain line" {
+		t.Fatalf("message=%q", got)
+	}
+}
