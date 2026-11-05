@@ -45,6 +45,9 @@ func (m *Manager) WriteBatch(ctx context.Context, b metrics.PersistenceBatch) er
 			return e
 		}
 		for _, resource := range s.Resources {
+			if !m.freshResource(resource) {
+				continue
+			}
 			_, e = tx.ExecContext(ctx, "INSERT OR REPLACE INTO resource_samples_10s(ts,resource_id,cpu_host_pct,memory_working_set_bytes,network_rx_bps,network_tx_bps,block_read_bps,block_write_bps,active_instance_count,status) VALUES(?,?,?,?,?,?,?,?,?,?)", s.At.UnixMilli(), resource.ID, resource.CPUHostPercent, resource.MemoryBytes, resource.RXBPS, resource.TXBPS, resource.BlockReadBPS, resource.BlockWriteBPS, len(resource.Components), resource.Status)
 			if e != nil {
 				return e
@@ -75,7 +78,25 @@ func (m *Manager) WriteBatch(ctx context.Context, b metrics.PersistenceBatch) er
 	if e = m.writeCollectorStateEvents(ctx, tx, s.At, s.Collectors); e != nil {
 		return e
 	}
-	return tx.Commit()
+	if e = tx.Commit(); e != nil {
+		return e
+	}
+	if s.Sequence > 0 && s.At.After(m.lastSampleAt) {
+		m.lastSampleAt = s.At
+	}
+	return nil
+}
+
+// freshResource reports whether a resource of the batch is a measurement not
+// stored yet. A stale resource (a failed Docker tick) and one whose
+// observation is not newer than the previous stored batch (a Docker tick still
+// running while the host loop republished) are skipped, so an outage leaves a
+// gap in the history instead of a flat line (COL-5, ADR 022 §3).
+func (m *Manager) freshResource(resource metrics.ResourceSnapshot) bool {
+	if resource.Stale {
+		return false
+	}
+	return m.lastSampleAt.IsZero() || resource.LastSeenAt.After(m.lastSampleAt)
 }
 
 func (m *Manager) writeCollectorStateEvents(ctx context.Context, tx querier, at time.Time, collectors map[string]metrics.CollectorHealth) error {

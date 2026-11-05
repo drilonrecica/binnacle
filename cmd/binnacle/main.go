@@ -167,6 +167,8 @@ func main() {
 		cache := dockercollector.NewCache()
 		productionSampler = &production.Sampler{Engine: engine, Logger: log, Docker: dockerEngine, Cache: cache, Store: store, HostProc: config.Paths.HostProc, HostSys: config.Paths.HostSys, HostRoot: config.Paths.HostRoot, DataDir: config.Paths.DataDir, MaxDockerConcurrency: config.Docker.MaxConcurrency, Interval: func() time.Duration {
 			return settingsService.Current().Collection.HostInterval
+		}, DockerInterval: func() time.Duration {
+			return settingsService.Current().Collection.ContainerInterval
 		}}
 		application.Add(productionSampler)
 	}

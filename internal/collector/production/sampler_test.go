@@ -80,11 +80,11 @@ func TestSamplerCollectsMergedHostAndResourceState(t *testing.T) {
 	if err != nil || boot != "boot-one" || host.MemoryUsedBytes == nil || fsReason != "" {
 		t.Fatalf("host=%+v boot=%q err=%v", host, boot, err)
 	}
-	if _, err = sampler.collectDocker(context.Background(), now, host.MemoryTotalBytes); err != nil {
+	if _, _, err = sampler.collectDocker(context.Background(), now, host.MemoryTotalBytes); err != nil {
 		t.Fatal(err)
 	}
 	docker.stats.CPU.TotalUsage, docker.stats.CPU.SystemUsage = 200, 2000
-	resources, err := sampler.collectDocker(context.Background(), now.Add(2*time.Second), host.MemoryTotalBytes)
+	resources, _, err := sampler.collectDocker(context.Background(), now.Add(2*time.Second), host.MemoryTotalBytes)
 	if err != nil || len(resources) != 1 || resources[0].CPUHostPercent == nil || resources[0].Project != "project" || len(resources[0].Components) != 1 {
 		t.Fatalf("resources=%+v err=%v", resources, err)
 	}

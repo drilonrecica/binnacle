@@ -24,6 +24,9 @@ type scriptedDocker struct {
 	// returns a stream that stays open until the context ends.
 	streams       []chan dockerapi.Event
 	subscriptions []time.Time
+	// listErr fails List; stats replaces the default Stats answer.
+	listErr error
+	stats   func(ctx context.Context, id string) (dockerapi.Stats, error)
 }
 
 func newScriptedDocker() *scriptedDocker {
@@ -71,6 +74,9 @@ func (d *scriptedDocker) calls(id string) int {
 func (d *scriptedDocker) List(context.Context) ([]dockerapi.Container, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.listErr != nil {
+		return nil, d.listErr
+	}
 	return append([]dockerapi.Container(nil), d.list...), nil
 }
 func (d *scriptedDocker) Inspect(_ context.Context, id string) (dockerapi.Inspect, error) {
@@ -83,7 +89,13 @@ func (d *scriptedDocker) Inspect(_ context.Context, id string) (dockerapi.Inspec
 	}
 	return v, nil
 }
-func (d *scriptedDocker) Stats(context.Context, string) (dockerapi.Stats, error) {
+func (d *scriptedDocker) Stats(ctx context.Context, id string) (dockerapi.Stats, error) {
+	d.mu.Lock()
+	stats := d.stats
+	d.mu.Unlock()
+	if stats != nil {
+		return stats(ctx, id)
+	}
 	return dockerapi.Stats{CPU: dockerapi.CPUStats{TotalUsage: 100, SystemUsage: 1000, OnlineCPUs: 2}, Memory: dockerapi.MemoryStats{Usage: 100, Limit: 1000}}, nil
 }
 func (d *scriptedDocker) Events(ctx context.Context) <-chan dockerapi.Event {
@@ -113,7 +125,7 @@ var stateEpoch = time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
 // tickAt runs one Docker tick and returns the component of id.
 func tickAt(t *testing.T, s *Sampler, at time.Time, id string) (metrics.ResourceComponent, []metrics.ResourceSnapshot) {
 	t.Helper()
-	resources, err := s.collectDocker(context.Background(), at, nil)
+	resources, _, err := s.collectDocker(context.Background(), at, nil)
 	if err != nil {
 		t.Fatalf("collectDocker: %v", err)
 	}
@@ -432,7 +444,8 @@ func TestEventsDisconnectedReason(t *testing.T) {
 	engine := metrics.NewEngine(16)
 	s := &Sampler{Engine: engine, Docker: docker, Cache: dockercollector.NewCache(), HostProc: t.TempDir()}
 	s.eventsDisconnected.Store(true)
-	s.collect(context.Background(), nil)
+	s.hostTick()
+	s.dockerTick(context.Background())
 	if got := engine.Snapshot().Collectors["docker"]; got.Reason != "events disconnected" || got.State != metrics.CollectorHealthy {
 		t.Fatalf("docker collector=%+v", got)
 	}

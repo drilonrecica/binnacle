@@ -129,17 +129,21 @@ type ResourceComponent struct {
 	PIDs           *uint64        `json:"pids,omitempty"`
 }
 type ResourceSnapshot struct {
-	ID             ResourceID          `json:"id"`
-	Name           string              `json:"name"`
-	Status         ResourceStatus      `json:"status"`
-	SignalStatus   ResourceStatus      `json:"signalStatus"`
-	CPUHostPercent *float64            `json:"cpuHostPct"`
-	MemoryBytes    *int64              `json:"memoryBytes"`
-	RXBPS          *float64            `json:"rxBps"`
-	TXBPS          *float64            `json:"txBps"`
-	BlockReadBPS   *float64            `json:"blockReadBps"`
-	BlockWriteBPS  *float64            `json:"blockWriteBps"`
-	LastSeenAt     time.Time           `json:"lastSeenAt"`
+	ID             ResourceID     `json:"id"`
+	Name           string         `json:"name"`
+	Status         ResourceStatus `json:"status"`
+	SignalStatus   ResourceStatus `json:"signalStatus"`
+	CPUHostPercent *float64       `json:"cpuHostPct"`
+	MemoryBytes    *int64         `json:"memoryBytes"`
+	RXBPS          *float64       `json:"rxBps"`
+	TXBPS          *float64       `json:"txBps"`
+	BlockReadBPS   *float64       `json:"blockReadBps"`
+	BlockWriteBPS  *float64       `json:"blockWriteBps"`
+	LastSeenAt     time.Time      `json:"lastSeenAt"`
+	// Stale marks a resource republished from the last successful Docker
+	// tick after a failed one: identities only, every metric nil, status
+	// unknown and LastSeenAt unchanged. Persistence never stores it.
+	Stale          bool                `json:"stale"`
 	Category       string              `json:"category,omitempty"`
 	Context        string              `json:"context,omitempty"`
 	Project        string              `json:"project,omitempty"`

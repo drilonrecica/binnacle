@@ -2,7 +2,6 @@
 package production
 
 import (
-	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -114,7 +113,7 @@ func TestSamplerFilesystemDegradation(t *testing.T) {
 	if err != nil || host.MemoryUsedBytes == nil || len(filesystems) != 0 || reason != "host root not mounted; filesystem metrics unavailable" {
 		t.Fatalf("err=%v filesystems=%d reason=%q", err, len(filesystems), reason)
 	}
-	sampler.collect(context.Background(), nil)
+	sampler.hostTick()
 	if h := engine.Snapshot().Collectors["host"]; h.State != metrics.CollectorDegraded || h.Reason != reason {
 		t.Fatalf("host collector %+v", h)
 	}

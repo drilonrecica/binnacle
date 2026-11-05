@@ -24,6 +24,12 @@ curl -H "Authorization: Bearer $BINNACLE_TOKEN" \
   https://binnacle.example/api/v1/resources
 ```
 
+Resources returned by `/api/v1/resources` and the live stream carry a
+boolean `stale` (additive in v1.0). It is `true` when the Docker collector
+failed its last tick: the resource is the last-known one, its metrics are
+`null`, its status is `unknown` and `lastSeenAt` is the time it was last
+measured. The Prometheus exporter omits those metrics.
+
 ## Attachment exports
 
 | Endpoint | Required scope |

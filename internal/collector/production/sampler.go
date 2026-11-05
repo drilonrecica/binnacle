@@ -58,6 +58,19 @@ const (
 	eventsStableAfter = 60 * time.Second
 )
 
+// Docker tick bounds (ADR 022 §2, §3). Constants, like the ones above.
+const (
+	// dockerTickDeadline bounds one whole Docker tick; containers not reached
+	// before it count as per-container failures.
+	dockerTickDeadline = 20 * time.Second
+	// skipLogInterval coalesces the warning for a skipped container to one
+	// line per container per interval.
+	skipLogInterval = time.Minute
+)
+
+// Sampler runs the host loop and the Docker loop in separate goroutines and
+// publishes one snapshot merged from the latest result of each (ADR 022 §1),
+// so a slow or hung Docker daemon never delays host metrics.
 type Sampler struct {
 	Engine   *metrics.Engine
 	Docker   dockerapi.Client
@@ -68,9 +81,12 @@ type Sampler struct {
 	HostSys string
 	// HostRoot is the read-only bind mount of the host's "/" under which
 	// filesystems are measured with statfs; "/" for a standalone binary.
-	HostRoot             string
-	DataDir              string
+	HostRoot string
+	DataDir  string
+	// Interval is the host loop interval; DockerInterval the Docker loop's,
+	// which falls back to Interval when nil.
 	Interval             func() time.Duration
+	DockerInterval       func() time.Duration
 	MaxDockerConcurrency int
 	// Logger receives collector diagnostics; nil means slog.Default().
 	Logger *slog.Logger
@@ -79,19 +95,32 @@ type Sampler struct {
 		UpsertResource(context.Context, storage.Resource) error
 		ArchiveMissingResources(context.Context, []string, time.Time) error
 	}
-	cancel            context.CancelFunc
-	mu                sync.Mutex
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+
+	// mu guards merged, the only state both loops touch.
+	mu     sync.Mutex
+	merged mergedState
+
+	// Host loop state.
 	previousCPU       hostcollector.CPUCounters
 	haveCPU           bool
 	previousNetwork   hostcollector.NetworkCounters
 	previousNetworkAt time.Time
 	previousDisk      hostcollector.DiskCounters
 	previousDiskAt    time.Time
-	previousStats     map[string]dockerSample
-	lastResources     []metrics.ResourceSnapshot
 	hostFailures      int
-	dockerFailures    int
-	LastDurationNanos atomic.Int64
+	hostFreshAt       time.Time
+	hostNanos         atomic.Int64
+
+	// Docker loop state.
+	previousStats  map[string]dockerSample
+	lastResources  []metrics.ResourceSnapshot
+	dockerFailures int
+	dockerFreshAt  time.Time
+	dockerNanos    atomic.Int64
+	// skipLogged holds when a skipped container was last logged.
+	skipLogged map[string]time.Time
 	// rediscover asks the next Docker tick to re-inspect every container: set
 	// after an events resubscription and after a dropped event.
 	rediscover atomic.Bool
@@ -99,13 +128,30 @@ type Sampler struct {
 	// resubscribed; the docker collector reason says so.
 	eventsDisconnected atomic.Bool
 	eventsDropped      atomic.Int64
+
 	// eventsBackoff overrides the resubscription backoff bounds in tests:
 	// minimum, cap and the open duration after which it resets.
 	eventsBackoff *[3]time.Duration
+	// callTimeout and tickDeadline override the Docker bounds in tests.
+	callTimeout, tickDeadline time.Duration
 	// statfs and mountPoint replace unix.Statfs and isMountPoint in tests.
 	statfs     func(string, *unix.Statfs_t) error
 	mountPoint func(string) bool
 }
+
+// mergedState is the latest result of each loop plus the events waiting for
+// the next publish.
+type mergedState struct {
+	hostTicked   bool
+	host         metrics.HostObservation
+	boot         string
+	hostHealth   metrics.CollectorHealth
+	dockerTicked bool
+	resources    []metrics.ResourceSnapshot
+	dockerHealth metrics.CollectorHealth
+	pending      []metrics.Event
+}
+
 type dockerSample struct {
 	value dockerapi.Stats
 	at    time.Time
@@ -116,12 +162,25 @@ func (s *Sampler) Start(ctx context.Context) error {
 		return errors.New("metrics engine is required")
 	}
 	ctx, s.cancel = context.WithCancel(ctx)
-	go s.run(ctx)
+	s.wg.Add(2)
+	go func() { defer s.wg.Done(); s.hostLoop(ctx) }()
+	go func() { defer s.wg.Done(); s.dockerLoop(ctx) }()
 	return nil
 }
-func (s *Sampler) Stop(context.Context) error {
+
+// Stop cancels both loops and waits for them within ctx before closing the
+// Docker client, so an in-flight call ends through its context rather than on
+// a closed transport (ADR 022 §7).
+func (s *Sampler) Stop(ctx context.Context) error {
 	if s.cancel != nil {
 		s.cancel()
+	}
+	done := make(chan struct{})
+	go func() { s.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		s.logger().Warn("collector loops did not stop before the shutdown deadline")
 	}
 	if closer, ok := s.Docker.(interface{ Close() error }); ok {
 		return closer.Close()
@@ -129,22 +188,33 @@ func (s *Sampler) Stop(context.Context) error {
 	return nil
 }
 
-func (s *Sampler) run(ctx context.Context) {
+// hostLoop collects the host, publishes, then waits one host interval.
+func (s *Sampler) hostLoop(ctx context.Context) {
+	for {
+		s.hostTick()
+		if !sleep(ctx, interval(s.Interval)) {
+			return
+		}
+	}
+}
+
+// dockerLoop collects Docker, publishes, then waits one Docker interval while
+// applying events as they arrive. It owns the events goroutine.
+func (s *Sampler) dockerLoop(ctx context.Context) {
 	var dockerEvents <-chan dockerapi.Event
 	if s.Docker != nil {
 		queue := make(chan dockerapi.Event, eventQueueSize)
-		go s.watchEvents(ctx, queue)
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); s.watchEvents(ctx, queue) }()
 		dockerEvents = queue
 	}
-	pending := make([]metrics.Event, 0, 16)
+	every := s.DockerInterval
+	if every == nil {
+		every = s.Interval
+	}
 	for {
-		s.collect(ctx, pending)
-		pending = pending[:0]
-		interval := 2 * time.Second
-		if s.Interval != nil && s.Interval() >= time.Second {
-			interval = s.Interval()
-		}
-		timer := time.NewTimer(interval)
+		s.dockerTick(ctx)
+		timer := time.NewTimer(interval(every))
 	wait:
 		for {
 			select {
@@ -153,10 +223,7 @@ func (s *Sampler) run(ctx context.Context) {
 				return
 			case event := <-dockerEvents:
 				if normalized, accepted := s.handleDockerEvent(ctx, event); accepted {
-					if len(pending) == pendingEventLimit {
-						pending = pending[1:]
-					}
-					pending = append(pending, normalized)
+					s.addPending(normalized)
 				}
 			case <-timer.C:
 				break wait
@@ -165,56 +232,171 @@ func (s *Sampler) run(ctx context.Context) {
 	}
 }
 
-func (s *Sampler) collect(ctx context.Context, pending []metrics.Event) {
+// interval returns the configured loop interval, 2 s when unset or below 1 s.
+func interval(configured func() time.Duration) time.Duration {
+	if configured != nil {
+		if v := configured(); v >= time.Second {
+			return v
+		}
+	}
+	return 2 * time.Second
+}
+
+func sleep(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+// hostTick reads one host sample, merges it and publishes.
+func (s *Sampler) hostTick() {
 	started := time.Now()
-	defer func() { s.LastDurationNanos.Store(time.Since(started).Nanoseconds()) }()
+	defer func() { s.hostNanos.Store(time.Since(started).Nanoseconds()) }()
 	// started keeps its monotonic reading for elapsed time between ticks;
 	// UTC() strips it, so only the stored and published copy is UTC (COL-8).
 	now := started.UTC()
-	host, filesystems, boot, fsReason, hostErr := s.collectHost(started)
+	host, filesystems, boot, fsReason, err := s.collectHost(started)
 	if len(filesystems) > 0 {
 		s.Engine.PublishFilesystems(filesystems)
 	}
-	collectors := map[string]metrics.CollectorHealth{}
-	if hostErr != nil {
+	var h metrics.CollectorHealth
+	if err != nil {
 		s.hostFailures++
-		collectors["host"] = health("host", s.hostFailures, hostErr, now)
+		h = health("host", s.hostFailures, err, s.hostFreshAt)
 	} else {
 		s.hostFailures = 0
-		collectors["host"] = health("host", 0, nil, now)
+		s.hostFreshAt = now
+		h = health("host", 0, nil, now)
 		if fsReason != "" {
-			h := collectors["host"]
 			h.State, h.Reason = metrics.CollectorDegraded, fsReason
-			collectors["host"] = h
 		}
 	}
-	resourceValues, dockerErr := s.collectDocker(ctx, started, host.MemoryTotalBytes)
-	if dockerErr != nil {
+	s.mu.Lock()
+	s.merged.hostTicked = true
+	s.merged.host, s.merged.hostHealth = host, h
+	if err == nil {
+		s.merged.boot = boot
+	}
+	s.mu.Unlock()
+	s.publish()
+}
+
+// dockerTick runs one bounded Docker collection, merges it and publishes.
+// Only a List failure fails the tick; then the last resource set is
+// republished as stale, never as fresh measurements (COL-5).
+func (s *Sampler) dockerTick(ctx context.Context) {
+	started := time.Now()
+	defer func() { s.dockerNanos.Store(time.Since(started).Nanoseconds()) }()
+	now := started.UTC()
+	deadline := s.tickDeadline
+	if deadline <= 0 {
+		deadline = dockerTickDeadline
+	}
+	tickCtx, cancel := context.WithTimeout(ctx, deadline)
+	resources, partial, err := s.collectDocker(tickCtx, started, s.hostMemoryTotal())
+	cancel()
+	if ctx.Err() != nil {
+		return
+	}
+	var h metrics.CollectorHealth
+	if err != nil {
 		s.dockerFailures++
-		collectors["docker"] = health("docker", s.dockerFailures, dockerErr, now)
-		resourceValues = append([]metrics.ResourceSnapshot(nil), s.lastResources...)
+		h = health("docker", s.dockerFailures, err, s.dockerFreshAt)
+		resources = staleResources(s.lastResources)
 	} else {
 		s.dockerFailures = 0
-		collectors["docker"] = health("docker", 0, nil, now)
+		s.dockerFreshAt = now
+		h = health("docker", 0, nil, now)
+		h.Reason = partial
 		if s.eventsDisconnected.Load() {
 			// State still comes from List every tick; only the fast path
 			// between ticks is missing (ADR 022 §5).
-			h := collectors["docker"]
-			h.Reason = "events disconnected"
-			collectors["docker"] = h
+			h.Reason = joinReason(h.Reason, "events disconnected")
 		}
-		s.lastResources = append([]metrics.ResourceSnapshot(nil), resourceValues...)
-		if s.Store != nil {
-			_ = s.Store.UpsertHost(ctx, "host", storage.HostIdentity("", "binnacle-local-host"), "Server")
-			ids := make([]string, 0, len(resourceValues))
-			for _, resource := range resourceValues {
-				ids = append(ids, string(resource.ID))
-				_ = s.Store.UpsertResource(ctx, storage.Resource{ID: string(resource.ID), HostID: "host", StableKey: resource.StableKey, SourceKind: resource.SourceKind, Name: resource.Name, Context: resource.Context, ProjectName: resource.Project, EnvironmentName: resource.Environment, Category: resource.Category, Status: string(resource.Status)})
-			}
-			_ = s.Store.ArchiveMissingResources(ctx, ids, now.Add(-5*time.Minute))
+		s.lastResources = resources
+		s.storeResources(ctx, resources, now)
+	}
+	s.mu.Lock()
+	s.merged.dockerTicked = true
+	s.merged.resources, s.merged.dockerHealth = resources, h
+	s.mu.Unlock()
+	s.publish()
+}
+
+// storeResources records the resource identities of a successful tick.
+func (s *Sampler) storeResources(ctx context.Context, resources []metrics.ResourceSnapshot, now time.Time) {
+	if s.Store == nil {
+		return
+	}
+	if err := s.Store.UpsertHost(ctx, "host", storage.HostIdentity("", "binnacle-local-host"), "Server"); err != nil {
+		s.logger().Warn("storing host identity failed", "error", err.Error())
+	}
+	ids := make([]string, 0, len(resources))
+	for _, resource := range resources {
+		ids = append(ids, string(resource.ID))
+		if err := s.Store.UpsertResource(ctx, storage.Resource{ID: string(resource.ID), HostID: "host", StableKey: resource.StableKey, SourceKind: resource.SourceKind, Name: resource.Name, Context: resource.Context, ProjectName: resource.Project, EnvironmentName: resource.Environment, Category: resource.Category, Status: string(resource.Status)}); err != nil {
+			s.logger().Warn("storing resource failed", "resource", string(resource.ID), "error", err.Error())
 		}
 	}
-	s.Engine.Publish(metrics.Snapshot{At: now, BootIdentity: metrics.BootIdentity(boot), Host: host, Resources: resourceValues, Collectors: collectors}, pending...)
+	if err := s.Store.ArchiveMissingResources(ctx, ids, now.Add(-5*time.Minute)); err != nil {
+		s.logger().Warn("archiving missing resources failed", "error", err.Error())
+	}
+}
+
+// staleResources copies the last successful resource set with identities
+// only: every metric nil, status unknown, LastSeenAt unchanged, Stale set.
+func staleResources(last []metrics.ResourceSnapshot) []metrics.ResourceSnapshot {
+	out := make([]metrics.ResourceSnapshot, 0, len(last))
+	for _, r := range last {
+		stale := metrics.ResourceSnapshot{ID: r.ID, Name: r.Name, Status: metrics.StatusUnknown, LastSeenAt: r.LastSeenAt, Stale: true, Category: r.Category, Context: r.Context, Project: r.Project, Environment: r.Environment, Infrastructure: r.Infrastructure, StableKey: r.StableKey, SourceKind: r.SourceKind, ManualName: r.ManualName, ManualContext: r.ManualContext}
+		for _, c := range r.Components {
+			stale.Components = append(stale.Components, metrics.ResourceComponent{ID: c.ID, Name: c.Name, Status: metrics.StatusUnknown})
+		}
+		out = append(out, stale)
+	}
+	return out
+}
+
+func (s *Sampler) hostMemoryTotal() *int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.merged.host.MemoryTotalBytes
+}
+
+// addPending queues one event for the next publish, dropping the oldest
+// beyond pendingEventLimit.
+func (s *Sampler) addPending(event metrics.Event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.merged.pending) == pendingEventLimit {
+		s.merged.pending = s.merged.pending[1:]
+	}
+	s.merged.pending = append(s.merged.pending, event)
+}
+
+// publish sends the merged snapshot. Nothing is published before the first
+// host tick, so a snapshot never carries an empty host by accident.
+// Snapshot.At is the publish time; HostObservation.At and LastSeenAt carry
+// the time of the tick that produced each half (ADR 022 §1).
+func (s *Sampler) publish() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m := &s.merged
+	if !m.hostTicked {
+		return
+	}
+	collectors := map[string]metrics.CollectorHealth{"host": m.hostHealth}
+	if m.dockerTicked {
+		collectors["docker"] = m.dockerHealth
+	}
+	pending := m.pending
+	m.pending = nil
+	s.Engine.Publish(metrics.Snapshot{At: time.Now().UTC(), BootIdentity: metrics.BootIdentity(m.boot), Host: m.host, Resources: m.resources, Collectors: collectors}, pending...)
 }
 
 // watchEvents keeps one Docker events subscription open and forwards its
@@ -340,12 +522,19 @@ func (s *Sampler) logger() *slog.Logger {
 	return slog.Default()
 }
 
+// CollectionDuration is the longer of the latest host and Docker tick.
 func (s *Sampler) CollectionDuration() time.Duration {
 	if s == nil {
 		return 0
 	}
-	return time.Duration(s.LastDurationNanos.Load())
+	return max(s.HostDuration(), s.DockerDuration())
 }
+
+// HostDuration is the duration of the latest host tick.
+func (s *Sampler) HostDuration() time.Duration { return time.Duration(s.hostNanos.Load()) }
+
+// DockerDuration is the duration of the latest Docker tick.
+func (s *Sampler) DockerDuration() time.Duration { return time.Duration(s.dockerNanos.Load()) }
 
 // collectHost reads one host sample. tick should carry a monotonic clock
 // reading: rates use it for elapsed time, and its UTC copy stamps the sample.
@@ -656,21 +845,26 @@ type resourceGroup struct {
 
 // collectDocker samples every container. tick should carry a monotonic clock
 // reading for the elapsed time of IO rates; its UTC copy stamps the result.
-func (s *Sampler) collectDocker(ctx context.Context, tick time.Time, hostTotal *int64) ([]metrics.ResourceSnapshot, error) {
+// Only a List error is returned. An Inspect or Stats error, including the
+// deadline of ctx, skips that one container: its component is unknown with nil
+// metrics and its previous sample is dropped. The returned reason counts the
+// skipped containers and is empty when none was skipped (ADR 022 §3).
+func (s *Sampler) collectDocker(ctx context.Context, tick time.Time, hostTotal *int64) ([]metrics.ResourceSnapshot, string, error) {
 	now := tick.UTC()
 	if s.Docker == nil {
-		return nil, errors.New("Docker client is not configured")
+		return nil, "", errors.New("Docker client is not configured")
 	}
-	containers, err := s.Docker.List(ctx)
+	request, cancel := context.WithTimeout(ctx, s.dockerCallTimeout())
+	containers, err := s.Docker.List(request)
+	cancel()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	groups := map[string]*resourceGroup{}
 	if s.previousStats == nil {
 		s.previousStats = map[string]dockerSample{}
 	}
-	// The list is the source of truth for which containers exist: both
-	// per-container maps shrink to it on every tick (COL-8).
+	// The list is the source of truth for which containers exist: every
+	// per-container map shrinks to it on every tick (COL-8).
 	present := make(map[string]struct{}, len(containers))
 	for _, container := range containers {
 		present[container.ID] = struct{}{}
@@ -680,17 +874,78 @@ func (s *Sampler) collectDocker(ctx context.Context, tick time.Time, hostTotal *
 			delete(s.previousStats, id)
 		}
 	}
+	for id := range s.skipLogged {
+		if _, ok := present[id]; !ok {
+			delete(s.skipLogged, id)
+		}
+	}
 	if s.Cache != nil {
 		s.Cache.Retain(present)
 	}
+
 	full := s.rediscover.Swap(false)
+	inspects := make(map[string]dockerapi.Inspect, len(containers))
+	var toInspect []string
 	for _, container := range containers {
-		inspect, inspectErr := s.inspect(ctx, container, tick, full)
-		if inspectErr != nil {
+		if v, ok := s.cachedInspect(container, tick, full); ok {
+			inspects[container.ID] = v
+		} else {
+			toInspect = append(toInspect, container.ID)
+		}
+	}
+	listed := make(map[string]dockerapi.Container, len(containers))
+	for _, container := range containers {
+		listed[container.ID] = container
+	}
+	failures := map[string]error{}
+	for id, result := range dockercollector.Collect(ctx, toInspect, s.MaxDockerConcurrency, s.dockerCallTimeout(), s.Docker.Inspect) {
+		if result.Err != nil {
+			failures[id] = result.Err
 			if full {
 				s.rediscover.Store(true)
 			}
-			return nil, inspectErr
+			// Cached metadata, though due for a refresh, still places the
+			// container in its resource; without it the container is omitted.
+			if s.Cache != nil {
+				if v, ok := s.Cache.Get(id); ok {
+					inspect := v.Inspect()
+					if state := listed[id].State; state != "" {
+						inspect.State = state
+					}
+					inspects[id] = inspect
+				}
+			}
+			continue
+		}
+		inspect := result.Value
+		if state := listed[id].State; state != "" {
+			inspect.State = state
+		}
+		if s.Cache != nil {
+			s.Cache.Set(dockercollector.MetadataFromInspect(inspect, tick))
+		}
+		inspects[id] = inspect
+	}
+
+	var running []string
+	for _, container := range containers {
+		if inspect, ok := inspects[container.ID]; ok && failures[container.ID] == nil && inspect.State == "running" {
+			running = append(running, container.ID)
+		}
+	}
+	stats := dockercollector.Collect(ctx, running, s.MaxDockerConcurrency, s.dockerCallTimeout(), s.Docker.Stats)
+	for id, result := range stats {
+		if result.Err != nil {
+			failures[id] = result.Err
+		}
+	}
+
+	groups := map[string]*resourceGroup{}
+	for _, container := range containers {
+		inspect, ok := inspects[container.ID]
+		if !ok {
+			delete(s.previousStats, container.ID)
+			continue
 		}
 		identity := containerIdentity(inspect)
 		resolvedCategory := category(inspect.Labels, identity)
@@ -711,6 +966,13 @@ func (s *Sampler) collectDocker(ctx context.Context, tick time.Time, hostTotal *
 			}
 			groups[identity.StableKey] = group
 		}
+		if failures[container.ID] != nil {
+			// Skipped: unknown with nil metrics, and no rate across the gap.
+			delete(s.previousStats, container.ID)
+			group.status = append(group.status, metrics.StatusUnknown)
+			group.components = append(group.components, metrics.ResourceComponent{ID: metrics.ContainerID(container.ID), Name: inspect.Name, Status: metrics.StatusUnknown, RuntimeState: container.State})
+			continue
+		}
 		status := containerStatus(inspect.State, inspect.Health)
 		group.status = append(group.status, status)
 		component := metrics.ResourceComponent{ID: metrics.ContainerID(container.ID), Name: inspect.Name, Status: status, RuntimeState: inspect.State, HealthStatus: inspect.Health}
@@ -720,45 +982,10 @@ func (s *Sampler) collectDocker(ctx context.Context, tick time.Time, hostTotal *
 			group.components = append(group.components, component)
 			continue
 		}
-		stats, statsErr := s.Docker.Stats(ctx, container.ID)
-		if statsErr != nil {
-			return nil, statsErr
-		}
-		memory := dockercollector.NormalizeMemory(dockercollector.MemoryStats{Usage: stats.Memory.Usage, Limit: stats.Memory.Limit, InactiveFile: stats.Memory.InactiveFile, PIDs: stats.PIDs}, uint64Value(hostTotal))
-		component.MemoryBytes = int64PtrFromFloat64Bytes(memory.WorkingSet)
-		component.PIDs = stats.PIDs
-		if memory.WorkingSet != nil {
-			group.memory += *memory.WorkingSet
-			group.memoryOK = true
-		}
-		if previous, ok := s.previousStats[container.ID]; ok {
-			cpu := dockercollector.NormalizeCPU(dockercollector.CPUStats{Total: previous.value.CPU.TotalUsage, System: previous.value.CPU.SystemUsage, Online: previous.value.CPU.OnlineCPUs}, dockercollector.CPUStats{Total: stats.CPU.TotalUsage, System: stats.CPU.SystemUsage, Online: stats.CPU.OnlineCPUs}, stats.CPU.OnlineCPUs)
-			component.CPUHostPercent = cpu.HostPercent
-			if cpu.HostPercent != nil {
-				group.cpu += *cpu.HostPercent
-				group.cpuOK = true
-			}
-			io := dockercollector.NormalizeIO(dockerIO(previous.value.IO), dockerIO(stats.IO), tick.Sub(previous.at).Seconds())
-			component.RXBPS, component.TXBPS, component.BlockReadBPS, component.BlockWriteBPS = io.RX, io.TX, io.Read, io.Write
-			if io.RX != nil {
-				group.rx += *io.RX
-				group.rxOK = true
-			}
-			if io.TX != nil {
-				group.tx += *io.TX
-				group.txOK = true
-			}
-			if io.Read != nil {
-				group.read += *io.Read
-				group.readOK = true
-			}
-			if io.Write != nil {
-				group.write += *io.Write
-				group.writeOK = true
-			}
-		}
+		sample := stats[container.ID].Value
+		s.addStats(group, &component, s.previousStats[container.ID], sample, tick, hostTotal)
 		group.components = append(group.components, component)
-		s.previousStats[container.ID] = dockerSample{value: stats, at: tick}
+		s.previousStats[container.ID] = dockerSample{value: sample, at: tick}
 	}
 	result := make([]metrics.ResourceSnapshot, 0, len(groups))
 	for stable, group := range groups {
@@ -766,35 +993,112 @@ func (s *Sampler) collectDocker(ctx context.Context, tick time.Time, hostTotal *
 		result = append(result, metrics.ResourceSnapshot{ID: id, Name: group.identity.Name, Status: resources.RollupStatus(group.status), CPUHostPercent: number(group.cpu, group.cpuOK), MemoryBytes: integer(group.memory, group.memoryOK), RXBPS: number(group.rx, group.rxOK), TXBPS: number(group.tx, group.txOK), BlockReadBPS: number(group.read, group.readOK), BlockWriteBPS: number(group.write, group.writeOK), LastSeenAt: now, Category: group.category, Context: group.identity.Context, Project: group.identity.Project, Environment: group.environment, Infrastructure: group.infrastructure, Components: group.components, StableKey: stable, SourceKind: group.identity.Source, ManualName: group.manualName, ManualContext: group.manualContext})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
-	return result, nil
+	return result, s.skipReason(ctx, containers, failures, tick), nil
+}
+
+// addStats fills a running component from its sample and adds it to the
+// group's aggregates; rates need the container's previous sample.
+func (s *Sampler) addStats(group *resourceGroup, component *metrics.ResourceComponent, previous dockerSample, stats dockerapi.Stats, tick time.Time, hostTotal *int64) {
+	memory := dockercollector.NormalizeMemory(dockercollector.MemoryStats{Usage: stats.Memory.Usage, Limit: stats.Memory.Limit, InactiveFile: stats.Memory.InactiveFile, PIDs: stats.PIDs}, uint64Value(hostTotal))
+	component.MemoryBytes = int64PtrFromFloat64Bytes(memory.WorkingSet)
+	component.PIDs = stats.PIDs
+	if memory.WorkingSet != nil {
+		group.memory += *memory.WorkingSet
+		group.memoryOK = true
+	}
+	if previous.at.IsZero() {
+		return
+	}
+	cpu := dockercollector.NormalizeCPU(dockercollector.CPUStats{Total: previous.value.CPU.TotalUsage, System: previous.value.CPU.SystemUsage, Online: previous.value.CPU.OnlineCPUs}, dockercollector.CPUStats{Total: stats.CPU.TotalUsage, System: stats.CPU.SystemUsage, Online: stats.CPU.OnlineCPUs}, stats.CPU.OnlineCPUs)
+	component.CPUHostPercent = cpu.HostPercent
+	if cpu.HostPercent != nil {
+		group.cpu += *cpu.HostPercent
+		group.cpuOK = true
+	}
+	io := dockercollector.NormalizeIO(dockerIO(previous.value.IO), dockerIO(stats.IO), tick.Sub(previous.at).Seconds())
+	component.RXBPS, component.TXBPS, component.BlockReadBPS, component.BlockWriteBPS = io.RX, io.TX, io.Read, io.Write
+	if io.RX != nil {
+		group.rx += *io.RX
+		group.rxOK = true
+	}
+	if io.TX != nil {
+		group.tx += *io.TX
+		group.txOK = true
+	}
+	if io.Read != nil {
+		group.read += *io.Read
+		group.readOK = true
+	}
+	if io.Write != nil {
+		group.write += *io.Write
+		group.writeOK = true
+	}
+}
+
+// skipReason logs each skipped container at most once per skipLogInterval and
+// summarises the skips for the collector reason, for example
+// "3 of 30 containers skipped: c1: no such container".
+func (s *Sampler) skipReason(ctx context.Context, containers []dockerapi.Container, failures map[string]error, tick time.Time) string {
+	if len(failures) == 0 {
+		return ""
+	}
+	if s.skipLogged == nil {
+		s.skipLogged = map[string]time.Time{}
+	}
+	first := ""
+	for _, container := range containers {
+		err := failures[container.ID]
+		if err == nil {
+			continue
+		}
+		if first == "" {
+			first = shortID(container.ID) + ": " + err.Error()
+		}
+		if last, ok := s.skipLogged[container.ID]; !ok || tick.Sub(last) >= skipLogInterval {
+			s.skipLogged[container.ID] = tick
+			s.logger().Warn("docker container skipped this tick", "container", container.ID, "error", err.Error())
+		}
+	}
+	reason := fmt.Sprintf("%d of %d containers skipped: %s", len(failures), len(containers), first)
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		reason += "; tick deadline reached"
+	}
+	return reason
+}
+
+func shortID(id string) string {
+	if len(id) > 12 {
+		return id[:12]
+	}
+	return id
+}
+
+func (s *Sampler) dockerCallTimeout() time.Duration {
+	if s.callTimeout > 0 {
+		return s.callTimeout
+	}
+	return dockercollector.CallTimeout
 }
 
 func dockerIO(v dockerapi.IOCounters) dockercollector.IOCounters {
 	return dockercollector.IOCounters{RX: v.RX, TX: v.TX, Read: v.Read, Write: v.Write, Network: v.Network}
 }
 
-// inspect returns the metadata of one listed container. The cached entry is
-// used unless the container is new, its listed state differs from the cached
-// one, an event marked it, it is older than metadataMaxAge, or full asks for a
-// re-discover (ADR 022 §2). The listed state always wins over the inspected
-// one, so the runtime state is at most one tick old even when events are lost.
-func (s *Sampler) inspect(ctx context.Context, container dockerapi.Container, tick time.Time, full bool) (dockerapi.Inspect, error) {
-	if s.Cache != nil && !full {
-		if v, ok := s.Cache.Get(container.ID); ok && !v.Reinspect && tick.Sub(v.InspectedAt) < metadataMaxAge && (container.State == "" || container.State == v.State) {
-			return v.Inspect(), nil
-		}
+// cachedInspect returns the cached metadata of one listed container unless
+// the container is new, its listed state differs from the cached one, an
+// event marked it, it is older than metadataMaxAge, or full asks for a
+// re-discover (ADR 022 §2); then the container must be inspected. The listed
+// state always wins over the inspected one, so the runtime state is at most
+// one tick old even when events are lost.
+func (s *Sampler) cachedInspect(container dockerapi.Container, tick time.Time, full bool) (dockerapi.Inspect, bool) {
+	if s.Cache == nil || full {
+		return dockerapi.Inspect{}, false
 	}
-	inspect, err := s.Docker.Inspect(ctx, container.ID)
-	if err != nil {
-		return dockerapi.Inspect{}, err
+	v, ok := s.Cache.Get(container.ID)
+	if !ok || v.Reinspect || tick.Sub(v.InspectedAt) >= metadataMaxAge || (container.State != "" && container.State != v.State) {
+		return dockerapi.Inspect{}, false
 	}
-	if container.State != "" {
-		inspect.State = container.State
-	}
-	if s.Cache != nil {
-		s.Cache.Set(dockercollector.MetadataFromInspect(inspect, tick))
-	}
-	return inspect, nil
+	return v.Inspect(), true
 }
 
 // containerIdentity resolves a container's logical resource identity.

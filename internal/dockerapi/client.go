@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"sync"
 	"time"
 
 	containertypes "github.com/moby/moby/api/types/container"
@@ -77,10 +76,18 @@ func inactiveFile(stats map[string]uint64) uint64 {
 	return stats["inactive_file"]
 }
 
+// LogConcurrency bounds concurrent log reads, follows included. Log reads
+// have their own semaphore so open log views cannot take the collection slots
+// (ADR 022 §4, RUN-2); it is a constant so the bound cannot be configured away.
+const LogConcurrency = 4
+
+// Limited bounds every call to the daemon. Collection and other short calls
+// share one semaphore of the configured size; log reads, which may follow a
+// container for up to 30 minutes, acquire only the separate log semaphore.
 type Limited struct {
 	Client Client
 	sem    chan struct{}
-	once   sync.Once
+	logs   chan struct{}
 }
 
 // sdkClient is the complete compile-time boundary to the Docker SDK. Keeping
@@ -388,12 +395,15 @@ func New(client Client, max int) *Limited {
 	if max < 1 {
 		max = 1
 	}
-	return &Limited{Client: client, sem: make(chan struct{}, max)}
+	return &Limited{Client: client, sem: make(chan struct{}, max), logs: make(chan struct{}, LogConcurrency)}
 }
 func (l *Limited) with(ctx context.Context, fn func() error) error {
+	return acquire(ctx, l.sem, fn)
+}
+func acquire(ctx context.Context, sem chan struct{}, fn func() error) error {
 	select {
-	case l.sem <- struct{}{}:
-		defer func() { <-l.sem }()
+	case sem <- struct{}{}:
+		defer func() { <-sem }()
 		return fn()
 	case <-ctx.Done():
 		return ctx.Err()
@@ -450,7 +460,7 @@ func (l *Limited) ReadLogs(ctx context.Context, id string, options LogOptions, e
 	if !ok {
 		return fmt.Errorf("docker log access is unavailable")
 	}
-	return l.with(ctx, func() error { return logs.ReadLogs(ctx, id, options, emit) })
+	return acquire(ctx, l.logs, func() error { return logs.ReadLogs(ctx, id, options, emit) })
 }
 func (l *Limited) Close() error {
 	if closer, ok := l.Client.(interface{ Close() error }); ok {

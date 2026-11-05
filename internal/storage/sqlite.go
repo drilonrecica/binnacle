@@ -30,9 +30,12 @@ type Manager struct {
 	workerCancel     context.CancelFunc
 	workerWG         sync.WaitGroup
 	prevCollectors   map[string]string
-	retention        RetentionCutoffs
-	budget           DatabaseBudget
-	emergencyPause   bool
+	// lastSampleAt is the snapshot time of the newest committed batch;
+	// resources observed at or before it were already stored.
+	lastSampleAt   time.Time
+	retention      RetentionCutoffs
+	budget         DatabaseBudget
+	emergencyPause bool
 }
 
 // RetentionCutoffs configures how long each resolution tier is kept.

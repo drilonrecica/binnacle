@@ -81,7 +81,7 @@ func TestSamplerKeepsMonotonicTimeForRates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resources, err := sampler.collectDocker(context.Background(), tick, host.MemoryTotalBytes)
+	resources, _, err := sampler.collectDocker(context.Background(), tick, host.MemoryTotalBytes)
 	if err != nil || len(resources) != 1 {
 		t.Fatalf("resources=%+v err=%v", resources, err)
 	}
@@ -101,11 +101,11 @@ func TestSamplerHostNetworkContainerHasUnknownNetworkIO(t *testing.T) {
 	docker := &fakeDocker{stats: dockerapi.Stats{Memory: dockerapi.MemoryStats{Usage: 1}, IO: dockerapi.IOCounters{Read: 100}}}
 	sampler := &Sampler{Docker: docker}
 	tick := time.Now()
-	if _, err := sampler.collectDocker(context.Background(), tick, nil); err != nil {
+	if _, _, err := sampler.collectDocker(context.Background(), tick, nil); err != nil {
 		t.Fatal(err)
 	}
 	docker.stats.IO.Read = 300
-	resources, err := sampler.collectDocker(context.Background(), tick.Add(2*time.Second), nil)
+	resources, _, err := sampler.collectDocker(context.Background(), tick.Add(2*time.Second), nil)
 	if err != nil || len(resources) != 1 {
 		t.Fatalf("resources=%+v err=%v", resources, err)
 	}
