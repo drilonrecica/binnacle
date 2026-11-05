@@ -30,6 +30,23 @@ failed its last tick: the resource is the last-known one, its metrics are
 `null`, its status is `unknown` and `lastSeenAt` is the time it was last
 measured. The Prometheus exporter omits those metrics.
 
+Event `id` is a string: a ULID that stays unique across restarts and is the
+same in the live stream, `/api/v1/events` and the exports (ADR 021 §9; events
+stored by earlier versions keep their numeric-looking ids). Live event
+payloads also carry `seq`, the per-process stream sequence. The SSE `id:`
+field of every frame is that sequence, so `Last-Event-ID` resumes events
+missed since it; it restarts with the process. `/api/v1/events` pages with
+`before=<id>`, ordered newest first by time and then by storage order.
+
+History responses list `gaps` with a `reason`: `host_reboot` (a
+`host_reboot` event falls inside the gap), `persistence_failure` (history
+batches were not stored: queue overflow, the storage emergency pause or a
+failed write, each recorded as a `persistence_gap` event),
+`collector_unavailable`, `inactive` (resources only) or `missing`. The
+resolution is the finest tier whose retention still covers the range start,
+never finer than the range length selects. Monitor health reports
+`dropped` batches and `events_dropped`, events shown live but never stored.
+
 `/api/v1/resources?state=archived` lists archived resources newest first and
 is paginated like the event history: `limit` is 1 to 500 (default 100) and
 `before=<id>` returns the resources archived before that one. A page shorter

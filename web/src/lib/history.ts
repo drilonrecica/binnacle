@@ -32,7 +32,11 @@ export type HistoryGap = {
   from: string;
   to: string;
   reason:
-    'missing' | 'inactive' | 'collector_unavailable' | 'persistence_failure';
+    | 'missing'
+    | 'inactive'
+    | 'collector_unavailable'
+    | 'persistence_failure'
+    | 'host_reboot';
 };
 export type HistoryResponse = {
   scope: 'host' | 'resource';

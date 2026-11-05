@@ -18,6 +18,12 @@ type Engine struct {
 	live        map[uint64]chan LiveMessage
 	nextSub     uint64
 	nextMessage Sequence
+	// persistedSeq is the high-water mark of events handed to persistence:
+	// each PersistenceBatch carries only events after it (EVT-6).
+	persistedSeq Sequence
+	// eventsDropped counts events that left the ring before persistence
+	// took them.
+	eventsDropped uint64
 	// window accumulates the ticks published since the last PersistenceBatch.
 	window window
 }
@@ -29,7 +35,14 @@ func (e *Engine) PersistenceBatch() PersistenceBatch {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	batch := e.window.drain(clone(e.snapshot))
-	batch.Events = append([]Event(nil), e.events...)
+	for _, event := range e.events {
+		if event.Seq > e.persistedSeq {
+			batch.Events = append(batch.Events, event)
+		}
+	}
+	if n := len(e.events); n > 0 {
+		e.persistedSeq = max(e.persistedSeq, e.events[n-1].Seq)
+	}
 	batch.Filesystems = append([]FilesystemObservation(nil), e.filesystems...)
 	return batch
 }
@@ -71,16 +84,23 @@ func (e *Engine) Publish(snapshot Snapshot, events ...Event) {
 	snapshot.Filesystems = append([]FilesystemObservation(nil), e.filesystems...)
 	e.snapshot = snapshot
 	e.window.observe(snapshot)
-	for _, event := range events {
-		if event.ID == 0 {
-			e.nextMessage++
-			event.ID = e.nextMessage
+	events = append([]Event(nil), events...)
+	for index := range events {
+		e.nextMessage++
+		events[index].Seq = e.nextMessage
+		if events[index].ID == "" {
+			events[index].ID = NewEventID()
 		}
-		event.At = event.At.UTC()
-		e.events = append(e.events, event)
+		events[index].At = events[index].At.UTC()
+		e.events = append(e.events, events[index])
 	}
-	if len(e.events) > e.maxEvents {
-		e.events = append([]Event(nil), e.events[len(e.events)-e.maxEvents:]...)
+	if excess := len(e.events) - e.maxEvents; excess > 0 {
+		for _, event := range e.events[:excess] {
+			if event.Seq > e.persistedSeq {
+				e.eventsDropped++
+			}
+		}
+		e.events = append([]Event(nil), e.events[excess:]...)
 	}
 	for _, ch := range e.subscribers {
 		select {
@@ -131,12 +151,19 @@ func (e *Engine) PublishFilesystems(obs []FilesystemObservation) {
 }
 func (e *Engine) Snapshot() Snapshot { e.mu.RLock(); defer e.mu.RUnlock(); return clone(e.snapshot) }
 func (e *Engine) SSEClients() int    { e.mu.RLock(); defer e.mu.RUnlock(); return len(e.live) }
-func (e *Engine) EventsAfter(id Sequence) []Event {
+
+// EventsDropped is the number of events evicted from the ring before a
+// persistence batch took them; they reached the live stream but not history.
+func (e *Engine) EventsDropped() uint64 { e.mu.RLock(); defer e.mu.RUnlock(); return e.eventsDropped }
+
+// EventsAfter returns the ring's events with a sequence after seq, for
+// Last-Event-ID resumption.
+func (e *Engine) EventsAfter(seq Sequence) []Event {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	out := []Event{}
 	for _, v := range e.events {
-		if v.ID > id {
+		if v.Seq > seq {
 			out = append(out, v)
 		}
 	}

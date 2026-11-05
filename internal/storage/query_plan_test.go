@@ -81,16 +81,15 @@ func planCases(t *testing.T) []planCase {
 		cases = append(cases, planCase{name: table + " retention", query: deleteBatchSQL(table, "ts<?"), args: []any{from.UnixMilli(), 500},
 			table: table, want: []string{"USING COVERING INDEX " + table + "_ts (ts<?)"}})
 	}
-	cursor := from.Add(30 * time.Minute).UnixMilli()
+	cursor := eventCursor{ts: from.Add(30 * time.Minute).UnixMilli(), rowid: 1000}
 	feed, feedArgs := eventQuerySQL(EventQuery{From: from, To: to, Severity: "warning", Types: []string{"container_restart"}, BeforeID: "evt"}, 100, &cursor)
 	forResource, forResourceArgs := eventQuerySQL(EventQuery{From: from, To: to, ResourceID: "res_a"}, 100, nil)
 	return append(cases,
 		planCase{"event feed", feed, feedArgs, "events", []string{"USING INDEX events_ts (ts>? AND ts<?)"}},
 		planCase{"resource event feed", forResource, forResourceArgs, "events", []string{"USING INDEX events_resource_ts (resource_id=? AND ts>? AND ts<?)"}},
-		planCase{"gap persistence events", gapPersistenceSQL, []any{from.UnixMilli(), to.UnixMilli()}, "events", []string{"USING INDEX events_ts (ts>? AND ts<?)"}},
-		planCase{"gap collector state", gapCollectorStateSQL, []any{"host", from.UnixMilli()}, "collector_state_events", []string{"USING INDEX collector_state_events_collector_ts (collector_name=? AND ts<?)"}},
-		planCase{"gap collector down", gapCollectorDownSQL, []any{"host", from.UnixMilli(), to.UnixMilli()}, "collector_state_events", []string{"USING INDEX collector_state_events_collector_ts (collector_name=? AND ts>? AND ts<?)"}},
-		planCase{"gap resource activity", gapResourceActivitySQL, []any{"res_a", to.UnixMilli()}, "resource_samples_10s", []string{"USING INDEX sqlite_autoindex_resource_samples_10s_1 (resource_id=? AND ts<?)"}},
+		planCase{"gap events", gapEventsSQL, []any{from.UnixMilli(), to.UnixMilli()}, "events", []string{"USING INDEX events_ts (ts>? AND ts<?)"}},
+		planCase{"gap collector states", gapCollectorStatesSQL, []any{"host", to.UnixMilli(), "host", from.UnixMilli()}, "collector_state_events", []string{"USING INDEX collector_state_events_collector_ts (collector_name=? AND ts>? AND ts<?)", "USING COVERING INDEX collector_state_events_collector_ts (collector_name=? AND ts>? AND ts<?)"}},
+		planCase{"gap resource activity", "WITH gaps(idx,until) AS (VALUES (?,?),(?,?))" + gapResourceActivitySQL, []any{0, from.UnixMilli(), 1, to.UnixMilli(), "res_a", "res_a"}, "resource_samples_10s", []string{"USING COVERING INDEX sqlite_autoindex_resource_samples_10s_1 (resource_id=? AND ts<?)"}},
 	)
 }
 

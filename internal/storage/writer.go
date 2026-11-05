@@ -4,6 +4,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -75,15 +76,22 @@ func (m *Manager) WriteBatch(ctx context.Context, b metrics.PersistenceBatch) er
 		}
 	}
 	for _, event := range b.Events {
-		if _, e = tx.ExecContext(ctx, "INSERT OR IGNORE INTO events(id,ts,host_id,resource_id,container_instance_id,type,severity,summary,details_json,correlation_key,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", event.ID, event.At.UnixMilli(), hostID, nullableResource(event.ResourceID), nullableContainer(event.ContainerInstance), event.Type, severity(event), event.Message, nullableString(event.Details), nullableString(event.CorrelationKey), eventSource(event.Type), event.At.UnixMilli()); e != nil {
+		if e = m.insertEvent(ctx, tx, event); e != nil {
 			return e
 		}
 	}
 	if e = m.writeCollectorStateEvents(ctx, tx, s.At, s.Collectors); e != nil {
 		return e
 	}
+	bootOpened, e := m.recordBoot(ctx, tx, s)
+	if e != nil {
+		return e
+	}
 	if e = tx.Commit(); e != nil {
 		return e
+	}
+	if bootOpened {
+		m.lastBoot = string(s.BootIdentity)
 	}
 	if s.Sequence > 0 {
 		for _, resource := range s.Resources {
@@ -93,6 +101,30 @@ func (m *Manager) WriteBatch(ctx context.Context, b metrics.PersistenceBatch) er
 		}
 	}
 	return nil
+}
+
+// recordBoot opens the snapshot's boot session when the boot identity is new
+// to this process, and records a host_reboot event when it ended the session
+// of a different boot (EVT-6). The event is dated at the kernel boot time
+// when the uptime is known, inside the gap the reboot left in the history.
+func (m *Manager) recordBoot(ctx context.Context, tx *sql.Tx, s metrics.Snapshot) (bool, error) {
+	boot := string(s.BootIdentity)
+	if s.Sequence == 0 || boot == "" || boot == m.lastBoot {
+		return false, nil
+	}
+	previous, opened, err := openBoot(ctx, tx, hostID, boot, s.At)
+	if err != nil || previous == "" {
+		return opened, err
+	}
+	at := s.At
+	if s.Host.UptimeSeconds != nil && *s.Host.UptimeSeconds > 0 {
+		at = s.At.Add(-time.Duration(*s.Host.UptimeSeconds * float64(time.Second)))
+	}
+	details, err := json.Marshal(map[string]string{"previousBoot": previous, "boot": boot})
+	if err != nil {
+		return false, err
+	}
+	return opened, m.insertEvent(ctx, tx, metrics.Event{ID: metrics.NewEventID(), At: at, Type: "host_reboot", Severity: "critical", Message: "Host rebooted; history has a gap while it was down", Details: string(details)})
 }
 
 // freshResource reports whether a resource of the batch is a measurement not
@@ -225,7 +257,17 @@ func eventSource(eventType string) string {
 	return "docker"
 }
 
+// WriteEvent stores one event; an event without an id gets a new ULID.
 func (m *Manager) WriteEvent(ctx context.Context, e metrics.Event) error {
-	_, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO events(id,ts,host_id,resource_id,container_instance_id,type,severity,summary,details_json,correlation_key,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", e.ID, e.At.UnixMilli(), hostID, nullableResource(e.ResourceID), nullableContainer(e.ContainerInstance), e.Type, severity(e), e.Message, nullableString(e.Details), nullableString(e.CorrelationKey), eventSource(e.Type), e.At.UnixMilli())
+	return m.insertEvent(ctx, m.db, e)
+}
+
+// insertEvent stores one event. Ids are unique ULIDs (ADR 021 §9), so
+// INSERT OR IGNORE only skips a replayed event.
+func (m *Manager) insertEvent(ctx context.Context, q querier, e metrics.Event) error {
+	if e.ID == "" {
+		e.ID = metrics.NewEventID()
+	}
+	_, err := q.ExecContext(ctx, "INSERT OR IGNORE INTO events(id,ts,host_id,resource_id,container_instance_id,type,severity,summary,details_json,correlation_key,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", e.ID, e.At.UnixMilli(), hostID, nullableResource(e.ResourceID), nullableContainer(e.ContainerInstance), e.Type, severity(e), e.Message, nullableString(e.Details), nullableString(e.CorrelationKey), eventSource(e.Type), e.At.UnixMilli())
 	return err
 }

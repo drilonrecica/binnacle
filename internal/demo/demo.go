@@ -245,15 +245,15 @@ func (g *Generator) Events(step uint64) []metrics.Event {
 	now := g.clock.Now().UTC()
 	switch {
 	case step%97 == 92:
-		return []metrics.Event{{ID: metrics.Sequence(step + 1), At: now, Type: "collector_degraded", Severity: "warning", Message: "Docker collector degraded: API responded slowly", Details: `{"collector":"docker"}`}}
+		return []metrics.Event{{At: now, Type: "collector_degraded", Severity: "warning", Message: "Docker collector degraded: API responded slowly", Details: `{"collector":"docker"}`}}
 	case step%29 == 0:
-		return []metrics.Event{{ID: metrics.Sequence(step + 1), At: now, Type: "container_oom", ResourceID: "res_demo_8", ContainerInstance: "res_demo_8-c1-000000000800", Severity: "critical", Message: "search-shop-1 was killed by the kernel OOM handler", Details: `{"container":"search-shop-1"}`}}
+		return []metrics.Event{{At: now, Type: "container_oom", ResourceID: "res_demo_8", ContainerInstance: "res_demo_8-c1-000000000800", Severity: "critical", Message: "search-shop-1 was killed by the kernel OOM handler", Details: `{"container":"search-shop-1"}`}}
 	case step%17 == 0:
-		return []metrics.Event{{ID: metrics.Sequence(step + 1), At: now, Type: "deployment", ResourceID: "res_demo_1", Severity: "info", Message: "web-shop deployed (containers replaced)", Details: `{"confidence":"confirmed"}`}}
+		return []metrics.Event{{At: now, Type: "deployment", ResourceID: "res_demo_1", Severity: "info", Message: "web-shop deployed (containers replaced)", Details: `{"confidence":"confirmed"}`}}
 	case step%11 == 0:
-		return []metrics.Event{{ID: metrics.Sequence(step + 1), At: now, Type: "container_restart", ResourceID: "res_demo_3", ContainerInstance: "res_demo_3-c1-000000000300", Severity: "warning", Message: "worker-shop-1 restarted", Details: `{"exitCode":137}`}}
+		return []metrics.Event{{At: now, Type: "container_restart", ResourceID: "res_demo_3", ContainerInstance: "res_demo_3-c1-000000000300", Severity: "warning", Message: "worker-shop-1 restarted", Details: `{"exitCode":137}`}}
 	case step%7 == 0:
-		return []metrics.Event{{ID: metrics.Sequence(step + 1), At: now, Type: "container_health_status_change", ResourceID: "res_demo_2", ContainerInstance: "res_demo_2-c2-000000000201", Severity: "info", Message: "api-shop-2 health changed to healthy"}}
+		return []metrics.Event{{At: now, Type: "container_health_status_change", ResourceID: "res_demo_2", ContainerInstance: "res_demo_2-c2-000000000201", Severity: "info", Message: "api-shop-2 health changed to healthy"}}
 	}
 	return nil
 }

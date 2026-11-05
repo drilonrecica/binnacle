@@ -84,7 +84,10 @@ export interface FilesystemObservation {
   inodesUsedPct?: number | null;
 }
 export interface LiveEvent {
-  id: number;
+  /** ULID, unique across restarts; equals the stored event id. */
+  id: string;
+  /** Per-process stream sequence; increases with every live message. */
+  seq: number;
   at?: string;
   type: string;
   message: string;
@@ -143,7 +146,11 @@ export class LiveStore {
     source.addEventListener('event', (event) => {
       try {
         const value = JSON.parse((event as MessageEvent).data) as LiveEvent;
-        if (typeof value.id !== 'number' || typeof value.type !== 'string')
+        if (
+          typeof value.id !== 'string' ||
+          typeof value.seq !== 'number' ||
+          typeof value.type !== 'string'
+        )
           throw new Error('Malformed event');
         if (!this.events.some((item) => item.id === value.id))
           this.events = [...this.events.slice(-127), value];

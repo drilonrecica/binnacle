@@ -30,6 +30,10 @@ type PersistenceMetrics interface {
 	DroppedCount() uint64
 	WriteLatency() time.Duration
 }
+
+// EventLossProvider reports events of lost batches that persistence could
+// not keep for the next batch (EVT-6).
+type EventLossProvider interface{ EventsLostCount() uint64 }
 type DurationProvider interface{ CollectionDuration() time.Duration }
 type NotificationHealthProvider interface {
 	HealthSnapshot() (queue int, permanent int, dropped int64, lastSuccess *time.Time)
@@ -68,6 +72,13 @@ func (m *Monitor) Snapshot() MonitorSnapshot {
 	if m.Persistence != nil {
 		queue, dropped, writeLatency = m.Persistence.Queue(), m.Persistence.DroppedCount(), m.Persistence.WriteLatency()
 	}
+	eventsDropped := uint64(0)
+	if m.Engine != nil {
+		eventsDropped += m.Engine.EventsDropped()
+	}
+	if lost, ok := m.Persistence.(EventLossProvider); ok {
+		eventsDropped += lost.EventsLostCount()
+	}
 	collectionDuration := time.Duration(0)
 	if m.Collector != nil {
 		collectionDuration = m.Collector.CollectionDuration()
@@ -90,7 +101,8 @@ func (m *Monitor) Snapshot() MonitorSnapshot {
 		metric("database", "SQLite database", dbSize, "bytes", budgetStatus(dbSize, m.DatabaseTarget), "Main SQLite file size."),
 		metric("wal", "SQLite WAL", walSize, "bytes", available(walSize), "Write-ahead log size."),
 		metric("queue", "Persistence queue", queue, "batches", queueStatus(queue, m.QueueCapacity), "Queued persistence batches."),
-		metric("dropped", "Dropped batches", int64(dropped), "batches", nonzeroStatus(dropped), "History batches dropped after queue overflow."),
+		metric("dropped", "Dropped batches", int64(dropped), "batches", nonzeroStatus(dropped), "History batches not stored after queue overflow, the emergency pause or a failed write; each gap is recorded as a persistence_gap event."),
+		metric("events_dropped", "Dropped events", int64(eventsDropped), "events", nonzeroStatus(eventsDropped), "Events shown live but never stored: evicted from the 128-event ring before a batch took them, or beyond the 128 events kept across lost batches."),
 		metric("write_latency", "Persistence write latency", durationValue(writeLatency), "milliseconds", durationStatus(writeLatency, 50*time.Millisecond), "Latest SQLite persistence operation."),
 		metric("rollup_duration", "Rollup duration", durationValue(health.RollupDuration), "milliseconds", durationStatus(health.RollupDuration, 500*time.Millisecond), "Latest incremental rollup pass over every tier; unavailable until the first pass."),
 		metric("retention_duration", "Retention duration", durationValue(health.RetentionDuration), "milliseconds", durationStatus(health.RetentionDuration, 2*time.Second), "Latest retention pass; unavailable until the first pass."),

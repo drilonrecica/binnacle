@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/drilonrecica/binnacle/internal/metrics"
 	"os"
 	"path/filepath"
 	"strings"
@@ -230,13 +231,12 @@ func (m *Manager) updatePause(ctx context.Context, now time.Time, state BudgetSt
 	m.writeStorageEvent(ctx, now, "persistence_resumed", "info", "Raw history persistence resumed; database usage below the critical threshold")
 }
 
-// writeStorageEvent records one of the storage worker's own events. The id is
-// the type and timestamp so two different events never collide; P3-06
-// replaces it with the shared generator.
+// writeStorageEvent records one of the storage worker's own events. Its id
+// comes from the shared ULID generator, so it never collides with another
+// storage event or an engine event (EVT-2, ADR 021 §9).
 func (m *Manager) writeStorageEvent(ctx context.Context, now time.Time, eventType, severity, message string) {
 	ms := now.UTC().UnixMilli()
-	id := fmt.Sprintf("%s_%d", eventType, ms)
-	if _, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO events(id,ts,host_id,type,severity,summary,source,created_at) VALUES(?,?,?,?,?,?,'binnacle',?)", id, ms, hostID, eventType, severity, message, ms); err != nil && ctx.Err() == nil {
+	if _, err := m.db.ExecContext(ctx, "INSERT OR IGNORE INTO events(id,ts,host_id,type,severity,summary,source,created_at) VALUES(?,?,?,?,?,?,'binnacle',?)", metrics.NewEventID(), ms, hostID, eventType, severity, message, ms); err != nil && ctx.Err() == nil {
 		m.logger().Error("persistence state event was not stored", "type", eventType, "error", err)
 	}
 }

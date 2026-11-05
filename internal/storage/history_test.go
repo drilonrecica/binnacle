@@ -49,9 +49,15 @@ func TestGapClassification(t *testing.T) {
 		from time.Time
 		want string
 	}{{base, "inactive"}, {base.Add(time.Minute), "collector_unavailable"}, {base.Add(2 * time.Minute), "persistence_failure"}}
-	for _, tc := range cases {
-		gap := Gap{From: tc.from, To: tc.from.Add(time.Minute)}
-		if got := m.classifyGap(ctx, q, gap); got != tc.want {
+	gaps := make([]Gap, len(cases))
+	for i, tc := range cases {
+		gaps[i] = Gap{From: tc.from, To: tc.from.Add(time.Minute)}
+	}
+	if err := m.classifyGaps(ctx, q, gaps); err != nil {
+		t.Fatal(err)
+	}
+	for i, tc := range cases {
+		if got := gaps[i].Reason; got != tc.want {
 			t.Fatalf("gap %s=%s want %s", tc.from, got, tc.want)
 		}
 	}

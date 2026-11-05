@@ -4,6 +4,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -150,7 +151,11 @@ func (m *Manager) QueryMetrics(ctx context.Context, q MetricQuery) (MetricsRespo
 	if err := q.Validate(); err != nil {
 		return MetricsResponse{}, err
 	}
-	r := MetricsResponse{Scope: q.Scope, ID: q.ID, From: q.From.UTC(), To: q.To.UTC(), Resolution: selectResolution(q.To.Sub(q.From)), Gaps: []Gap{}}
+	m.mu.Lock()
+	retention, shortened := m.retention, append([]string(nil), m.budget.Shortened...)
+	m.mu.Unlock()
+	res := resolutionFor(q.From, q.To, time.Now(), effectiveRetention(retention, shortened))
+	r := MetricsResponse{Scope: q.Scope, ID: q.ID, From: q.From.UTC(), To: q.To.UTC(), Resolution: res, Gaps: []Gap{}}
 	for index, metric := range q.Metrics {
 		points, err := m.metricPoints(ctx, q, metric, r.Resolution)
 		if err != nil {
@@ -159,8 +164,8 @@ func (m *Manager) QueryMetrics(ctx context.Context, q MetricQuery) (MetricsRespo
 		r.Series = append(r.Series, Series{Metric: metric, Unit: metricUnit(metric), Points: points})
 		if index == 0 {
 			gaps := findGaps(q.From, q.To, r.Resolution, points)
-			for i := range gaps {
-				gaps[i].Reason = m.classifyGap(ctx, q, gaps[i])
+			if err = m.classifyGaps(ctx, q, gaps); err != nil {
+				return MetricsResponse{}, err
 			}
 			r.Gaps = mergeGaps(gaps)
 		}
@@ -168,44 +173,175 @@ func (m *Manager) QueryMetrics(ctx context.Context, q MetricQuery) (MetricsRespo
 	return r, nil
 }
 
-// The gap classifier's lookups. Each is a SEARCH: events_ts,
-// collector_state_events_collector_ts (STO-7) and the resource_samples_10s
-// primary key.
+// resolutionFor starts from the tier the range length selects and moves to
+// coarser tiers until one whose retention still covers the range start, so a
+// short range far in the past is read from a tier that has its data instead
+// of being reported as one long gap (EVT-6). A retention of zero is
+// unlimited; the 1h tier is the last resort.
+func resolutionFor(from, to, now time.Time, r RetentionCutoffs) Resolution {
+	tiers := []struct {
+		res  Resolution
+		keep time.Duration
+	}{{ResolutionRaw, r.Raw}, {Resolution1m, r.OneMinute}, {Resolution15m, r.FifteenMinute}, {Resolution1h, r.OneHour}}
+	wanted := selectResolution(to.Sub(from))
+	for i, tier := range tiers {
+		if tier.res != wanted {
+			continue
+		}
+		for _, candidate := range tiers[i:] {
+			if candidate.keep <= 0 || !from.Before(now.Add(-candidate.keep)) {
+				return candidate.res
+			}
+		}
+	}
+	return Resolution1h
+}
+
+// effectiveRetention halves the tiers the latest emergency pass shortened
+// (ADR 021 §7), matching what retention actually keeps.
+func effectiveRetention(r RetentionCutoffs, shortened []string) RetentionCutoffs {
+	for _, tier := range shortened {
+		switch tier {
+		case "raw":
+			r.Raw /= 2
+		case "1m":
+			r.OneMinute /= 2
+		}
+	}
+	return r
+}
+
+// The gap classifier reads one range per table for all gaps of a response
+// (EVT-6). Each is a SEARCH: events_ts, collector_state_events_collector_ts
+// (STO-7) and the resource_samples_10s primary key.
 const (
-	gapPersistenceSQL      = `SELECT COUNT(*) FROM events WHERE ts>=? AND ts<? AND type IN ('persistence_degraded','persistence_gap')`
-	gapCollectorStateSQL   = `SELECT new_state FROM collector_state_events WHERE collector_name=? AND ts<=? ORDER BY ts DESC LIMIT 1`
-	gapCollectorDownSQL    = `SELECT COUNT(*) FROM collector_state_events WHERE collector_name=? AND ts>=? AND ts<? AND new_state IN ('degraded','down')`
-	gapResourceActivitySQL = `SELECT COALESCE(status,''),active_instance_count FROM resource_samples_10s WHERE resource_id=? AND ts<? ORDER BY ts DESC LIMIT 1`
+	// gapEventsSQL lists the events that explain a gap in the whole range.
+	gapEventsSQL = `SELECT ts,type FROM events WHERE ts>=? AND ts<=? AND type IN ('persistence_degraded','persistence_gap','host_reboot') ORDER BY ts`
+	// gapCollectorStatesSQL lists the collector's state changes in the
+	// range, starting with the last one at or before its start.
+	gapCollectorStatesSQL = `SELECT ts,new_state FROM collector_state_events WHERE collector_name=? AND ts<=? AND ts>=COALESCE((SELECT MAX(ts) FROM collector_state_events WHERE collector_name=? AND ts<=?),0) ORDER BY ts`
+	// gapResourceActivitySQL is prefixed with a gaps(idx,until) CTE and
+	// returns the resource's last sample before each gap's end.
+	gapResourceActivitySQL = ` SELECT gaps.idx,COALESCE(s.status,''),COALESCE(s.active_instance_count,0) FROM gaps LEFT JOIN resource_samples_10s s ON s.resource_id=? AND s.ts=(SELECT MAX(ts) FROM resource_samples_10s WHERE resource_id=? AND ts<gaps.until)`
 )
 
-func (m *Manager) classifyGap(ctx context.Context, q MetricQuery, gap Gap) string {
-	var count int
-	_ = m.db.QueryRowContext(ctx, gapPersistenceSQL, gap.From.UnixMilli(), gap.To.UnixMilli()).Scan(&count)
-	if count > 0 {
-		return "persistence_failure"
+// maxGapsPerActivityQuery bounds the bind variables of one activity query.
+const maxGapsPerActivityQuery = 400
+
+type gapEvent struct {
+	at   int64
+	kind string
+}
+
+// classifyGaps sets each gap's reason: host_reboot, persistence_failure,
+// collector_unavailable, inactive (resources only) or missing, in that order.
+func (m *Manager) classifyGaps(ctx context.Context, q MetricQuery, gaps []Gap) error {
+	if len(gaps) == 0 {
+		return nil
+	}
+	from, to := gaps[0].From.UnixMilli(), gaps[len(gaps)-1].To.UnixMilli()
+	events, err := m.gapEvents(ctx, gapEventsSQL, from, to)
+	if err != nil {
+		return fmt.Errorf("gap events: %w", err)
 	}
 	collector := "host"
 	if q.Scope == "resource" {
 		collector = "docker"
 	}
-	var state string
-	_ = m.db.QueryRowContext(ctx, gapCollectorStateSQL, collector, gap.From.UnixMilli()).Scan(&state)
-	if state == "degraded" || state == "down" {
-		return "collector_unavailable"
+	states, err := m.gapEvents(ctx, gapCollectorStatesSQL, collector, to, collector, from)
+	if err != nil {
+		return fmt.Errorf("gap collector states: %w", err)
 	}
-	_ = m.db.QueryRowContext(ctx, gapCollectorDownSQL, collector, gap.From.UnixMilli(), gap.To.UnixMilli()).Scan(&count)
-	if count > 0 {
-		return "collector_unavailable"
-	}
+	var inactive []bool
 	if q.Scope == "resource" {
-		var status string
-		var active int
-		_ = m.db.QueryRowContext(ctx, gapResourceActivitySQL, q.ID, gap.To.UnixMilli()).Scan(&status, &active)
-		if active == 0 || status == "paused" || status == "archived" {
-			return "inactive"
+		if inactive, err = m.gapInactivity(ctx, q.ID, gaps); err != nil {
+			return fmt.Errorf("gap resource activity: %w", err)
 		}
 	}
+	for i := range gaps {
+		gaps[i].Reason = classifyGap(gaps[i], events, states, inactive != nil && inactive[i])
+	}
+	return nil
+}
+
+func classifyGap(gap Gap, events, states []gapEvent, inactive bool) string {
+	from, to := gap.From.UnixMilli(), gap.To.UnixMilli()
+	within := func(e gapEvent) bool { return e.at >= from && e.at <= to }
+	for _, kind := range []struct{ event, reason string }{{"host_reboot", "host_reboot"}, {"persistence_degraded", "persistence_failure"}, {"persistence_gap", "persistence_failure"}} {
+		for _, e := range events {
+			if e.kind == kind.event && within(e) {
+				return kind.reason
+			}
+		}
+	}
+	down := func(state string) bool { return state == "degraded" || state == "down" }
+	current := ""
+	for _, s := range states {
+		if s.at <= from {
+			current = s.kind
+		} else if s.at < to && down(s.kind) {
+			return "collector_unavailable"
+		}
+	}
+	if down(current) {
+		return "collector_unavailable"
+	}
+	if inactive {
+		return "inactive"
+	}
 	return "missing"
+}
+
+func (m *Manager) gapEvents(ctx context.Context, query string, args ...any) ([]gapEvent, error) {
+	rows, err := m.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []gapEvent
+	for rows.Next() {
+		var e gapEvent
+		if err = rows.Scan(&e.at, &e.kind); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// gapInactivity reports, per gap, whether the resource's last sample before
+// the gap's end shows it paused, archived or without running instances.
+func (m *Manager) gapInactivity(ctx context.Context, resourceID string, gaps []Gap) ([]bool, error) {
+	out := make([]bool, len(gaps))
+	for start := 0; start < len(gaps); start += maxGapsPerActivityQuery {
+		chunk := gaps[start:min(start+maxGapsPerActivityQuery, len(gaps))]
+		args := make([]any, 0, 2*len(chunk)+2)
+		values := make([]string, len(chunk))
+		for i, gap := range chunk {
+			values[i] = "(?,?)"
+			args = append(args, start+i, gap.To.UnixMilli())
+		}
+		args = append(args, resourceID, resourceID)
+		rows, err := m.db.QueryContext(ctx, "WITH gaps(idx,until) AS (VALUES "+strings.Join(values, ",")+")"+gapResourceActivitySQL, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var index, active int
+			var status string
+			if err = rows.Scan(&index, &status, &active); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			out[index] = active == 0 || status == "paused" || status == "archived"
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 func (m *Manager) metricPoints(ctx context.Context, q MetricQuery, metric Metric, res Resolution) ([]Point, error) {
 	query, args, err := metricPointsSQL(q, metric, res)

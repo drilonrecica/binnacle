@@ -88,6 +88,8 @@ type Manager struct {
 	workerCancel    context.CancelFunc
 	workerWG        sync.WaitGroup
 	prevCollectors  map[string]string
+	// lastBoot is the boot identity whose session the writer has opened.
+	lastBoot string
 	// lastSampleAt is the newest resource observation (LastSeenAt) committed;
 	// resources observed at or before it were already stored.
 	lastSampleAt   time.Time

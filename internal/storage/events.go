@@ -4,6 +4,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"time"
 )
@@ -34,7 +35,7 @@ func (m *Manager) EventsFor(ctx context.Context, from, to time.Time, limit int, 
 		query += " AND resource_id=?"
 		args = append(args, resourceID)
 	}
-	query += " ORDER BY ts DESC,id DESC LIMIT ?"
+	query += " ORDER BY ts DESC,rowid DESC LIMIT ?"
 	args = append(args, limit)
 	rows, e := m.db.QueryContext(ctx, query, args...)
 	if e != nil {
@@ -71,7 +72,7 @@ func (m *Manager) ExportEvents(ctx context.Context, from, to time.Time, limit in
 	if limit < 1 || limit > 10001 {
 		limit = 10001
 	}
-	rows, e := m.db.QueryContext(ctx, "SELECT id,ts,type,severity,summary,details_json,correlation_key,container_instance_id,resource_id,source FROM events WHERE ts>=? AND ts<=? ORDER BY ts,id LIMIT ?", from.UnixMilli(), to.UnixMilli(), limit)
+	rows, e := m.db.QueryContext(ctx, "SELECT id,ts,type,severity,summary,details_json,correlation_key,container_instance_id,resource_id,source FROM events WHERE ts>=? AND ts<=? ORDER BY ts,rowid LIMIT ?", from.UnixMilli(), to.UnixMilli(), limit)
 	if e != nil {
 		return nil, e
 	}
@@ -121,11 +122,15 @@ func (m *Manager) QueryEvents(ctx context.Context, q EventQuery) ([]HistoricalEv
 	if limit < 1 || limit > maxEventLimit {
 		limit = 100
 	}
-	var cursor *int64
+	var cursor *eventCursor
 	if q.BeforeID != "" {
-		var cursorTS int64
-		if err := m.db.QueryRowContext(ctx, "SELECT ts FROM events WHERE id=?", q.BeforeID).Scan(&cursorTS); err == nil {
-			cursor = &cursorTS
+		var c eventCursor
+		err := m.db.QueryRowContext(ctx, "SELECT ts,rowid FROM events WHERE id=?", q.BeforeID).Scan(&c.ts, &c.rowid)
+		switch {
+		case err == nil:
+			cursor = &c
+		case !errors.Is(err, sql.ErrNoRows):
+			return nil, err
 		}
 	}
 	query, args := eventQuerySQL(q, limit, cursor)
@@ -160,10 +165,15 @@ func (m *Manager) QueryEvents(ctx context.Context, q EventQuery) ([]HistoricalEv
 	return out, rows.Err()
 }
 
-// eventQuerySQL is the event feed query; cursor is the ts of q.BeforeID when
-// that event exists. The range is served by events_ts, or by
-// events_resource_ts for one resource.
-func eventQuerySQL(q EventQuery, limit int, cursor *int64) (string, []any) {
+// eventCursor is the position of the BeforeID event in the feed order.
+type eventCursor struct{ ts, rowid int64 }
+
+// eventQuerySQL is the event feed query; cursor is the position of
+// q.BeforeID when that event exists. Events are ordered by ts, then by
+// insertion order (rowid), never by comparing ids as text: stored ids mix
+// pre-ULID numbers and ULIDs (EVT-6, ADR 021 §8). The range is served by
+// events_ts, or by events_resource_ts for one resource; both carry the rowid.
+func eventQuerySQL(q EventQuery, limit int, cursor *eventCursor) (string, []any) {
 	query := "SELECT id,ts,type,severity,summary,details_json,correlation_key,container_instance_id,resource_id,source FROM events WHERE ts>=? AND ts<=?"
 	args := []any{q.From.UnixMilli(), q.To.UnixMilli()}
 	if q.ResourceID != "" {
@@ -181,9 +191,9 @@ func eventQuerySQL(q EventQuery, limit int, cursor *int64) (string, []any) {
 		}
 	}
 	if cursor != nil {
-		query += " AND (ts<? OR (ts=? AND id<?))"
-		args = append(args, *cursor, *cursor, q.BeforeID)
+		query += " AND (ts<? OR (ts=? AND rowid<?))"
+		args = append(args, cursor.ts, cursor.ts, cursor.rowid)
 	}
-	query += " ORDER BY ts DESC,id DESC LIMIT ?"
+	query += " ORDER BY ts DESC,rowid DESC LIMIT ?"
 	return query, append(args, limit)
 }

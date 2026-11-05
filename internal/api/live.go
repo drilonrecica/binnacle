@@ -71,7 +71,7 @@ func stream(w http.ResponseWriter, r *http.Request, e *metrics.Engine, recheck f
 	defer sub.Close()
 	if n, err := strconv.ParseUint(r.Header.Get("Last-Event-ID"), 10, 64); err == nil {
 		for _, event := range e.EventsAfter(metrics.Sequence(n)) {
-			writeFrame(w, "event", event.ID, event)
+			writeFrame(w, "event", event.Seq, event)
 			f.Flush()
 		}
 	}
@@ -100,7 +100,7 @@ func stream(w http.ResponseWriter, r *http.Request, e *metrics.Engine, recheck f
 				}
 				writeFrame(w, "snapshot", snapshot.Sequence, snapshot)
 			} else if message.Event != nil {
-				writeFrame(w, "event", message.Event.ID, message.Event)
+				writeFrame(w, "event", message.Event.Seq, message.Event)
 			}
 			f.Flush()
 		}

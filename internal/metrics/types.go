@@ -161,8 +161,14 @@ type CollectorHealth struct {
 	Reason  string         `json:"reason,omitempty"`
 	FreshAt time.Time      `json:"freshAt"`
 }
+
+// Event is one discrete occurrence. ID is a ULID that is unique across
+// process starts and is the stored row's key; Seq is the engine's
+// per-process message sequence that the live stream resumes from
+// (ADR 021 §9).
 type Event struct {
-	ID                Sequence    `json:"id"`
+	ID                string      `json:"id"`
+	Seq               Sequence    `json:"seq"`
 	At                time.Time   `json:"at"`
 	Type              string      `json:"type"`
 	ResourceID        ResourceID  `json:"resourceId,omitempty"`

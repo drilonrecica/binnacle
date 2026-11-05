@@ -115,7 +115,7 @@ func (e *Evaluator) evaluatePersistence(ctx context.Context, rules []Rule, now t
 		return nil
 	}
 	var eventType string
-	err := e.Repo.db.QueryRowContext(ctx, `SELECT type FROM events WHERE type IN ('persistence_emergency','persistence_degraded','persistence_resumed') ORDER BY ts DESC,id DESC LIMIT 1`).Scan(&eventType)
+	err := e.Repo.db.QueryRowContext(ctx, `SELECT type FROM events WHERE type IN ('persistence_emergency','persistence_degraded','persistence_resumed') ORDER BY ts DESC,rowid DESC LIMIT 1`).Scan(&eventType)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}

@@ -14,7 +14,8 @@ async function prepare(
 ) {
   const value = structuredClone(snapshot);
   const events: Array<{
-    id: number;
+    id: string;
+    seq: number;
     at: string;
     type: string;
     severity: string;
@@ -39,7 +40,8 @@ async function prepare(
     } as (typeof value.collectors)['docker'];
     events.push(
       {
-        id: 41,
+        id: '01J2ZQ6V8M0000000000000041',
+        seq: 41,
         at: '2026-07-11T11:58:00Z',
         type: 'container_oom',
         severity: 'critical',
@@ -47,7 +49,8 @@ async function prepare(
         resourceId: 'res_beta',
       },
       {
-        id: 42,
+        id: '01J2ZQ6V8M0000000000000042',
+        seq: 42,
         at: '2026-07-11T11:59:00Z',
         type: 'container_restart',
         severity: 'warning',

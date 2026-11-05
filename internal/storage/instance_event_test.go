@@ -69,7 +69,7 @@ func TestWriteBatchPersistsEventExtendedFields(t *testing.T) {
 
 	now := time.Now().UTC()
 	event := metrics.Event{
-		ID:                1,
+		ID:                metrics.NewEventID(),
 		At:                now,
 		Type:              "container_oom",
 		ResourceID:        "res_web",
@@ -85,7 +85,7 @@ func TestWriteBatchPersistsEventExtendedFields(t *testing.T) {
 	}
 
 	var severity, details, correlation, container string
-	row := manager.DB().QueryRowContext(ctx, "SELECT severity, details_json, correlation_key, container_instance_id FROM events WHERE id=?", "1")
+	row := manager.DB().QueryRowContext(ctx, "SELECT severity, details_json, correlation_key, container_instance_id FROM events WHERE id=?", event.ID)
 	if err := row.Scan(&severity, &details, &correlation, &container); err != nil {
 		t.Fatal(err)
 	}

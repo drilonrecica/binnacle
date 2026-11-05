@@ -89,7 +89,7 @@
   let loadingMore = $state(false);
   let exhausted = $state(false);
   let error = $state('');
-  let seenLiveId = $state(0);
+  let seenLiveSeq = $state(0);
   let pending = $state<HistoricalEvent[]>([]);
   let shown = $state<HistoricalEvent[]>([]);
   let highlight = $state(new Set<string>());
@@ -133,7 +133,7 @@
     exhausted = false;
     pending = [];
     shown = [];
-    seenLiveId = live.events.at(-1)?.id ?? 0;
+    seenLiveSeq = live.events.at(-1)?.seq ?? 0;
     router.setQuery({
       range: range === '24h' ? null : range,
       severity: severity === 'all' ? null : severity,
@@ -190,9 +190,9 @@
   // Live events arrive through the SSE store; queue them when the reader has
   // scrolled away so the list never jumps under their pointer.
   $effect(() => {
-    const fresh = live.events.filter((event) => event.id > seenLiveId);
+    const fresh = live.events.filter((event) => event.seq > seenLiveSeq);
     if (!fresh.length) return;
-    seenLiveId = fresh[fresh.length - 1].id;
+    seenLiveSeq = fresh[fresh.length - 1].seq;
     if (!liveOn) return;
     const rows = fresh.map(fromLive).filter(matches).reverse();
     if (!rows.length) return;
