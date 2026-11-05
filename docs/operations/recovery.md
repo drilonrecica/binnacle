@@ -120,7 +120,7 @@ metrics above:
 | Section | Entries | Meaning |
 | --- | --- | --- |
 | `failures` | `persistence_write`, `rollup`, `retention`, `vacuum`, `docker`, `checks`, `checks_skipped`, `deliveries` | Failures since the process started. Any failure marks the entry `warning`; the log has the cause. A check whose target is down is a result, not a `checks` failure. `docker` leaves out calls cancelled by shutdown and is absent in demo mode, like `checks`. |
-| `latency` | `persistence_write`, `rollup`, `retention`, `vacuum` | p50, p95 and max in milliseconds over the latest 256 runs, plus `count`, the runs since start. `warning` when p95 exceeds 50 ms (write), 500 ms (rollup) or 2 s (retention, vacuum); `null` and `unavailable` before the first run. |
+| `latency` | `persistence_write`, `rollup`, `retention`, `vacuum` | p50, p95 and max in milliseconds over the latest 256 runs, plus `count`, the runs since start, and `histogram` and `sum`, cumulative since start: each bucket counts the runs that took at most `le` milliseconds (the last bucket, `le: null`, counts every run), so two reads give the exact distribution between them; the benchmark computes its write p95 this way. `warning` when p95 exceeds 50 ms (write), 500 ms (rollup) or 2 s (retention, vacuum); `null` and `unavailable` before the first run. |
 
 The windows cover recent runs only, so a slow hour long ago does not hide a
 healthy present, and memory stays fixed however long Binnacle runs. Counters

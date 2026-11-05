@@ -73,3 +73,47 @@ func TestErrorLogFallsBackToDefaultLogger(t *testing.T) {
 		t.Fatalf("default logger got %q", buf.String())
 	}
 }
+
+func TestLatencyHistogramIsCumulativeSinceStart(t *testing.T) {
+	var l Latency
+	l.Observe(500 * time.Microsecond) // le 1 ms
+	l.Observe(time.Millisecond)       // a bound belongs to its own bucket
+	l.Observe(45 * time.Millisecond)  // le 50 ms
+	l.Observe(time.Minute)            // beyond the last bound
+	// Older than the window, the histogram still counts it.
+	for range LatencyWindow {
+		l.Observe(3 * time.Millisecond) // le 5 ms
+	}
+	s := l.Summary()
+	at := func(bound time.Duration) uint64 {
+		for i, b := range HistogramBounds {
+			if b == bound {
+				return s.Buckets[i]
+			}
+		}
+		t.Fatalf("no bucket for %s", bound)
+		return 0
+	}
+	if got := at(time.Millisecond); got != 2 {
+		t.Fatalf("le 1ms = %d, want 2", got)
+	}
+	if got := at(2 * time.Millisecond); got != 2 {
+		t.Fatalf("le 2ms = %d, want 2", got)
+	}
+	if got := at(5 * time.Millisecond); got != 2+LatencyWindow {
+		t.Fatalf("le 5ms = %d, want %d", got, 2+LatencyWindow)
+	}
+	if got := at(50 * time.Millisecond); got != 3+LatencyWindow {
+		t.Fatalf("le 50ms = %d", got)
+	}
+	if got := at(30 * time.Second); got != 3+LatencyWindow {
+		t.Fatalf("le 30s = %d", got)
+	}
+	if last := s.Buckets[len(s.Buckets)-1]; last != s.Count || s.Count != 4+LatencyWindow {
+		t.Fatalf("+Inf bucket = %d, count = %d", last, s.Count)
+	}
+	want := 500*time.Microsecond + time.Millisecond + 45*time.Millisecond + time.Minute + LatencyWindow*3*time.Millisecond
+	if s.Sum != want {
+		t.Fatalf("sum = %s, want %s", s.Sum, want)
+	}
+}

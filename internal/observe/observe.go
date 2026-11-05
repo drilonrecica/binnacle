@@ -28,9 +28,24 @@ func (c *Counter) Add(n uint64) { c.n.Add(n) }
 // hour long ago does not hide a healthy present (and the reverse).
 const LatencyWindow = 256
 
-// Latency keeps the durations of the latest LatencyWindow operations. Its
-// memory is fixed; Observe is O(1) and Summary sorts at most LatencyWindow
-// values.
+// HistogramBounds are the upper bounds of the latency histogram buckets.
+// A last, unbounded bucket counts everything slower. They are fine around the
+// 50 ms write target and coarse beyond a second.
+var HistogramBounds = [...]time.Duration{
+	time.Millisecond, 2 * time.Millisecond, 5 * time.Millisecond, 10 * time.Millisecond,
+	15 * time.Millisecond, 20 * time.Millisecond, 25 * time.Millisecond, 30 * time.Millisecond,
+	40 * time.Millisecond, 50 * time.Millisecond, 75 * time.Millisecond, 100 * time.Millisecond,
+	150 * time.Millisecond, 250 * time.Millisecond, 500 * time.Millisecond, time.Second,
+	2 * time.Second, 5 * time.Second, 10 * time.Second, 30 * time.Second,
+}
+
+// Latency keeps the durations of the latest LatencyWindow operations and a
+// histogram of every operation since start. Its memory is fixed; Observe is
+// O(1) and Summary sorts at most LatencyWindow values.
+//
+// The window answers "how is it now"; the histogram is cumulative, so a
+// reader that takes two summaries can compute the exact distribution of the
+// operations between them (the benchmark's write p95, RUN-9).
 type Latency struct {
 	mu      sync.Mutex
 	samples [LatencyWindow]time.Duration
@@ -38,6 +53,8 @@ type Latency struct {
 	size    int
 	count   uint64
 	last    time.Duration
+	buckets [len(HistogramBounds) + 1]uint64
+	sum     time.Duration
 }
 
 // Observe records one operation's duration.
@@ -53,7 +70,20 @@ func (l *Latency) Observe(d time.Duration) {
 	}
 	l.count++
 	l.last = d
+	l.buckets[bucketIndex(d)]++
+	l.sum += d
 	l.mu.Unlock()
+}
+
+// bucketIndex is the first bucket whose upper bound is at least d, or the
+// unbounded last bucket.
+func bucketIndex(d time.Duration) int {
+	for i, bound := range HistogramBounds {
+		if d <= bound {
+			return i
+		}
+	}
+	return len(HistogramBounds)
 }
 
 // Since observes the time elapsed since started.
@@ -66,13 +96,23 @@ type LatencySummary struct {
 	Count         uint64
 	Last          time.Duration
 	P50, P95, Max time.Duration
+	// Buckets are the cumulative histogram counts since start: Buckets[i]
+	// operations took at most HistogramBounds[i]; the last entry equals Count.
+	Buckets [len(HistogramBounds) + 1]uint64
+	// Sum is the total duration of every operation since start.
+	Sum time.Duration
 }
 
 // Summary returns the current percentiles.
 func (l *Latency) Summary() LatencySummary {
 	l.mu.Lock()
 	values := slices.Clone(l.samples[:l.size])
-	summary := LatencySummary{Count: l.count, Last: l.last}
+	summary := LatencySummary{Count: l.count, Last: l.last, Sum: l.sum}
+	var cumulative uint64
+	for i, n := range l.buckets {
+		cumulative += n
+		summary.Buckets[i] = cumulative
+	}
 	l.mu.Unlock()
 	if len(values) == 0 {
 		return summary

@@ -48,6 +48,8 @@ func main() {
 	demoSeed := flag.Uint64("demo-seed", 1, "seed for synthetic demo data")
 	demoContainers := flag.Int("demo-containers", 30, "number of synthetic containers to generate in demo mode")
 	demoChecks := flag.Int("demo-checks", 10, "number of synthetic checks to generate in demo mode")
+	demoRunChecks := flag.Bool("demo-run-checks", false, "run the check scheduler against the synthetic checks in demo mode (benchmark)")
+	demoRawHistory := flag.Duration("demo-raw-history", 0, "seed this much raw 10 s history instead of the default demo history (benchmark; at least 1h)")
 	healthcheck := flag.Bool("healthcheck", false, "perform a one-shot local health check and exit")
 	showVersion := flag.Bool("version", false, "print the Binnacle version and exit")
 	flag.Parse()
@@ -147,9 +149,17 @@ func main() {
 		generator := demo.New(*demoSeed, realClock{})
 		generator.Containers = *demoContainers
 		application.Add(app.ComponentFuncs{Label: "demo-history", StartFunc: func(ctx context.Context) error {
-			if err := demo.SeedHistory(ctx, store, generator, time.Now()); err != nil {
+			seed := demo.SeedHistory
+			if *demoRawHistory > 0 {
+				seed = func(ctx context.Context, store demo.HistoryStore, generator *demo.Generator, now time.Time) error {
+					return demo.SeedRawHistory(ctx, store, generator, now, *demoRawHistory)
+				}
+			}
+			started := time.Now()
+			if err := seed(ctx, store, generator, time.Now()); err != nil {
 				return fmt.Errorf("seed demo history: %w", err)
 			}
+			log.Info("demo history ready", "raw_history", demoRawHistory.String(), "duration", time.Since(started).String())
 			return nil
 		}})
 		application.Add(&demo.Component{Generator: generator, Engine: engine})
@@ -234,7 +244,11 @@ func main() {
 	}})
 	application.Add(coolifyIntegration)
 	application.Add(sessions)
-	if !*demoMode && !config.Demo {
+	// Demo mode leaves the seeded check states as they are unless the
+	// benchmark asks for the scheduler, which then runs the offline demo
+	// runner every check interval.
+	runChecks := (!*demoMode && !config.Demo) || *demoRunChecks
+	if runChecks {
 		application.Add(checkScheduler)
 	}
 	application.Add(trendEstimator)
@@ -285,7 +299,7 @@ func main() {
 	apiServer.EnableEvents(store, eventsAuthorizer, protection)
 	apiServer.EnableHistoryDeletion(store, authorizer, sessions)
 	monitor := &diagnostics.Monitor{DatabasePath: config.Paths.DatabasePath, DatabaseTarget: config.Database.TargetBudgetBytes, QueueCapacity: config.Persistence.QueueBatchLimit, Engine: engine, LiveClients: apiServer.LiveClients, Persistence: persistence, Collector: productionSampler, Notifications: notificationWorker, NotificationQueueCapacity: config.Notifications.QueueCapacity, DockerSocket: dockerSocket, DockerFailures: dockerFailures, Storage: store}
-	if !*demoMode && !config.Demo {
+	if runChecks {
 		monitor.Checks = checkScheduler
 	}
 	apiServer.EnableMonitorHealth(monitor, authorizer)

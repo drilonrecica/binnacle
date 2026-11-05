@@ -61,6 +61,18 @@ func TestMonitorReportsWorkerFailuresAndLatency(t *testing.T) {
 	if write.ID != "persistence_write" || write.Count != 4 || write.P50 != 20.0 || write.P95 != 200.0 || write.Max != 200.0 || write.Status != "warning" {
 		t.Fatalf("write latency=%+v", write)
 	}
+	// RUN-9: the cumulative histogram in milliseconds, last bucket unbounded.
+	h := write.Histogram
+	if len(h) != len(observe.HistogramBounds)+1 || h[len(h)-1].LE != nil || h[len(h)-1].Count != 4 || write.Sum != 260.0 {
+		t.Fatalf("write histogram=%+v sum=%v", h, write.Sum)
+	}
+	counts := map[float64]uint64{}
+	for _, b := range h[:len(h)-1] {
+		counts[b.LE.(float64)] = b.Count
+	}
+	if counts[5] != 0 || counts[10] != 1 || counts[20] != 2 || counts[30] != 3 || counts[150] != 3 || counts[250] != 4 {
+		t.Fatalf("write histogram=%+v", h)
+	}
 	empty := (&Monitor{DatabasePath: "/missing", Persistence: &observedPersistence{}}).Snapshot().Latency[0]
 	if empty.P50 != nil || empty.Max != nil || empty.Status != "unavailable" {
 		t.Fatalf("empty window=%+v", empty)

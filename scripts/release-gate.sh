@@ -142,11 +142,14 @@ else
   skip "demo container smoke" "no container runtime available"
 fi
 
-# 6. Benchmark.
+# 6. Benchmark (RUN-9): the long-run scenario against the targets in
+# docs/operations/benchmarking.md. A missed or unmeasured target fails the
+# gate; the table is appended to the record below.
+rm -f "$ROOT_DIR/benchmark-report.json" "$ROOT_DIR/benchmark-report.md"
 if [[ -f "$ROOT_DIR/scripts/benchmark.py" ]]; then
-  run_check "benchmark" make benchmark
+  run_check "benchmark (long-run targets)" make benchmark
 else
-  skip "benchmark" "benchmark script missing"
+  fail "benchmark (long-run targets)" "benchmark script missing"
 fi
 
 # 7. Full browser qualification.
@@ -192,14 +195,13 @@ for entry in "${results[@]}"; do
 done
 record ""
 
-# Append benchmark summary if available.
-if [[ -f "$ROOT_DIR/benchmark-report.json" ]]; then
-  record "## Benchmark summary"
+# Append the benchmark targets; the full report is benchmark-report.json.
+if [[ -f "$ROOT_DIR/benchmark-report.md" ]]; then
+  record "## Benchmark targets"
   record ""
-  record '```json'
-  cat "$ROOT_DIR/benchmark-report.json" >> "$RECORD"
+  cat "$ROOT_DIR/benchmark-report.md" >> "$RECORD"
   record ""
-  record '```'
+  record "Full report: \`benchmark-report.json\`."
   record ""
 fi
 

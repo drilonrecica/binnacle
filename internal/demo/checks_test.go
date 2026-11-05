@@ -56,3 +56,36 @@ func TestSeedChecksAlertsUsesExistingDemoResources(t *testing.T) {
 		t.Fatalf("checks=%d alerts=%d", checksCount, alertsCount)
 	}
 }
+
+// RUN-9: the benchmark runs the scheduler against the demo runner. A demo
+// result must schedule the next run one interval from now, not from the
+// epoch, or every check is due again on the next tick.
+func TestDemoCheckResultSchedulesTheNextRunFromNow(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store := storage.New(filepath.Join(dir, "db.sqlite"), filepath.Join(dir, "runtime"))
+	if err := store.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	now := time.Now().UTC()
+	if err := alerts.NewRepository(store.DB()).SeedDefaults(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := SeedChecksAlerts(ctx, store.DB(), 3, 3, now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	repo := checks.NewRepository(store.DB())
+	due, err := repo.Due(ctx, now, 10)
+	if err != nil || len(due) != 3 {
+		t.Fatalf("due before run=%d err=%v", len(due), err)
+	}
+	for _, c := range due {
+		if err := repo.SaveResult(ctx, c, CheckRunner{}.Run(ctx, c)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if due, err = repo.Due(ctx, now.Add(time.Second), 10); err != nil || len(due) != 0 {
+		t.Fatalf("checks due again right after running: %d err=%v", len(due), err)
+	}
+}

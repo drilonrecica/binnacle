@@ -12,7 +12,7 @@ GO_SOURCE_FILES := $(shell find cmd internal -type f -name '*.go' -print)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev dev-demo dev-host test check build web-build image image-multi vuln licenses sbom scan format-check go-test web-test web-check go-vet benchmark benchmark-matrix
+.PHONY: help dev dev-demo dev-host test check build web-build image image-multi vuln licenses sbom scan format-check go-test web-test web-check go-vet benchmark benchmark-short benchmark-matrix
 
 help: ## Show the supported local development commands.
 
@@ -110,10 +110,14 @@ go-vet: web-build ## Run Go vet and the rule that forbids discarding errors with
 	$(GO) vet ./...
 	$(GO) run ./internal/lint/cmd/errdiscard ./internal/...
 
-benchmark: ## Run a short deterministic benchmark with 30 synthetic containers.
+benchmark: build ## Run the long-run benchmark (30 and 100 containers, 48 h seeded history) and fail on a missed target.
 
-	python3 scripts/benchmark.py --containers 30 --duration 60 --output benchmark-report.json
+	python3 scripts/benchmark.py --scenario long-run --no-build --binary $(BINNACLE_BIN) --output benchmark-report.json --markdown benchmark-report.md
 
-benchmark-matrix: ## Run the 10/30/50/100 container benchmark matrix.
+benchmark-short: ## Run a short benchmark with 30 synthetic containers on a fresh demo database.
+
+	python3 scripts/benchmark.py --scenario short --containers 30 --duration 60 --output benchmark-report.json
+
+benchmark-matrix: ## Run the 10/30/50/100 container short benchmark matrix.
 
 	BENCHMARK_DURATION=60 ./scripts/benchmark-matrix.sh

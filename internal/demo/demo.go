@@ -109,6 +109,12 @@ func (g *Generator) SnapshotAt(step uint64, now time.Time) metrics.Snapshot {
 			status = metrics.StatusUnknown
 		}
 		name := fmt.Sprintf("%s-%s", tpl.name, project)
+		// Template and project repeat every 40 containers; later cycles
+		// get a suffix so the name, and the stable key derived from it,
+		// stay unique (resources are UNIQUE(host_id, stable_key)).
+		if cycle := i / (len(templates) * len(projects)); cycle > 0 {
+			name = fmt.Sprintf("%s-%d", name, cycle+1)
+		}
 		id := fmt.Sprintf("res_demo_%d", i+1)
 		baseCPU := 1.5 + float64(i%5)*1.8
 		if tpl.infrastructure {

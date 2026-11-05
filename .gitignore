@@ -71,6 +71,7 @@ binnacle.db-shm
 
 # Benchmark reports
 benchmark-report.json
+benchmark-report.md
 benchmark-reports/
 
 # Release records

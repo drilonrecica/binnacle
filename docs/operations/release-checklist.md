@@ -25,7 +25,7 @@ table and captured benchmark output.
 | Socket proxy policy | Only required Docker reads pass; mutation and archive paths are denied | Raw socket reaches Binnacle or a forbidden path succeeds |
 | Container image build | Installation artifacts exist | Image build fails |
 | Demo container smoke | Unauthenticated liveness responds from the locally built candidate image | `/healthz` fails |
-| Benchmark | Performance regressions detected | RSS, CPU, write latency, or SSE exceed documented goals on reference hardware |
+| Benchmark (long-run) | 30 and 100 containers on 48 h of seeded raw history with checks, eight SSE clients and a retention pass stay within the targets in `docs/operations/benchmarking.md` | Any target missed or not measured (`make benchmark` exits 1) |
 | Security and integration race tests | Auth, tokens, enrichment, diagnostics, exports, storage, and preferences remain race-free | Any targeted race test fails |
 | Browser and accessibility suites | Access, diagnostics, token, preference, mobile, and accessibility workflows remain usable | Playwright or visual regression fails |
 | Advanced-auth acceptance | Default-hidden UI/routes, enabled TOTP/proxy workflows, and stored-enrollment startup refusal are verified | Any advanced-auth acceptance case fails |
@@ -60,6 +60,6 @@ Attach the following to the release record:
 
 1. `release-record/build.log`
 2. `release-record/<version>-<short-sha>.md`
-3. `benchmark-report.json`
+3. `benchmark-report.json` and `benchmark-report.md`
 4. Container image digest (`docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/drilonrecica/binnacle:local`)
 5. E2E and visual regression reports when run

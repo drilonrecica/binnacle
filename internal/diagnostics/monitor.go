@@ -44,16 +44,42 @@ type FailureMetric struct {
 // LatencyMetric is the p50, p95 and max of one operation over its latest
 // observe.LatencyWindow runs, in milliseconds; null before the first run.
 // The status compares p95 with the operation's warning threshold.
+//
+// Histogram and Sum cover every run since start, not just the window: two
+// snapshots give the exact distribution between them, which is how the
+// benchmark computes its write p95 (RUN-9).
 type LatencyMetric struct {
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Count  uint64 `json:"count"`
-	P50    any    `json:"p50"`
-	P95    any    `json:"p95"`
-	Max    any    `json:"max"`
-	Status string `json:"status"`
-	Help   string `json:"help"`
+	ID        string            `json:"id"`
+	Label     string            `json:"label"`
+	Count     uint64            `json:"count"`
+	P50       any               `json:"p50"`
+	P95       any               `json:"p95"`
+	Max       any               `json:"max"`
+	Histogram []HistogramBucket `json:"histogram"`
+	Sum       float64           `json:"sum"`
+	Status    string            `json:"status"`
+	Help      string            `json:"help"`
 }
+
+// HistogramBucket is one cumulative bucket: Count runs took at most LE
+// milliseconds. The last bucket has a nil LE (unbounded) and counts every run.
+type HistogramBucket struct {
+	LE    any    `json:"le"`
+	Count uint64 `json:"count"`
+}
+
+// histogram converts the cumulative counts of s to milliseconds buckets.
+func histogram(s observe.LatencySummary) []HistogramBucket {
+	buckets := make([]HistogramBucket, len(s.Buckets))
+	for i, count := range s.Buckets {
+		buckets[i].Count = count
+		if i < len(observe.HistogramBounds) {
+			buckets[i].LE = float64(observe.HistogramBounds[i]) / float64(time.Millisecond)
+		}
+	}
+	return buckets
+}
+
 type PersistenceMetrics interface {
 	Queue() int64
 	DroppedCount() uint64
@@ -242,7 +268,7 @@ func (m *Monitor) latency(health storage.Health) []LatencyMetric {
 		if s.Count > 0 {
 			status = flagStatus(s.P95 > warning, "warning")
 		}
-		values = append(values, LatencyMetric{ID: id, Label: label, Count: s.Count, P50: summaryValue(s, s.P50), P95: summaryValue(s, s.P95), Max: summaryValue(s, s.Max), Status: status, Help: help})
+		values = append(values, LatencyMetric{ID: id, Label: label, Count: s.Count, P50: summaryValue(s, s.P50), P95: summaryValue(s, s.P95), Max: summaryValue(s, s.Max), Histogram: histogram(s), Sum: float64(s.Sum) / float64(time.Millisecond), Status: status, Help: help})
 	}
 	if p, ok := m.Persistence.(PersistenceObservability); ok {
 		add("persistence_write", "Persistence write", p.WriteLatencySummary(), 50*time.Millisecond, "One history batch written to SQLite, retries included.")

@@ -45,6 +45,7 @@ jobs:
           path: |
             release-record/
             benchmark-report.json
+            benchmark-report.md
 
   publish:
     needs: [validate, qualify]

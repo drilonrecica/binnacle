@@ -10,10 +10,13 @@ import (
 	"time"
 )
 
+// CheckRunner answers checks without network access. CheckedAt is left zero
+// so the repository stamps the real time: a result dated at the epoch made
+// every scheduled check due again on the next tick.
 type CheckRunner struct{}
 
 func (CheckRunner) Run(_ context.Context, c checks.Check) checks.Result {
-	r := checks.Result{CheckID: c.ID, Status: "success", CheckedAt: time.Unix(0, 0).UTC(), LatencyMS: 24}
+	r := checks.Result{CheckID: c.ID, Status: "success", LatencyMS: 24}
 	if strings.HasSuffix(c.ID, "failure") {
 		r.Status = "failure"
 		r.FailureCode = checks.FailureUnexpectedStatus
