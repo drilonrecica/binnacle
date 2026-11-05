@@ -153,12 +153,12 @@
     display: grid;
   }
   .group + .group {
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--line);
   }
   h3 {
     padding: var(--space-3) var(--space-4) var(--space-1);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
     font-weight: 600;
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;
@@ -193,18 +193,18 @@
     gap: var(--space-2);
   }
   .title {
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     font-weight: 600;
   }
   .description {
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-meta);
   }
   .conditions {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-3);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
 </style>

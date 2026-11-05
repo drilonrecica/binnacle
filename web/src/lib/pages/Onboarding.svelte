@@ -229,7 +229,7 @@
 
   <div class="actions">
     {#if step > 1}
-      <Button variant="ghost" onclick={() => (step -= 1)} disabled={busy}
+      <Button variant="quiet" onclick={() => (step -= 1)} disabled={busy}
         >Back</Button
       >
     {:else}
@@ -270,8 +270,8 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
     font-weight: 500;
   }
   .steps li::before {
@@ -282,12 +282,12 @@
     justify-content: center;
     width: 20px;
     height: 20px;
-    border: 1px solid var(--border-strong);
+    border: 1px solid var(--line-strong);
     border-radius: 50%;
     font-family: var(--font-mono);
   }
   .steps li.current {
-    color: var(--text);
+    color: var(--fg);
   }
   .steps li.current::before {
     border-color: var(--accent);
@@ -304,9 +304,9 @@
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
     border: 1px solid var(--warn-border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-card);
     background: var(--warn-bg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .notice :global(svg) {
     flex: none;
@@ -320,33 +320,33 @@
   }
   .notice p {
     margin-top: 2px;
-    color: var(--text-2);
+    color: var(--muted);
   }
   .facts {
     display: grid;
     gap: var(--space-2);
     margin: 0;
-    padding-left: var(--space-5);
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    padding-left: var(--space-4);
+    color: var(--muted);
+    font-size: var(--text-meta);
   }
   .tiers {
-    color: var(--text-3);
+    color: var(--muted);
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .outbound {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .muted {
-    color: var(--text-3);
+    color: var(--muted);
   }
   .running {
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-meta);
   }
   .checks {
     display: grid;
@@ -359,14 +359,14 @@
     display: flex;
     gap: var(--space-3);
     padding: var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--bg-subtle);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--bg);
   }
   .check-icon {
     display: inline-flex;
     margin-top: 2px;
-    color: var(--text-3);
+    color: var(--muted);
   }
   .check-icon :global(svg) {
     width: 16px;
@@ -384,24 +384,24 @@
   .check-text {
     display: grid;
     gap: 2px;
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .check-title {
     font-weight: 600;
   }
   .required {
-    color: var(--text-3);
+    color: var(--muted);
     font-weight: 400;
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .check-reason {
-    color: var(--text-2);
+    color: var(--muted);
   }
   .check-fix {
     color: var(--warn-fg);
   }
   details {
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   details code {
     display: block;
@@ -410,15 +410,15 @@
   }
   .warn {
     color: var(--warn-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .error {
     padding: var(--space-2) var(--space-3);
     border: 1px solid var(--critical-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-control);
     background: var(--critical-bg);
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .actions {
     display: flex;

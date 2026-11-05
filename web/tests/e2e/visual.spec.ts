@@ -20,7 +20,7 @@ test('overview renders the headroom row and the grouped resource table', async (
     await mark.evaluate((image) => (image as HTMLImageElement).naturalWidth),
   ).toBeGreaterThan(0);
   await expect(
-    page.getByRole('progressbar', { name: 'CPU utilization' }),
+    page.getByRole('meter', { name: 'CPU utilization' }),
   ).toBeVisible();
   const resources = page.getByRole(mobile ? 'list' : 'table', {
     name: 'Resources',
@@ -49,7 +49,7 @@ test('host renders stat tiles and historical charts', async ({ page }) => {
     page.getByRole('heading', { name: 'Host', level: 1 }),
   ).toBeVisible();
   await expect(
-    page.getByRole('progressbar', { name: 'CPU utilization' }),
+    page.getByRole('meter', { name: 'CPU utilization' }),
   ).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'Load average' }),

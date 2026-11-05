@@ -136,7 +136,6 @@
     {
       key: 'runtime',
       label: 'Runtime',
-      hideBelow: 900,
       cell: componentRuntime,
     },
     {
@@ -159,7 +158,7 @@
       key: 'pids',
       label: 'PIDs',
       align: 'right',
-      hideBelow: 1100,
+      hideBelow: 'lg',
       sortable: true,
       sortValue: (row) => row.pids,
       cell: componentPids,
@@ -474,21 +473,21 @@
   .stats {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--panel);
     overflow: hidden;
   }
   .stats > :global(.stat) {
-    border-right: 1px solid var(--border);
+    border-right: 1px solid var(--line);
   }
   .stats > :global(.stat:last-child) {
     border-right: 0;
   }
   .context,
   .archived-at {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .mono {
     font-family: var(--font-mono);
@@ -501,12 +500,12 @@
     border: 0;
     border-radius: 4px;
     background: none;
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .id:hover {
-    background: var(--surface-2);
-    color: var(--text);
+    background: var(--panel-2);
+    color: var(--fg);
   }
   .id :global(svg) {
     width: 12px;
@@ -517,18 +516,18 @@
     gap: 2px;
   }
   .component-id {
-    color: var(--text-3);
+    color: var(--muted);
     font-size: 11px;
   }
   .runtime {
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .health {
-    color: var(--text-3);
+    color: var(--muted);
   }
   .danger {
-    margin-top: var(--space-5);
+    margin-top: var(--space-4);
   }
   .error {
     color: var(--critical-fg);
@@ -545,7 +544,7 @@
       border-right: 0;
     }
     .stats > :global(.stat:nth-child(-n + 2)) {
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--line);
     }
   }
 </style>

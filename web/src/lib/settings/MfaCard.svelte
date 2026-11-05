@@ -156,7 +156,7 @@
         <Button size="sm" onclick={downloadCodes}
           >{#snippet icon()}<Download />{/snippet}Download</Button
         >
-        <Button size="sm" variant="ghost" onclick={() => (recoveryCodes = [])}
+        <Button size="sm" variant="quiet" onclick={() => (recoveryCodes = [])}
           >Done</Button
         >
       </div>
@@ -222,7 +222,7 @@
         <span class="label">Secret</span>
         <div class="secret-row">
           <code>{seed}</code>
-          <Button size="sm" variant="ghost" onclick={() => copy(seed, 'Secret')}
+          <Button size="sm" variant="quiet" onclick={() => copy(seed, 'Secret')}
             >{#snippet icon()}<Copy />{/snippet}Copy</Button
           >
         </div>
@@ -231,7 +231,7 @@
           <code class="uri">{uri}</code>
           <Button
             size="sm"
-            variant="ghost"
+            variant="quiet"
             onclick={() => copy(uri, 'Setup URI')}
             >{#snippet icon()}<Copy />{/snippet}Copy</Button
           >
@@ -254,7 +254,7 @@
     {#if error}<p class="error" role="alert">{error}</p>{/if}
   </form>
   {#snippet footer()}
-    <Button variant="ghost" onclick={() => (enrollOpen = false)} disabled={busy}
+    <Button variant="quiet" onclick={() => (enrollOpen = false)} disabled={busy}
       >Cancel</Button
     >
     {#if !seed}
@@ -303,7 +303,7 @@
   </form>
   {#snippet footer()}
     <Button
-      variant="ghost"
+      variant="quiet"
       onclick={() => (disableOpen = false)}
       disabled={busy}>Cancel</Button
     >
@@ -313,11 +313,11 @@
 
 <style>
   .note {
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-meta);
   }
   .note code {
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .actions {
     display: flex;
@@ -330,15 +330,15 @@
   }
   .error {
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .secret {
     display: grid;
     gap: var(--space-1);
   }
   .label {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .secret-row {
     display: flex;
@@ -350,9 +350,9 @@
     flex: 1;
     min-width: 0;
     padding: var(--space-2);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    font-size: var(--text-xs);
+    border-radius: var(--radius-control);
+    background: var(--panel-2);
+    font-size: var(--text-mono);
     overflow-wrap: anywhere;
   }
   .recovery {
@@ -364,7 +364,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-1) var(--space-4);
     margin: 0;
-    padding-left: var(--space-5);
+    padding-left: var(--space-4);
     font-family: var(--font-mono);
   }
 </style>

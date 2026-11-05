@@ -212,7 +212,7 @@
               </div>
               <Button
                 size="sm"
-                variant="ghost"
+                variant="quiet"
                 onclick={() => endSilence(silence)}>End now</Button
               >
             </li>
@@ -230,7 +230,7 @@
   }
   .error {
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .list {
     margin: 0;
@@ -244,20 +244,20 @@
     padding: var(--space-2) var(--space-4);
   }
   .list li + li {
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--line);
   }
   .text {
     display: grid;
     flex: 1;
     gap: 2px;
     min-width: 0;
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .text a {
     font-weight: 500;
   }
   .meta {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
 </style>

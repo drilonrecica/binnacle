@@ -225,7 +225,7 @@
 <style>
   .stack {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
   }
   .grid {
     display: grid;
@@ -237,7 +237,7 @@
     grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--space-2);
     padding: var(--space-4);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
   .pins {
     margin: 0;
@@ -249,12 +249,12 @@
     align-items: center;
     gap: var(--space-2);
     padding: var(--space-1) var(--space-4);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .pin-index {
     width: 20px;
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .pin-name {
     flex: 1;
@@ -262,9 +262,9 @@
     font-weight: 500;
   }
   .missing {
-    color: var(--text-3);
+    color: var(--muted);
     font-weight: 400;
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   @media (max-width: 900px) {
     .grid {

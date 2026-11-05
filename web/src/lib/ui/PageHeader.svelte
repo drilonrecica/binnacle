@@ -52,7 +52,7 @@
   .page-header {
     display: grid;
     gap: var(--space-4);
-    margin-bottom: var(--space-5);
+    margin-bottom: var(--space-6);
   }
   .row {
     display: flex;
@@ -73,8 +73,8 @@
     margin: 0;
     padding: 0;
     list-style: none;
-    color: var(--text-3);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-body);
   }
   .crumbs li {
     display: inline-flex;
@@ -82,7 +82,7 @@
     gap: 2px;
   }
   .crumbs a {
-    color: var(--text-2);
+    color: var(--muted);
   }
   .crumbs :global(svg) {
     width: 14px;
@@ -90,13 +90,14 @@
     margin: 0 2px;
   }
   h1 {
-    font-size: var(--text-xl);
-    font-weight: 600;
+    font-family: var(--font-display);
+    font-size: var(--text-h1);
+    font-weight: var(--weight-semibold);
     overflow-wrap: anywhere;
   }
   .description {
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-body);
     max-width: 72ch;
   }
   .meta {
@@ -105,8 +106,8 @@
     align-items: center;
     gap: var(--space-2) var(--space-3);
     margin-top: var(--space-1);
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-body);
   }
   .actions {
     display: flex;

@@ -147,13 +147,12 @@
 
   const tokenColumns: Column<ApiToken>[] = [
     { key: 'name', label: 'Token', cell: tokenNameCell },
-    { key: 'scopes', label: 'Scopes', hideBelow: 900, cell: tokenScopesCell },
+    { key: 'scopes', label: 'Scopes', cell: tokenScopesCell },
     {
       key: 'created',
       label: 'Created',
       align: 'right',
       width: '120px',
-      hideBelow: 720,
       cell: tokenCreated,
     },
     {
@@ -168,7 +167,7 @@
       label: 'Expires',
       align: 'right',
       width: '120px',
-      hideBelow: 1100,
+      hideBelow: 'lg',
       cell: tokenExpires,
     },
     {
@@ -211,7 +210,7 @@
   {#if !row.revokedAt}
     <Button
       size="sm"
-      variant="ghost"
+      variant="quiet"
       onclick={() => {
         revoking = row;
         revokeOpen = true;
@@ -384,7 +383,7 @@
             <code>{origin}/metrics</code>
             <Button
               size="sm"
-              variant="ghost"
+              variant="quiet"
               onclick={() => copy(`${origin}/metrics`)}
               >{#snippet icon()}<Copy />{/snippet}Copy</Button
             >
@@ -476,7 +475,7 @@
       >
     {:else}
       <Button
-        variant="ghost"
+        variant="quiet"
         onclick={() => (tokenDialog = false)}
         disabled={tokenBusy}>Cancel</Button
       >
@@ -498,7 +497,7 @@
 <style>
   .stack {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
   }
   .form {
     display: grid;
@@ -514,19 +513,19 @@
     gap: var(--space-2);
   }
   .note {
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-meta);
   }
   .note code,
   .endpoints code {
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .padded {
     padding: var(--space-4);
   }
   .error {
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .token-name {
     display: flex;
@@ -537,8 +536,8 @@
     font-weight: 600;
   }
   .prefix {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .scopes {
     display: flex;
@@ -546,22 +545,22 @@
     gap: 4px;
   }
   .muted {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .endpoints {
     display: grid;
     gap: var(--space-3);
     margin: 0;
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .endpoints div {
     display: grid;
     gap: 4px;
   }
   .endpoints dt {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .endpoints dd {
     display: flex;
@@ -576,9 +575,9 @@
   }
   .plaintext code {
     padding: var(--space-3);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    font-size: var(--text-xs);
+    border-radius: var(--radius-control);
+    background: var(--panel-2);
+    font-size: var(--text-mono);
     overflow-wrap: anywhere;
   }
   .scopes-field {
@@ -590,7 +589,7 @@
   }
   .scopes-field legend {
     margin-bottom: var(--space-1);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     font-weight: 500;
   }
   .scope {
@@ -598,11 +597,11 @@
     grid-template-columns: auto 1fr auto;
     gap: var(--space-2);
     align-items: center;
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .scope code {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   @media (max-width: 720px) {
     .grid2 {

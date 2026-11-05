@@ -159,11 +159,11 @@
     z-index: 60;
     min-width: 180px;
     padding: var(--space-1);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    background: var(--surface);
-    box-shadow: var(--shadow-lg);
-    animation: menu-in var(--motion-fast) var(--ease-out);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-card);
+    background: var(--panel);
+    box-shadow: var(--shadow-overlay);
+    animation: menu-in var(--motion) var(--ease-out);
   }
   @keyframes menu-in {
     from {

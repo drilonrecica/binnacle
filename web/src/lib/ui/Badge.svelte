@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import StatusMarker from './StatusMarker.svelte';
   import type { Tone } from './status';
 
   let {
@@ -9,14 +10,15 @@
     children,
   }: {
     tone?: Tone;
+    /** Shows the tone's shape marker before the text. */
     dot?: boolean;
     mono?: boolean;
     children: Snippet;
   } = $props();
 </script>
 
-<span class={`badge ${tone}`} class:mono>
-  {#if dot}<span class="dot" aria-hidden="true"></span>{/if}
+<span class={`badge ${tone}`} class:mono data-tone={tone}>
+  {#if dot}<StatusMarker {tone} size={7} />{/if}
   {@render children()}
 </span>
 
@@ -26,59 +28,49 @@
     align-items: center;
     gap: 0.375rem;
     height: 22px;
-    padding: 0 0.5rem;
+    padding: 0 var(--space-2);
     border: 1px solid var(--badge-border);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-control);
     background: var(--badge-bg);
     color: var(--badge-fg);
-    font-size: var(--text-xs);
-    font-weight: 500;
+    font-size: var(--text-meta);
+    font-weight: var(--weight-medium);
     line-height: 1;
     white-space: nowrap;
   }
   .mono {
     font-family: var(--font-mono);
-  }
-  .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--badge-solid);
+    font-size: var(--text-mono);
+    font-variant-numeric: tabular-nums;
   }
   .ok {
     --badge-bg: var(--ok-bg);
     --badge-fg: var(--ok-fg);
     --badge-border: var(--ok-border);
-    --badge-solid: var(--ok-solid);
   }
   .warn {
     --badge-bg: var(--warn-bg);
     --badge-fg: var(--warn-fg);
     --badge-border: var(--warn-border);
-    --badge-solid: var(--warn-solid);
   }
   .critical {
     --badge-bg: var(--critical-bg);
     --badge-fg: var(--critical-fg);
     --badge-border: var(--critical-border);
-    --badge-solid: var(--critical-solid);
   }
   .info {
     --badge-bg: var(--info-bg);
     --badge-fg: var(--info-fg);
     --badge-border: var(--info-border);
-    --badge-solid: var(--info-solid);
   }
   .neutral {
     --badge-bg: var(--neutral-bg);
     --badge-fg: var(--neutral-fg);
     --badge-border: var(--neutral-border);
-    --badge-solid: var(--neutral-solid);
   }
   .accent {
     --badge-bg: var(--accent-bg);
     --badge-fg: var(--accent-text);
     --badge-border: var(--accent-border);
-    --badge-solid: var(--accent);
   }
 </style>

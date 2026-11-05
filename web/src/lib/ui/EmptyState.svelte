@@ -44,9 +44,9 @@
     width: 40px;
     height: 40px;
     margin-bottom: var(--space-1);
-    border-radius: var(--radius);
-    background: var(--surface-2);
-    color: var(--text-2);
+    border-radius: var(--radius-card);
+    background: var(--panel-2);
+    color: var(--muted);
   }
   .ok .icon {
     background: var(--ok-bg);
@@ -57,13 +57,13 @@
     height: 20px;
   }
   h3 {
-    font-size: var(--text-md);
-    font-weight: 600;
+    font-size: var(--text-body);
+    font-weight: var(--weight-semibold);
   }
   p {
     max-width: 44ch;
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-body);
   }
   .actions {
     display: flex;

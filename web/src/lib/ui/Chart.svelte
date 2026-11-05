@@ -29,6 +29,11 @@
   import { onMount, tick } from 'svelte';
   import uPlot from 'uplot';
   import 'uplot/dist/uPlot.min.css';
+  import {
+    invalidateChartColors,
+    readChartColors,
+    seriesColor as paletteColor,
+  } from './chart-colors';
   import { uniqueId } from './focus';
   import { formatAbsolute } from './relative-time';
 
@@ -42,6 +47,7 @@
     min = 0,
     max,
     label,
+    legend = true,
   }: {
     series: ChartSeries[];
     gaps?: ChartGap[];
@@ -54,12 +60,21 @@
     max?: number;
     /** Accessible name for the chart. */
     label: string;
+    /** Series names with the hovered or latest value, in mono. */
+    legend?: boolean;
   } = $props();
 
   let root = $state<HTMLDivElement | null>(null);
   let wrapper = $state<HTMLDivElement | null>(null);
   let plot: uPlot | undefined;
-  let hover = $state<{ index: number; left: number; top: number } | null>(null);
+  let hover = $state<{
+    index: number;
+    left: number;
+    top: number;
+    notes: string[];
+  } | null>(null);
+  // Resolved once per theme (see chart-colors.ts), not on every hover.
+  let colors = $state.raw(readChartColors());
   let selected = $state<number | null>(null);
   let width = $state(0);
   const inspectorId = uniqueId('chart-inspector');
@@ -91,26 +106,41 @@
     return Math.ceil(widest) + 20;
   }
 
-  function cssVar(name: string): string {
-    return getComputedStyle(document.documentElement)
-      .getPropertyValue(name)
-      .trim();
-  }
-
   function seriesColor(index: number, item: ChartSeries): string {
-    return cssVar(`--chart-${item.color ?? (index % 6) + 1}`) || '#2dd4d8';
+    return paletteColor(colors, index, item.color);
   }
 
   function withAlpha(color: string, alpha: number): string {
     return `color-mix(in srgb, ${color} ${Math.round(alpha * 100)}%, transparent)`;
   }
 
+  function latest(points: Array<number | null>): number | null {
+    for (let index = points.length - 1; index >= 0; index -= 1) {
+      const value = points[index];
+      if (value != null) return value;
+    }
+    return null;
+  }
+
+  /** Annotations within a few pixels of the cursor, as tooltip notes. */
+  function markerNotes(u: uPlot, left: number): string[] {
+    return markers
+      .filter((marker) => Math.abs(u.valToPos(marker.at, 'x') - left) <= 6)
+      .map((marker) =>
+        marker.count && marker.count > 1
+          ? `${marker.label} (${marker.count})`
+          : marker.label,
+      );
+  }
+
   function options(): uPlot.Options {
-    const axisColor = cssVar('--chart-axis') || '#7b8794';
-    const grid = cssVar('--chart-grid') || 'rgba(255,255,255,0.06)';
-    const gapFill = cssVar('--chart-gap') || 'rgba(245,184,61,0.1)';
-    const markerStroke = cssVar('--chart-marker') || 'rgba(245,184,61,0.8)';
-    const area = Number(cssVar('--chart-area')) || 0.18;
+    const {
+      axis: axisColor,
+      grid,
+      gap: gapFill,
+      marker: markerFill,
+      area,
+    } = colors;
     return {
       width: Math.max(1, width),
       height,
@@ -158,8 +188,9 @@
           grid: { stroke: grid, width: 1 },
           ticks: { stroke: grid, width: 1 },
           font: '11px JetBrains Mono, monospace',
-          gap: 6,
-          size: 28,
+          // Room above the tick labels for the annotation triangles.
+          gap: markers.length ? 12 : 6,
+          size: markers.length ? 34 : 28,
         },
         {
           stroke: axisColor,
@@ -191,15 +222,19 @@
                 u.bbox.height,
               );
             }
-            ctx.strokeStyle = markerStroke;
-            ctx.lineWidth = 1;
-            ctx.setLineDash([3, 3]);
+            // Annotations: small brass triangles just under the x axis line.
+            ctx.fillStyle = markerFill;
+            const ratio = window.devicePixelRatio || 1;
+            const half = 4 * ratio;
+            const base = u.bbox.top + u.bbox.height + 2 * ratio;
             for (const marker of markers) {
-              const x = Math.round(u.valToPos(marker.at, 'x', true)) + 0.5;
+              const x = Math.round(u.valToPos(marker.at, 'x', true));
               ctx.beginPath();
-              ctx.moveTo(x, u.bbox.top);
-              ctx.lineTo(x, u.bbox.top + u.bbox.height);
-              ctx.stroke();
+              ctx.moveTo(x, base);
+              ctx.lineTo(x + half, base + half * 1.5);
+              ctx.lineTo(x - half, base + half * 1.5);
+              ctx.closePath();
+              ctx.fill();
             }
             ctx.restore();
           },
@@ -211,7 +246,13 @@
               hover = null;
               return;
             }
-            hover = { index, left: u.cursor.left ?? 0, top: u.cursor.top ?? 0 };
+            const left = u.cursor.left ?? 0;
+            hover = {
+              index,
+              left,
+              top: u.cursor.top ?? 0,
+              notes: markerNotes(u, left),
+            };
           },
         ],
       },
@@ -223,7 +264,7 @@
     plot?.destroy();
     plot = new uPlot(options(), aligned, root);
     // uPlot paints the cursor with its own CSS variables.
-    root.style.setProperty('--uplot-cursor', cssVar('--chart-cursor'));
+    root.style.setProperty('--uplot-cursor', colors.cursor);
   }
 
   onMount(() => {
@@ -236,7 +277,11 @@
       plot?.setSize({ width: Math.max(1, width), height });
     });
     resize.observe(wrapper);
-    const theme = new MutationObserver(() => rebuild());
+    const theme = new MutationObserver(() => {
+      invalidateChartColors();
+      colors = readChartColors();
+      rebuild();
+    });
     theme.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme'],
@@ -268,6 +313,7 @@
     const at = xs[hover.index];
     return {
       at,
+      notes: hover.notes,
       values: series.map((item, index) => ({
         label: item.label,
         color: seriesColor(index, item),
@@ -328,9 +374,28 @@
           >
         </div>
       {/each}
+      {#each hoverValues.notes as note (note)}
+        <div class="tooltip-note">▲ {note}</div>
+      {/each}
     </div>
   {/if}
 </div>
+
+{#if legend && series.length}
+  <ul class="legend" aria-hidden="true">
+    {#each series as item, index (item.key)}
+      {@const points = aligned[index + 1] as Array<number | null>}
+      {@const current = hover ? (points[hover.index] ?? null) : latest(points)}
+      <li>
+        <span class="swatch" style:background={seriesColor(index, item)}></span>
+        <span class="legend-label">{item.label}</span>
+        <span class="legend-value"
+          >{current == null ? '—' : formatValue(current)}</span
+        >
+      </li>
+    {/each}
+  </ul>
+{/if}
 
 <button
   type="button"
@@ -395,17 +460,17 @@
     z-index: 5;
     min-width: 150px;
     padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    box-shadow: var(--shadow-md);
-    font-size: var(--text-xs);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-control);
+    background: var(--panel);
+    box-shadow: var(--shadow-overlay);
+    font-size: var(--text-meta);
     pointer-events: none;
     white-space: nowrap;
   }
   .tooltip-time {
     margin-bottom: 4px;
-    color: var(--text-3);
+    color: var(--muted);
     font-family: var(--font-mono);
   }
   .tooltip-row {
@@ -419,11 +484,37 @@
     border-radius: 2px;
   }
   .tooltip-label {
-    color: var(--text-2);
+    color: var(--muted);
   }
   .tooltip-value {
     margin-left: auto;
     font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .tooltip-note {
+    margin-top: 4px;
+    color: var(--accent-text);
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-4);
+    margin: var(--space-2) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--text-meta);
+  }
+  .legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .legend-label {
+    color: var(--muted);
+  }
+  .legend-value {
+    font-family: var(--font-mono);
+    font-size: var(--text-mono);
     font-variant-numeric: tabular-nums;
   }
   .inspector {
@@ -432,16 +523,16 @@
     gap: var(--space-2);
     margin-top: var(--space-2);
     padding: 2px 8px;
-    border: 1px dashed var(--border-strong);
-    border-radius: var(--radius-sm);
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius-control);
     background: none;
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-meta);
     opacity: 0;
   }
   .inspector:focus-visible {
     opacity: 1;
-    color: var(--text);
+    color: var(--fg);
     outline-offset: 2px;
   }
   .inspector-readout {

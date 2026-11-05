@@ -119,8 +119,8 @@
     z-index: 40;
     height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
-    border-top: 1px solid var(--border);
-    background: var(--surface);
+    border-top: 1px solid var(--line);
+    background: var(--panel);
   }
   ul {
     display: grid;
@@ -142,7 +142,7 @@
     padding: 0;
     border: 0;
     background: none;
-    color: var(--text-3);
+    color: var(--muted);
     font-size: 11px;
     font-weight: 500;
     text-decoration: none;
@@ -166,9 +166,9 @@
     min-width: 16px;
     height: 16px;
     padding: 0 4px;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-control);
     background: var(--critical-solid);
-    color: #fff;
+    color: var(--fg-inverse);
     font-family: var(--font-mono);
     font-size: 10px;
     font-weight: 700;
@@ -189,17 +189,17 @@
     gap: var(--space-3);
     height: 44px;
     padding: 0 var(--space-3);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-size: var(--text-base);
+    border-radius: var(--radius-control);
+    color: var(--fg);
+    font-size: var(--text-body);
   }
   .more-list a:hover,
   .more-list button:hover {
-    background: var(--surface-2);
+    background: var(--panel-2);
   }
   .more-list :global(svg) {
     width: 18px;
     height: 18px;
-    color: var(--text-2);
+    color: var(--muted);
   }
 </style>

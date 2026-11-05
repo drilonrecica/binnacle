@@ -87,7 +87,7 @@
   .tabs {
     display: flex;
     gap: var(--space-1);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -105,32 +105,33 @@
     border: 0;
     border-bottom: 2px solid transparent;
     background: none;
-    color: var(--text-2);
-    font-size: var(--text-sm);
-    font-weight: 500;
+    color: var(--muted);
+    font-size: var(--text-body);
+    font-weight: var(--weight-medium);
     white-space: nowrap;
     transition:
-      color var(--motion-fast) var(--ease),
-      border-color var(--motion-fast) var(--ease);
+      color var(--motion) var(--ease-out),
+      border-color var(--motion) var(--ease-out);
   }
   button:hover {
-    color: var(--text);
+    color: var(--fg);
   }
   button.active {
     border-bottom-color: var(--accent);
-    color: var(--text);
+    color: var(--fg);
   }
   button:focus-visible {
     outline-offset: -2px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-control);
   }
   .count {
-    padding: 1px 6px;
-    border-radius: var(--radius-full);
-    background: var(--surface-3);
-    color: var(--text-2);
+    padding: 1px var(--space-1);
+    border-radius: var(--radius-control);
+    background: var(--line);
+    color: var(--muted);
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
+    font-variant-numeric: tabular-nums;
   }
   button.active .count {
     background: var(--accent-bg);

@@ -128,7 +128,7 @@
 <style>
   .all {
     color: var(--accent-text);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     font-weight: 500;
   }
   .loading {
@@ -137,7 +137,7 @@
   .error {
     padding: var(--space-4);
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .feed {
     margin: 0;
@@ -180,18 +180,18 @@
     min-width: 0;
   }
   .message {
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     overflow-wrap: anywhere;
   }
   .meta {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .meta a {
-    color: var(--text-2);
+    color: var(--muted);
     font-family: var(--font-mono);
   }
 </style>

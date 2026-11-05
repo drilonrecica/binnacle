@@ -26,7 +26,7 @@
   } from '../ui/DataTable.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
-  import ProgressBar from '../ui/ProgressBar.svelte';
+  import Scale from '../ui/Scale.svelte';
   import RelativeTime from '../ui/RelativeTime.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
   import Stat from '../ui/Stat.svelte';
@@ -151,7 +151,7 @@
       sortValue: (row) => row.mountPoint,
       cell: fsMount,
     },
-    { key: 'type', label: 'Type', hideBelow: 900, cell: fsType },
+    { key: 'type', label: 'Type', cell: fsType },
     {
       key: 'used',
       label: 'Used',
@@ -172,7 +172,6 @@
       key: 'total',
       label: 'Total',
       align: 'right',
-      hideBelow: 720,
       sortable: true,
       sortValue: (row) => row.totalBytes,
       cell: fsTotal,
@@ -181,7 +180,7 @@
       key: 'inodes',
       label: 'Inodes',
       align: 'right',
-      hideBelow: 1100,
+      hideBelow: 'lg',
       sortable: true,
       sortValue: (row) => row.inodesUsedPct,
       cell: fsInodes,
@@ -225,7 +224,6 @@
     {
       key: 'user',
       label: 'User',
-      hideBelow: 900,
       sortable: true,
       sortValue: (row) => row.user,
       cell: processUser,
@@ -233,7 +231,7 @@
     {
       key: 'state',
       label: 'State',
-      hideBelow: 1100,
+      hideBelow: 'lg',
       sortable: true,
       sortValue: (row) => row.state,
       cell: processState,
@@ -242,7 +240,7 @@
       key: 'uptime',
       label: 'Uptime',
       align: 'right',
-      hideBelow: 1000,
+      hideBelow: 'lg',
       sortable: true,
       sortValue: (row) => row.uptimeSeconds,
       cell: processUptime,
@@ -250,7 +248,6 @@
     {
       key: 'container',
       label: 'Container',
-      hideBelow: 720,
       cell: processContainer,
     },
   ];
@@ -287,7 +284,7 @@
 {/snippet}
 {#snippet fsUsed(row: FilesystemObservation)}
   <div class="fs-used">
-    <ProgressBar value={row.usedPct} label={`${row.mountPoint} usage`} />
+    <Scale value={row.usedPct} label={`${row.mountPoint} usage`} />
     <span class={`num pct ${utilizationTone(row.usedPct)}`}
       >{row.usedPct == null ? '—' : `${formatNumber(row.usedPct)}%`}</span
     >
@@ -599,22 +596,22 @@
 
 <style>
   .meta-item {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .meta-item .num {
-    color: var(--text-2);
+    color: var(--muted);
   }
   .stats {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--panel);
     overflow: hidden;
   }
   .stats > :global(.stat) {
-    border-right: 1px solid var(--border);
+    border-right: 1px solid var(--line);
   }
   .stats > :global(.stat:last-child) {
     border-right: 0;
@@ -630,7 +627,7 @@
     font-weight: 600;
   }
   .muted {
-    color: var(--text-3);
+    color: var(--muted);
   }
   .fs-used {
     display: flex;
@@ -664,27 +661,27 @@
     min-width: 0;
   }
   .sampled {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .limit {
     height: var(--control-h-sm);
     padding: 0 var(--space-2);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-subtle);
-    color: var(--text);
-    font-size: var(--text-xs);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-control);
+    background: var(--bg);
+    color: var(--fg);
+    font-size: var(--text-mono);
   }
   .error {
     padding: var(--space-3) var(--space-4);
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .note {
     margin-right: auto;
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .collectors {
     display: grid;
@@ -695,15 +692,15 @@
     display: grid;
     gap: var(--space-3);
     margin: 0;
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .collector-meta div {
     display: grid;
     gap: 2px;
   }
   .collector-meta dt {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .collector-meta dd {
     margin: 0;
@@ -716,7 +713,7 @@
       border-right: 0;
     }
     .stats > :global(.stat:nth-child(-n + 2)) {
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--line);
     }
   }
 </style>

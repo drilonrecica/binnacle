@@ -67,19 +67,19 @@
     grid-area: hint;
   }
   .label {
-    font-size: var(--text-sm);
-    font-weight: 500;
+    font-size: var(--text-body);
+    font-weight: var(--weight-medium);
   }
   .required {
     margin-left: 2px;
     color: var(--critical-fg);
   }
   .hint {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-meta);
   }
   .error {
     color: var(--critical-fg);
-    font-size: var(--text-xs);
+    font-size: var(--text-meta);
   }
 </style>

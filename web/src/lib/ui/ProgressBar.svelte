@@ -1,21 +1,20 @@
 <script lang="ts">
-  import { utilizationTone, type Tone } from './status';
+  import type { Tone } from './status';
 
+  // Progress of a task (a deletion, an export). Readings such as disk usage
+  // are not progress: use Scale, which is a meter.
   let {
     value,
     label,
-    tone,
-    warn = 80,
-    critical = 95,
+    tone = 'accent',
     size = 'md',
   }: {
     /** Percentage 0–100, or null when unknown. */
     value: number | null | undefined;
-    /** Accessible name, e.g. "Host memory". */
+    /** Accessible name, e.g. "Deletion progress". */
     label: string;
+    /** `critical` for a failed task; the caller states the failure in text. */
     tone?: Tone;
-    warn?: number;
-    critical?: number;
     size?: 'sm' | 'md';
   } = $props();
 
@@ -24,19 +23,16 @@
       ? null
       : Math.min(100, Math.max(0, value)),
   );
-  const resolvedTone = $derived(
-    tone ?? utilizationTone(clamped, warn, critical),
-  );
 </script>
 
 <div
-  class={`bar ${resolvedTone} ${size}`}
+  class={`bar ${tone} ${size}`}
   role="progressbar"
   aria-label={label}
   aria-valuemin="0"
   aria-valuemax="100"
   aria-valuenow={clamped ?? undefined}
-  aria-valuetext={clamped == null ? 'Unavailable' : `${Math.round(clamped)}%`}
+  aria-valuetext={clamped == null ? 'Unknown' : `${Math.round(clamped)}%`}
 >
   {#if clamped != null}
     <div class="fill" style:width={`${clamped}%`}></div>
@@ -49,17 +45,19 @@
     width: 100%;
     height: 6px;
     overflow: hidden;
-    border-radius: var(--radius-full);
-    background: var(--surface-3);
+    border-radius: 1px;
+    background: var(--line);
   }
   .bar.sm {
     height: 4px;
   }
   .fill {
     height: 100%;
-    border-radius: inherit;
     background: var(--fill);
-    transition: width var(--motion) var(--ease);
+    transition: width var(--motion) var(--ease-out);
+  }
+  .accent {
+    --fill: var(--accent);
   }
   .ok {
     --fill: var(--ok-solid);
@@ -72,9 +70,6 @@
   }
   .info {
     --fill: var(--info-solid);
-  }
-  .accent {
-    --fill: var(--accent);
   }
   .neutral {
     --fill: var(--neutral-solid);

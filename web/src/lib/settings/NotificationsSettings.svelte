@@ -142,7 +142,6 @@
     {
       key: 'incident',
       label: 'Incident',
-      hideBelow: 900,
       cell: deliveryIncident,
     },
     {
@@ -150,7 +149,7 @@
       label: 'Attempts',
       align: 'right',
       width: '90px',
-      hideBelow: 1100,
+      hideBelow: 'lg',
       cell: deliveryAttempts,
     },
     {
@@ -350,7 +349,7 @@
 <style>
   .stack {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
   }
   .loading {
     padding: var(--space-4);
@@ -358,7 +357,7 @@
   .error {
     padding: var(--space-4);
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .channels {
     margin: 0;
@@ -372,7 +371,7 @@
     padding: var(--space-3) var(--space-4);
   }
   .channels li + li {
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--line);
   }
   .channels li.disabled .text {
     opacity: 0.6;
@@ -384,9 +383,9 @@
     flex: none;
     width: 32px;
     height: 32px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    color: var(--text-2);
+    border-radius: var(--radius-control);
+    background: var(--panel-2);
+    color: var(--muted);
   }
   .kind :global(svg) {
     width: 16px;
@@ -405,23 +404,23 @@
     gap: var(--space-2);
   }
   .title {
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     font-weight: 600;
   }
   .target {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .mono {
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .muted {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .capitalize {
     text-transform: capitalize;

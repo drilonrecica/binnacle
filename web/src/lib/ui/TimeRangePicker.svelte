@@ -183,7 +183,7 @@
       </label>
       {#if error}<p class="error" role="alert">{error}</p>{/if}
       <div class="actions">
-        <Button size="sm" variant="ghost" onclick={closeCustom}>Cancel</Button>
+        <Button size="sm" variant="quiet" onclick={closeCustom}>Cancel</Button>
         <Button size="sm" variant="primary" onclick={applyCustom}
           >Apply range</Button
         >
@@ -195,6 +195,7 @@
 <style>
   .picker {
     display: inline-flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
   }
@@ -204,16 +205,16 @@
     gap: var(--space-2);
     height: var(--control-h-sm);
     padding: 0 var(--space-2);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text-2);
-    font-size: var(--text-xs);
-    font-weight: 500;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--muted);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-medium);
   }
   .custom:hover,
   .custom.active {
-    color: var(--text);
+    color: var(--fg);
   }
   .custom.active {
     border-color: var(--accent-border);
@@ -225,37 +226,38 @@
   }
   .custom-range {
     font-family: var(--font-mono);
+    font-size: var(--text-mono);
   }
   .popover {
     z-index: 60;
     display: grid;
     gap: var(--space-3);
-    width: 280px;
+    width: min(280px, calc(100vw - 2 * var(--space-4)));
     padding: var(--space-4);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    background: var(--surface);
-    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-card);
+    background: var(--panel);
+    box-shadow: var(--shadow-overlay);
   }
   label {
     display: grid;
     gap: var(--space-1);
-    font-size: var(--text-xs);
-    color: var(--text-2);
+    color: var(--muted);
+    font-size: var(--text-meta);
   }
   input {
     height: var(--control-h);
     padding: 0 var(--space-2);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-subtle);
-    color: var(--text);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-control);
+    background: var(--bg);
+    color: var(--fg);
     font-family: var(--font-mono);
-    font-size: var(--text-sm);
+    font-size: var(--text-mono);
   }
   .error {
     color: var(--critical-fg);
-    font-size: var(--text-xs);
+    font-size: var(--text-meta);
   }
   .actions {
     display: flex;

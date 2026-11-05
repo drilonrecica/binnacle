@@ -142,18 +142,16 @@
     {
       key: 'resource',
       label: 'Resource',
-      hideBelow: 900,
       sortable: true,
       sortValue: (row) => names.get(row.resourceId) ?? row.resourceId,
       cell: resourceCell,
     },
-    { key: 'result', label: 'Last result', hideBelow: 1100, cell: resultCell },
+    { key: 'result', label: 'Last result', hideBelow: 'lg', cell: resultCell },
     {
       key: 'schedule',
       label: 'Every',
       align: 'right',
       width: '90px',
-      hideBelow: 720,
       sortable: true,
       sortValue: (row) => row.interval,
       cell: scheduleCell,
@@ -310,11 +308,11 @@
     justify-content: space-between;
     gap: var(--space-4);
     padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
   .hint {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .name {
     display: grid;
@@ -326,8 +324,8 @@
   }
   .url {
     max-width: 380px;
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -337,14 +335,14 @@
   }
   .mono {
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .result {
     display: grid;
     gap: 2px;
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .muted {
-    color: var(--text-3);
+    color: var(--muted);
   }
 </style>

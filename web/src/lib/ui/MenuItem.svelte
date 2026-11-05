@@ -66,16 +66,16 @@
     min-height: 32px;
     padding: 0 var(--space-2);
     border: 0;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-control);
     background: transparent;
-    color: var(--text);
-    font-size: var(--text-sm);
+    color: var(--fg);
+    font-size: var(--text-body);
     text-align: left;
     text-decoration: none;
   }
   .item:hover,
   .item:focus-visible {
-    background: var(--surface-2);
+    background: var(--panel-2);
     outline: none;
     text-decoration: none;
   }
@@ -87,7 +87,7 @@
   }
   .icon {
     display: inline-flex;
-    color: var(--text-2);
+    color: var(--muted);
   }
   .icon :global(svg) {
     width: 15px;

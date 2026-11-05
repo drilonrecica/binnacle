@@ -296,7 +296,7 @@
     gap: var(--space-2);
   }
   .range-label {
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     font-weight: 500;
   }
   .switches {
@@ -304,8 +304,8 @@
     gap: var(--space-2);
   }
   .stamp {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .selected {
     font-family: var(--font-mono);
@@ -313,8 +313,8 @@
   }
   .banner {
     padding: var(--space-2) var(--space-4);
-    border-bottom: 1px solid var(--border);
-    font-size: var(--text-sm);
+    border-bottom: 1px solid var(--line);
+    font-size: var(--text-meta);
   }
   .banner.error {
     color: var(--critical-fg);
@@ -330,8 +330,8 @@
   }
   .note {
     margin-right: auto;
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   @media (max-width: 1000px) {
     .layout {

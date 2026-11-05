@@ -5,7 +5,7 @@
   import { formatBytes } from '../i18n';
   import Field from '../ui/Field.svelte';
   import Input from '../ui/Input.svelte';
-  import ProgressBar from '../ui/ProgressBar.svelte';
+  import Scale from '../ui/Scale.svelte';
   import RadioCards from '../ui/RadioCards.svelte';
   import Select from '../ui/Select.svelte';
   import HistoryDeletionCard from './HistoryDeletionCard.svelte';
@@ -221,7 +221,7 @@
             {#if budgetBytes}of {formatBytes(budgetBytes)}{/if}</span
           >
         </div>
-        <ProgressBar value={usagePct} label="Database usage" />
+        <Scale value={usagePct} label="Database usage" />
       </div>
     {/if}
   </SettingsSection>
@@ -232,18 +232,18 @@
 <style>
   .stack {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
   }
   .tiers {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-3);
-    color: var(--text-3);
+    color: var(--muted);
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .tiers b {
-    color: var(--text-2);
+    color: var(--muted);
     font-weight: 500;
   }
   .grid {
@@ -252,8 +252,8 @@
     gap: var(--space-3);
   }
   .hint {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .budget {
     display: grid;
@@ -274,8 +274,8 @@
   .usage-head {
     display: flex;
     justify-content: space-between;
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-meta);
   }
   @media (max-width: 720px) {
     .grid,

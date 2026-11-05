@@ -44,11 +44,11 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-2) var(--space-5);
+    padding: var(--space-2) var(--space-4);
     border-bottom: 1px solid var(--warn-border);
     background: var(--warn-bg);
     color: var(--warn-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .bar[data-state='unauthorized'] {
     border-color: var(--critical-border);
@@ -68,6 +68,6 @@
     min-width: 0;
   }
   .text span {
-    color: var(--text-2);
+    color: var(--muted);
   }
 </style>

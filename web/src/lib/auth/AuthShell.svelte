@@ -58,7 +58,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: var(--space-5);
+    gap: var(--space-4);
     min-height: 100vh;
     min-height: 100dvh;
     padding: var(--space-6) var(--space-4);
@@ -83,13 +83,13 @@
   .card {
     position: relative;
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
     width: min(100%, 440px);
     padding: var(--space-8) var(--space-6);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    background: var(--surface);
-    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--panel);
+    box-shadow: var(--shadow-overlay);
   }
   .card.wide {
     width: min(100%, 720px);
@@ -114,23 +114,23 @@
     display: none;
   }
   .wordmark {
-    font-size: var(--text-md);
+    font-size: var(--text-h2);
     font-weight: 700;
     letter-spacing: -0.02em;
   }
   .eyebrow {
     color: var(--accent-text);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
     font-weight: 600;
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;
   }
   h1 {
-    font-size: var(--text-2xl);
+    font-size: var(--text-h1);
   }
   .description {
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-meta);
   }
   .body {
     display: grid;
@@ -138,13 +138,13 @@
   }
   .aside {
     padding-top: var(--space-4);
-    border-top: 1px solid var(--border);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .foot {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
     letter-spacing: var(--tracking-label);
   }
 </style>

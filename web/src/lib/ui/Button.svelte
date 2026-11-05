@@ -3,7 +3,11 @@
   import type { HTMLButtonAttributes } from 'svelte/elements';
   import Spinner from './Spinner.svelte';
 
-  type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'link';
+  /**
+   * primary: brass, one per view. secondary: outline. quiet: no chrome until
+   * hover. danger: destructive. link: inline text action.
+   */
+  type Variant = 'primary' | 'secondary' | 'quiet' | 'danger' | 'link';
   type Size = 'sm' | 'md';
 
   let {
@@ -67,19 +71,19 @@
     height: var(--control-h);
     padding: 0 var(--space-3);
     border: 1px solid transparent;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-control);
     background: transparent;
-    color: var(--text);
-    font-size: var(--text-sm);
-    font-weight: 500;
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    font-weight: var(--weight-medium);
     line-height: 1;
     white-space: nowrap;
     text-decoration: none;
     transition:
-      background var(--motion-fast) var(--ease),
-      border-color var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease),
-      box-shadow var(--motion-fast) var(--ease);
+      background var(--motion) var(--ease-out),
+      border-color var(--motion) var(--ease-out),
+      color var(--motion) var(--ease-out);
   }
   .btn:hover {
     text-decoration: none;
@@ -87,7 +91,7 @@
   .btn.sm {
     height: var(--control-h-sm);
     padding: 0 var(--space-2);
-    font-size: var(--text-xs);
+    font-size: var(--text-meta);
     gap: var(--space-1);
   }
   .btn.icon-only {
@@ -111,7 +115,7 @@
     background: var(--accent);
     border-color: var(--accent);
     color: var(--accent-contrast);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
   .primary:hover:not(:disabled) {
     background: var(--accent-hover);
@@ -119,21 +123,20 @@
   }
 
   .secondary {
-    background: var(--surface);
-    border-color: var(--border-strong);
-    box-shadow: var(--shadow-sm);
+    border-color: var(--line-strong);
+    background: transparent;
   }
   .secondary:hover:not(:disabled) {
-    background: var(--surface-2);
-    border-color: var(--n-600);
+    border-color: var(--muted);
+    background: var(--panel-2);
   }
 
-  .ghost {
-    color: var(--text-2);
+  .quiet {
+    color: var(--muted);
   }
-  .ghost:hover:not(:disabled) {
-    background: var(--surface-2);
-    color: var(--text);
+  .quiet:hover:not(:disabled) {
+    background: var(--panel-2);
+    color: var(--fg);
   }
 
   .danger {
@@ -144,14 +147,13 @@
   .danger:hover:not(:disabled) {
     background: var(--critical-solid);
     border-color: var(--critical-solid);
-    color: #fff;
+    color: var(--fg-inverse);
   }
 
   .link {
     height: auto;
     padding: 0;
     color: var(--accent-text);
-    font-weight: 500;
   }
   .link:hover:not(:disabled) {
     text-decoration: underline;

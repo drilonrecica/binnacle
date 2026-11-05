@@ -36,21 +36,21 @@
     width: 100%;
     height: var(--control-h);
     padding: 0 32px 0 var(--space-3);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-subtle);
-    color: var(--text);
-    font-size: var(--text-sm);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-control);
+    background: var(--bg);
+    color: var(--fg);
+    font-size: var(--text-body);
     appearance: none;
     cursor: pointer;
   }
   .sm select {
     height: var(--control-h-sm);
     padding-left: var(--space-2);
-    font-size: var(--text-xs);
+    font-size: var(--text-meta);
   }
   select:hover:not(:disabled) {
-    border-color: var(--n-600);
+    border-color: var(--muted);
   }
   select:focus {
     outline: none;
@@ -71,7 +71,7 @@
     right: 10px;
     display: inline-flex;
     align-items: center;
-    color: var(--text-3);
+    color: var(--muted);
     pointer-events: none;
   }
   .chevron :global(svg) {

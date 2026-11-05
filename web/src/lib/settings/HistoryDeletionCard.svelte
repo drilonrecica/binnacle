@@ -276,16 +276,16 @@
   }
   .error {
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .job {
     display: grid;
     gap: var(--space-2);
     padding: var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--bg-subtle);
-    font-size: var(--text-sm);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--bg);
+    font-size: var(--text-meta);
   }
   .job-head {
     display: flex;

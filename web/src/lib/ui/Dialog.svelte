@@ -106,11 +106,11 @@
     width: min(100vw - 2rem, var(--dialog-w));
     max-height: min(100vh - 2rem, 88vh);
     padding: 0;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    background: var(--surface);
-    color: var(--text);
-    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-card);
+    background: var(--panel);
+    color: var(--fg);
+    box-shadow: var(--shadow-overlay);
     overflow: hidden;
   }
   .dialog.sm {
@@ -127,7 +127,6 @@
   }
   .dialog::backdrop {
     background: var(--overlay);
-    backdrop-filter: blur(2px);
   }
   @keyframes dialog-in {
     from {
@@ -145,32 +144,32 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-4);
-    padding: var(--space-5) var(--space-5) var(--space-3);
+    padding: var(--space-4) var(--space-4) var(--space-3);
   }
   .heading {
     display: grid;
     gap: var(--space-1);
   }
   h2 {
-    font-size: var(--text-lg);
+    font-size: var(--text-h2);
   }
   .heading p {
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-body);
   }
   .body {
-    padding: 0 var(--space-5) var(--space-5);
+    padding: 0 var(--space-4) var(--space-4);
     overflow: auto;
   }
   .footer {
     display: flex;
     justify-content: flex-end;
     gap: var(--space-2);
-    padding: var(--space-3) var(--space-5);
-    border-top: 1px solid var(--border);
-    background: var(--bg-subtle);
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--line);
+    background: var(--panel-2);
   }
-  @media (max-width: 600px) {
+  @media (max-width: 559px) {
     .dialog {
       width: calc(100vw - 1rem);
       max-height: calc(100vh - 1rem);

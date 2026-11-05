@@ -112,7 +112,6 @@
       label: 'Resolved',
       align: 'right',
       width: '140px',
-      hideBelow: 900,
       cell: alertResolved,
     },
   ];
@@ -125,7 +124,6 @@
       label: 'Attempts',
       align: 'right',
       width: '90px',
-      hideBelow: 900,
       cell: deliveryAttempts,
     },
     {
@@ -312,15 +310,15 @@
 <style>
   .stack {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
   }
   .target {
     font-family: var(--font-mono);
     font-weight: 500;
   }
   .muted {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .alert-message {
     display: grid;

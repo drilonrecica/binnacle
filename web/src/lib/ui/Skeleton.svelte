@@ -2,7 +2,7 @@
   let {
     width = '100%',
     height = 16,
-    radius = 'var(--radius-sm)',
+    radius = 'var(--radius-control)',
     lines = 1,
   }: {
     width?: string | number;
@@ -28,9 +28,9 @@
     display: block;
     background: linear-gradient(
       90deg,
-      var(--surface-2) 25%,
-      var(--surface-3) 50%,
-      var(--surface-2) 75%
+      var(--panel-2) 25%,
+      var(--line) 50%,
+      var(--panel-2) 75%
     );
     background-size: 200% 100%;
     animation: shimmer 1.4s ease-in-out infinite;

@@ -3,10 +3,12 @@
   import type { HTMLButtonAttributes } from 'svelte/elements';
   import { tooltip } from './tooltip';
 
+  // `label` is required: an icon-only control always has an accessible name,
+  // and the same text shows as a tooltip on hover and focus.
   let {
     label,
     size = 'md',
-    variant = 'ghost',
+    variant = 'quiet',
     href,
     children,
     class: className = '',
@@ -14,7 +16,7 @@
   }: {
     label: string;
     size?: 'sm' | 'md';
-    variant?: 'ghost' | 'secondary';
+    variant?: 'quiet' | 'secondary';
     href?: string;
     children: Snippet;
     class?: string;
@@ -53,12 +55,12 @@
     height: var(--control-h);
     padding: 0;
     border: 1px solid transparent;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-control);
     background: transparent;
-    color: var(--text-2);
+    color: var(--muted);
     transition:
-      background var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
+      background var(--motion) var(--ease-out),
+      color var(--motion) var(--ease-out);
   }
   .icon-btn.sm {
     width: var(--control-h-sm);
@@ -73,17 +75,13 @@
     height: 14px;
   }
   .icon-btn:hover:not(:disabled) {
-    background: var(--surface-2);
-    color: var(--text);
+    background: var(--panel-2);
+    color: var(--fg);
     text-decoration: none;
   }
   .icon-btn.secondary {
-    background: var(--surface);
-    border-color: var(--border-strong);
-    color: var(--text);
-  }
-  .icon-btn.secondary:hover:not(:disabled) {
-    background: var(--surface-2);
+    border-color: var(--line-strong);
+    color: var(--fg);
   }
   .icon-btn:disabled {
     opacity: 0.5;

@@ -74,7 +74,7 @@
   {/if}
   {#if error}<p class="error" role="alert">{error}</p>{/if}
   {#snippet footer()}
-    <Button variant="ghost" onclick={() => (open = false)} disabled={busy}
+    <Button variant="quiet" onclick={() => (open = false)} disabled={busy}
       >{cancelLabel}</Button
     >
     <Button
@@ -91,34 +91,34 @@
 
 <style>
   .content {
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-body);
   }
   .phrase {
     display: grid;
     gap: var(--space-2);
     margin-top: var(--space-4);
-    font-size: var(--text-sm);
-    color: var(--text-2);
+    font-size: var(--text-body);
+    color: var(--muted);
   }
   .phrase code {
     padding: 1px 5px;
-    border-radius: 4px;
-    background: var(--surface-2);
-    color: var(--text);
+    border-radius: var(--radius-control);
+    background: var(--panel-2);
+    color: var(--fg);
   }
   .phrase input {
     height: var(--control-h);
     padding: 0 var(--space-3);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-subtle);
-    color: var(--text);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-control);
+    background: var(--bg);
+    color: var(--fg);
     font-family: var(--font-mono);
   }
   .error {
     margin-top: var(--space-3);
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-body);
   }
 </style>

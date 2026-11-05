@@ -2,6 +2,29 @@
 
 export type Tone = 'ok' | 'warn' | 'critical' | 'info' | 'neutral' | 'accent';
 
+/**
+ * The marker shape that accompanies every tone, so status never depends on
+ * colour alone (ADR 027): ok is a filled circle, warn a ring, critical a
+ * square, info a diamond outline, and neutral or unknown a dashed circle.
+ */
+export type Shape = 'circle' | 'ring' | 'square' | 'diamond' | 'dashed';
+
+export function toneShape(tone: Tone): Shape {
+  switch (tone) {
+    case 'ok':
+    case 'accent':
+      return 'circle';
+    case 'warn':
+      return 'ring';
+    case 'critical':
+      return 'square';
+    case 'info':
+      return 'diamond';
+    default:
+      return 'dashed';
+  }
+}
+
 export type NormalizedStatus =
   | 'healthy'
   | 'degraded'

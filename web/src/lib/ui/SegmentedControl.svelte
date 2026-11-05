@@ -38,36 +38,35 @@
   .segmented {
     display: inline-flex;
     padding: 2px;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-subtle);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-control);
+    background: var(--bg);
   }
   button {
     height: calc(var(--control-h) - 6px);
     padding: 0 var(--space-3);
     border: 0;
-    border-radius: 4px;
+    border-radius: 2px;
     background: transparent;
-    color: var(--text-2);
-    font-size: var(--text-sm);
-    font-weight: 500;
+    color: var(--muted);
     font-family: var(--font-mono);
+    font-size: var(--text-mono);
+    font-weight: var(--weight-medium);
     transition:
-      background var(--motion-fast) var(--ease),
-      color var(--motion-fast) var(--ease);
+      background var(--motion) var(--ease-out),
+      color var(--motion) var(--ease-out);
   }
   .sm button {
     height: calc(var(--control-h-sm) - 6px);
     padding: 0 var(--space-2);
-    font-size: var(--text-xs);
   }
   button:hover:not(:disabled) {
-    color: var(--text);
+    color: var(--fg);
   }
   button.active {
-    background: var(--surface);
-    color: var(--text);
-    box-shadow: var(--shadow-sm);
+    background: var(--panel-2);
+    color: var(--fg);
+    box-shadow: inset 0 -2px 0 var(--accent);
   }
   button:disabled {
     opacity: 0.5;

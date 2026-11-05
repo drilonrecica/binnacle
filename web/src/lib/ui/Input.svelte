@@ -48,23 +48,23 @@
     width: 100%;
     height: var(--control-h);
     padding: 0 var(--space-3);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-subtle);
-    color: var(--text);
-    font-size: var(--text-sm);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-control);
+    background: var(--bg);
+    color: var(--fg);
+    font-size: var(--text-body);
     transition:
-      border-color var(--motion-fast) var(--ease),
-      box-shadow var(--motion-fast) var(--ease);
+      border-color var(--motion) var(--ease-out),
+      box-shadow var(--motion) var(--ease-out);
   }
   input.mono {
     font-family: var(--font-mono);
   }
   input::placeholder {
-    color: var(--text-3);
+    color: var(--muted);
   }
   input:hover:not(:disabled) {
-    border-color: var(--n-600);
+    border-color: var(--muted);
   }
   input:focus {
     outline: none;
@@ -93,7 +93,7 @@
     bottom: 0;
     display: inline-flex;
     align-items: center;
-    color: var(--text-3);
+    color: var(--muted);
     pointer-events: none;
   }
   .adornment :global(svg) {

@@ -285,7 +285,7 @@
     {#if resourceId}
       <Button
         size="sm"
-        variant="ghost"
+        variant="quiet"
         onclick={() => {
           resourceId = '';
           void load();
@@ -342,8 +342,8 @@
     width: min(100%, 320px);
   }
   .end {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .pending {
     position: sticky;

@@ -179,16 +179,16 @@
     gap: var(--space-4);
   }
   .or {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
     text-align: center;
   }
   .error {
     padding: var(--space-2) var(--space-3);
     border: 1px solid var(--critical-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-control);
     background: var(--critical-bg);
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
 </style>

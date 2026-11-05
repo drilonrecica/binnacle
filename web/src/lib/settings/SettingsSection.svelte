@@ -40,7 +40,7 @@
   {#snippet footer()}
     {#if onsave}
       {#if dirty}<span class="dirty">Unsaved changes</span>{/if}
-      <Button variant="ghost" onclick={onreset} disabled={!dirty || saving}
+      <Button variant="quiet" onclick={onreset} disabled={!dirty || saving}
         >Reset</Button
       >
       <Button
@@ -60,11 +60,11 @@
   }
   .error {
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .dirty {
     margin-right: auto;
     color: var(--warn-fg);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
 </style>

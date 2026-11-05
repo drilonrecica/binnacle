@@ -43,6 +43,8 @@ export const pairs = [
   ['--accent-text', '--accent-bg over --bg', TEXT],
   ['--accent-text', '--accent-bg over --panel-2', TEXT],
   ['--accent-contrast', '--accent', TEXT],
+  // Text on a solid critical fill: the danger button's hover and count badges.
+  ['--fg-inverse', '--critical-solid', TEXT],
   ['--fg-inverse', '--fg', TEXT],
 ];
 

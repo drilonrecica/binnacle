@@ -269,8 +269,8 @@
   .meta {
     display: flex;
     gap: var(--space-4);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
     font-family: var(--font-mono);
   }
   .gaps {
@@ -289,7 +289,7 @@
     gap: var(--space-1) var(--space-4);
     margin: 0 0 var(--space-2);
     padding: 0 var(--space-1);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .latest div {
     display: flex;
@@ -300,11 +300,11 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    color: var(--text-2);
+    color: var(--muted);
   }
   .latest dd {
     margin: 0;
-    color: var(--text);
+    color: var(--fg);
     font-weight: 500;
   }
   .swatch {
@@ -318,15 +318,15 @@
   .error {
     padding: var(--space-6) var(--space-4);
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     text-align: center;
   }
   .stats {
     display: flex;
     gap: var(--space-4);
     padding: var(--space-2) var(--space-2) 0;
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   @media (max-width: 1100px) {
     .cols-2 {

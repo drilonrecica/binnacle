@@ -73,12 +73,12 @@ test('resources list filters, sorts, and opens detail with containers', async ({
     page.getByRole('heading', { name: 'worker.production', level: 1 }),
   ).toBeVisible();
   await page.getByRole('tab', { name: /Containers/ }).click();
-  await expect(page.getByRole('table', { name: 'Containers' })).toContainText(
-    'worker-1',
-  );
-  await expect(page.getByRole('table', { name: 'Containers' })).toContainText(
-    /starting/i,
-  );
+  // Every table is a list of cards on a phone.
+  const containers = page.getByRole(mobile ? 'list' : 'table', {
+    name: 'Containers',
+  });
+  await expect(containers).toContainText('worker-1');
+  await expect(containers).toContainText(/starting/i);
 });
 
 test('creates a health check from the Alerts checks tab', async ({ page }) => {
@@ -267,6 +267,10 @@ test('shows incidents and manages notification channels and deliveries', async (
   await expect.poll(() => smtpCreated).toBe(true);
 
   await expect(page.getByText('Failed')).toBeVisible();
+  // Toasts pause while hovered (WCAG 2.2.1), so a click that has to pass over
+  // one would wait for ever on a phone; dismiss them as a user would.
+  const dismiss = page.getByRole('button', { name: /^Dismiss: / });
+  while ((await dismiss.count()) > 0) await dismiss.first().click();
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect.poll(() => retried).toBe(true);
 });

@@ -60,13 +60,12 @@
       sortValue: (row) => title(row),
       cell: titleCell,
     },
-    { key: 'target', label: 'Target', hideBelow: 900, cell: targetCell },
+    { key: 'target', label: 'Target', cell: targetCell },
     {
       key: 'alerts',
       label: 'Alerts',
       align: 'right',
       width: '110px',
-      hideBelow: 720,
       cell: alertsCell,
     },
     {
@@ -83,7 +82,7 @@
       label: 'Duration',
       align: 'right',
       width: '110px',
-      hideBelow: 1100,
+      hideBelow: 'lg',
       cell: durationCell,
     },
   ];
@@ -190,27 +189,27 @@
     align-items: center;
     gap: var(--space-3) var(--space-4);
     padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
   .hint {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .title {
     font-weight: 600;
   }
   .mono {
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .muted {
-    color: var(--text-3);
+    color: var(--muted);
   }
   .card {
     display: grid;
     gap: var(--space-2);
     padding: var(--space-3);
-    color: var(--text);
+    color: var(--fg);
     text-decoration: none;
   }
   .card-top {
@@ -223,7 +222,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-3);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
 </style>

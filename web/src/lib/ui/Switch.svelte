@@ -45,16 +45,16 @@
     width: 36px;
     height: 20px;
     padding: 0;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-full);
-    background: var(--surface-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-control);
+    background: var(--line);
     transition:
-      background var(--motion-fast) var(--ease),
-      border-color var(--motion-fast) var(--ease);
+      background var(--motion) var(--ease-out),
+      border-color var(--motion) var(--ease-out);
   }
   .switch[aria-checked='true'] {
-    background: var(--accent);
     border-color: var(--accent);
+    background: var(--accent);
   }
   .thumb {
     position: absolute;
@@ -62,12 +62,12 @@
     left: 2px;
     width: 14px;
     height: 14px;
-    border-radius: 50%;
-    background: var(--n-0);
-    box-shadow: var(--shadow-sm);
-    transition: transform var(--motion-fast) var(--ease);
+    border-radius: 2px;
+    background: var(--fg);
+    transition: transform var(--motion) var(--ease-out);
   }
   .switch[aria-checked='true'] .thumb {
+    background: var(--accent-contrast);
     transform: translateX(16px);
   }
   .switch:disabled {

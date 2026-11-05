@@ -134,7 +134,7 @@
 {#snippet actionsCell(row: Silence)}
   <Button
     size="sm"
-    variant="ghost"
+    variant="quiet"
     onclick={() => {
       ending = row;
       confirmOpen = true;
@@ -199,11 +199,11 @@
     justify-content: space-between;
     gap: var(--space-4);
     padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
   .hint {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .scope {
     display: flex;
@@ -212,7 +212,7 @@
   }
   .mono {
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .reason {
     white-space: normal;
@@ -223,14 +223,14 @@
     text-align: right;
   }
   .muted {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .expired-title {
     padding: var(--space-3) var(--space-4) var(--space-1);
-    border-top: 1px solid var(--border);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: var(--text-mono);
     font-weight: 600;
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;

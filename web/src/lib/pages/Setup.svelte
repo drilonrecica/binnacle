@@ -170,7 +170,7 @@
           {error}
         </p>{/if}
       <div class="actions">
-        <Button variant="ghost" onclick={() => (step = 1)} disabled={busy}
+        <Button variant="quiet" onclick={() => (step = 1)} disabled={busy}
           >Back</Button
         >
         <Button type="submit" variant="primary" loading={busy}
@@ -194,8 +194,8 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
     font-weight: 500;
   }
   .steps li::before {
@@ -206,12 +206,12 @@
     justify-content: center;
     width: 20px;
     height: 20px;
-    border: 1px solid var(--border-strong);
+    border: 1px solid var(--line-strong);
     border-radius: 50%;
     font-family: var(--font-mono);
   }
   .steps li.current {
-    color: var(--text);
+    color: var(--fg);
   }
   .steps li.current::before {
     border-color: var(--accent);
@@ -235,9 +235,9 @@
   .error {
     padding: var(--space-2) var(--space-3);
     border: 1px solid var(--critical-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-control);
     background: var(--critical-bg);
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
 </style>

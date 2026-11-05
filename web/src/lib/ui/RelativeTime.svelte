@@ -54,6 +54,6 @@
     white-space: nowrap;
   }
   .muted {
-    color: var(--text-3);
+    color: var(--muted);
   }
 </style>

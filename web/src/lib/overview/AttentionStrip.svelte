@@ -54,10 +54,10 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
-    margin-bottom: var(--space-5);
+    margin-bottom: var(--space-4);
     padding: var(--space-2);
     border: 1px solid var(--strip-border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-card);
     background: var(--strip-bg);
   }
   .strip.critical {
@@ -83,14 +83,14 @@
     gap: var(--space-3);
     min-height: 40px;
     padding: var(--space-1) var(--space-3) var(--space-1) var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--panel);
+    color: var(--fg);
     text-decoration: none;
   }
   .item:hover {
-    border-color: var(--border-strong);
+    border-color: var(--line-strong);
     text-decoration: none;
   }
   .dot {
@@ -116,35 +116,35 @@
     line-height: 1.25;
   }
   .title {
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     font-weight: 600;
   }
   .detail {
-    color: var(--text-2);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .since {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .item :global(.chev) {
     width: 14px;
     height: 14px;
-    color: var(--text-3);
+    color: var(--muted);
   }
   .more {
     padding: 0 var(--space-3);
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-meta);
     font-weight: 500;
   }
   .clear {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    margin-bottom: var(--space-5);
+    margin-bottom: var(--space-4);
     color: var(--ok-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .clear :global(svg) {
     width: 16px;

@@ -130,7 +130,7 @@
     {#if error}<p class="error" role="alert">{error}</p>{/if}
   </form>
   {#snippet footer()}
-    <Button variant="ghost" onclick={() => (open = false)} disabled={busy}
+    <Button variant="quiet" onclick={() => (open = false)} disabled={busy}
       >Cancel</Button
     >
     <Button
@@ -155,6 +155,6 @@
   }
   .error {
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
 </style>

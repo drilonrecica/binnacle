@@ -310,7 +310,7 @@
     {/if}
   </form>
   {#snippet footer()}
-    <Button variant="ghost" onclick={() => (open = false)} disabled={busy}
+    <Button variant="quiet" onclick={() => (open = false)} disabled={busy}
       >Cancel</Button
     >
     <Button variant="primary" onclick={save} loading={busy}
@@ -337,22 +337,22 @@
   }
   .error {
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .callout {
     display: grid;
     gap: var(--space-1);
     padding: var(--space-3);
     border: 1px solid var(--warn-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-control);
     background: var(--warn-bg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .callout strong {
     color: var(--warn-fg);
   }
   .callout code {
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   @media (max-width: 600px) {
     .row {

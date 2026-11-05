@@ -177,17 +177,17 @@
 <style>
   .loading {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
   }
   .columns {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 340px;
-    gap: var(--space-5);
+    gap: var(--space-4);
     align-items: start;
   }
   .side {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
   }
   .toolbar {
     display: flex;

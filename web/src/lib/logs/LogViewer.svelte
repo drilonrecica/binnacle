@@ -191,8 +191,8 @@
     max-height: calc(100vh - 300px);
     min-height: 320px;
     overflow: auto;
-    background: var(--bg-subtle);
-    border-radius: 0 0 var(--radius) var(--radius);
+    background: var(--bg);
+    border-radius: 0 0 var(--radius-card) var(--radius-card);
   }
   .scroller:focus-visible {
     outline-offset: -2px;
@@ -217,7 +217,7 @@
     contain-intrinsic-size: auto 22px;
   }
   .line:hover {
-    background: var(--surface-2);
+    background: var(--panel-2);
   }
   .line.warn {
     border-left-color: var(--warn-solid);
@@ -227,10 +227,10 @@
     background: color-mix(in srgb, var(--critical-bg) 60%, transparent);
   }
   .line.muted .message {
-    color: var(--text-3);
+    color: var(--muted);
   }
   .time {
-    color: var(--text-3);
+    color: var(--muted);
     white-space: nowrap;
   }
   .component {
@@ -247,7 +247,7 @@
   .message {
     white-space: pre;
     overflow-wrap: anywhere;
-    color: var(--text);
+    color: var(--fg);
   }
   .wrap .message {
     white-space: pre-wrap;
@@ -255,8 +255,10 @@
   mark {
     padding: 0 1px;
     border-radius: 2px;
-    background: var(--warn-solid);
-    color: var(--n-950);
+    /* Tint plus an underline: the text keeps body contrast (ADR 027 pairs). */
+    background: var(--warn-bg);
+    box-shadow: inset 0 -2px 0 var(--warn-solid);
+    color: var(--fg);
   }
   .copy {
     display: inline-flex;
@@ -267,7 +269,7 @@
     border: 0;
     border-radius: 4px;
     background: none;
-    color: var(--text-3);
+    color: var(--muted);
     opacity: 0;
   }
   .line:hover .copy,

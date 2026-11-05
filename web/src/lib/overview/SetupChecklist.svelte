@@ -92,7 +92,7 @@
 {#if visible}
   <Card title="Finish setting up" id="checklist-title" padded={false}>
     {#snippet actions()}
-      <Button size="sm" variant="ghost" onclick={dismiss}>Dismiss</Button>
+      <Button size="sm" variant="quiet" onclick={dismiss}>Dismiss</Button>
     {/snippet}
     <ul class="list">
       {#each items as item (item.id)}
@@ -133,7 +133,7 @@
   .icon {
     display: inline-flex;
     margin-top: 2px;
-    color: var(--text-3);
+    color: var(--muted);
   }
   .icon :global(svg) {
     width: 16px;
@@ -148,17 +148,17 @@
   .text {
     display: grid;
     gap: 1px;
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .text a {
     font-weight: 500;
   }
   li.done .text a {
-    color: var(--text-2);
+    color: var(--muted);
     text-decoration: line-through;
   }
   .detail {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
 </style>

@@ -317,22 +317,22 @@
 <style>
   .stack {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
   }
   .padded {
     padding: var(--space-4);
   }
   .error {
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .warn {
     color: var(--warn-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .stamp {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .grid {
     display: grid;
@@ -340,14 +340,14 @@
     gap: 1px;
     margin: 0;
     padding: 0;
-    background: var(--border);
+    background: var(--line);
     list-style: none;
   }
   .metric {
     display: grid;
     gap: var(--space-1);
     padding: var(--space-3) var(--space-4);
-    background: var(--surface);
+    background: var(--panel);
   }
   .metric-head {
     display: flex;
@@ -356,16 +356,16 @@
     gap: var(--space-2);
   }
   .metric-label {
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     font-weight: 500;
   }
   .metric-value {
-    font-size: var(--text-lg);
+    font-size: var(--text-h2);
     font-weight: 500;
   }
   .metric-help {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -376,24 +376,24 @@
   .latency table {
     width: 100%;
     border-collapse: collapse;
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .latency caption {
     padding-bottom: var(--space-2);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
     text-align: left;
   }
   .latency th,
   .latency td {
     padding: var(--space-2) var(--space-2);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
     text-align: left;
     white-space: nowrap;
   }
   .latency thead th {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
     font-weight: 500;
   }
   .latency tbody th {
@@ -414,7 +414,7 @@
   }
   .fields summary {
     cursor: pointer;
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     font-weight: 500;
   }
   .fields dl {
@@ -424,21 +424,21 @@
     max-height: 360px;
     overflow: auto;
     padding: var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--bg-subtle);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--bg);
   }
   .fields dt {
-    color: var(--text-3);
+    color: var(--muted);
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
   .fields dd {
     margin: 0;
   }
   pre {
     margin: 0;
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
@@ -457,8 +457,8 @@
     gap: 2px;
   }
   .deployment dt {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .deployment dd {
     display: flex;
@@ -467,7 +467,7 @@
     margin: 0;
   }
   .deployment code {
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
     overflow-wrap: anywhere;
   }
   @media (max-width: 720px) {

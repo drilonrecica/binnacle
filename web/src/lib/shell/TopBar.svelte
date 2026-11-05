@@ -77,8 +77,8 @@
     align-items: center;
     gap: var(--space-3);
     height: var(--topbar-h);
-    padding: 0 var(--space-5);
-    border-bottom: 1px solid var(--border);
+    padding: 0 var(--space-4);
+    border-bottom: 1px solid var(--line);
     background: color-mix(in srgb, var(--bg) 85%, transparent);
     backdrop-filter: blur(8px);
   }
@@ -104,10 +104,10 @@
     height: 28px;
     padding: 0 var(--space-3);
     border: 1px solid var(--warn-border);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-control);
     background: var(--warn-bg);
     color: var(--warn-fg);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
     font-weight: 500;
     white-space: nowrap;
     text-decoration: none;
@@ -124,15 +124,15 @@
     gap: var(--space-2);
     height: 32px;
     padding: 0 var(--space-2) 0 var(--space-3);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text-3);
-    font-size: var(--text-sm);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-control);
+    background: var(--panel);
+    color: var(--muted);
+    font-size: var(--text-meta);
   }
   .search:hover {
-    color: var(--text);
-    border-color: var(--n-600);
+    color: var(--fg);
+    border-color: var(--muted);
   }
   .search :global(svg) {
     width: 15px;

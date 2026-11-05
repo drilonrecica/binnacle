@@ -165,7 +165,7 @@
     width: 100%;
     max-width: var(--content-max);
     margin: 0 auto;
-    padding: var(--space-5);
+    padding: var(--space-4);
     outline: none;
   }
   .mobile .content {

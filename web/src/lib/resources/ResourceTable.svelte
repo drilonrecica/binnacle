@@ -117,7 +117,7 @@
       label: 'Network',
       align: 'right',
       width: '140px',
-      hideBelow: 1440,
+      hideBelow: 'lg',
       sortable: true,
       sortValue: (row) => row.rxBps,
       cell: networkCell,
@@ -127,7 +127,7 @@
       label: 'Containers',
       align: 'right',
       width: '110px',
-      hideBelow: 1024,
+      hideBelow: 'lg',
       sortable: true,
       sortValue: (row) => row.components?.length ?? 0,
       cell: componentsCell,
@@ -264,7 +264,7 @@
   }
   .name {
     font-weight: 600;
-    color: var(--text);
+    color: var(--fg);
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -272,8 +272,8 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .context-text {
     font-family: var(--font-mono);
@@ -293,8 +293,8 @@
   .net {
     display: inline-grid;
     gap: 1px;
-    color: var(--text-2);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
     line-height: 1.2;
     text-align: right;
   }
@@ -325,14 +325,14 @@
   }
   .group-name {
     text-transform: none;
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     letter-spacing: 0;
   }
   .group-count {
     padding: 0 6px;
-    border-radius: var(--radius-full);
-    background: var(--surface-3);
-    color: var(--text-2);
+    border-radius: var(--radius-control);
+    background: var(--line);
+    color: var(--muted);
     font-family: var(--font-mono);
     font-weight: 500;
   }
@@ -340,7 +340,7 @@
     display: grid;
     gap: var(--space-2);
     padding: var(--space-3);
-    color: var(--text);
+    color: var(--fg);
     text-decoration: none;
   }
   .card-top {
@@ -354,7 +354,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-3);
-    color: var(--text-2);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
 </style>

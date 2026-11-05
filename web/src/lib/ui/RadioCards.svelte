@@ -75,16 +75,16 @@
     display: flex;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-card);
+    background: var(--panel);
     cursor: pointer;
     transition:
-      border-color var(--motion-fast) var(--ease),
-      background var(--motion-fast) var(--ease);
+      border-color var(--motion) var(--ease-out),
+      background var(--motion) var(--ease-out);
   }
   .card:hover {
-    border-color: var(--n-600);
+    border-color: var(--muted);
   }
   .card.selected {
     border-color: var(--accent);
@@ -108,9 +108,9 @@
     width: 16px;
     height: 16px;
     margin-top: 2px;
-    border: 2px solid var(--border-strong);
+    border: 2px solid var(--line-strong);
     border-radius: 50%;
-    background: var(--bg-subtle);
+    background: var(--bg);
   }
   .selected .indicator {
     border-color: var(--accent);
@@ -122,17 +122,17 @@
     min-width: 0;
   }
   .title {
-    font-size: var(--text-sm);
-    font-weight: 600;
+    font-size: var(--text-body);
+    font-weight: var(--weight-semibold);
   }
   .description {
-    color: var(--text-2);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-body);
   }
   .meta {
-    color: var(--text-3);
+    color: var(--muted);
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-meta);
   }
   .extra {
     margin-top: var(--space-2);
@@ -141,7 +141,7 @@
     opacity: 0.6;
     cursor: not-allowed;
   }
-  @media (max-width: 720px) {
+  @media (max-width: 559px) {
     .cols-2,
     .cols-3 {
       grid-template-columns: 1fr;

@@ -138,7 +138,7 @@
   .error {
     padding: var(--space-4);
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .days,
   .events {
@@ -151,9 +151,9 @@
     top: 0;
     z-index: 1;
     padding: var(--space-2) var(--space-4);
-    background: var(--bg-subtle);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    background: var(--bg);
+    color: var(--muted);
+    font-size: var(--text-mono);
     font-weight: 600;
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;
@@ -164,7 +164,7 @@
     gap: var(--space-3);
     align-items: start;
     padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
   .event.live {
     animation: flash 1.4s var(--ease-out);
@@ -176,8 +176,8 @@
   }
   .time {
     padding-top: 2px;
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .sev {
     width: 8px;
@@ -201,7 +201,7 @@
     min-width: 0;
   }
   .summary {
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     overflow-wrap: anywhere;
   }
   .meta {
@@ -209,17 +209,17 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2) var(--space-3);
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .meta a {
-    color: var(--text-2);
+    color: var(--muted);
     font-weight: 500;
   }
   .container {
     padding: 1px 5px;
     border-radius: 4px;
-    background: var(--surface-2);
+    background: var(--panel-2);
     font-size: 11px;
   }
   .source {
@@ -231,12 +231,12 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    border-radius: var(--radius-sm);
-    color: var(--text-3);
+    border-radius: var(--radius-control);
+    color: var(--muted);
   }
   .logs:hover {
-    background: var(--surface-2);
-    color: var(--text);
+    background: var(--panel-2);
+    color: var(--fg);
   }
   .logs :global(svg) {
     width: 15px;

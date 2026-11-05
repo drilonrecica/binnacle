@@ -24,6 +24,7 @@
     invalid = false,
     required = false,
     label,
+    limit = 50,
     onchange,
   }: {
     options: ComboboxOption[];
@@ -35,6 +36,8 @@
     disabled?: boolean;
     invalid?: boolean;
     required?: boolean;
+    /** Most options listed at once; the rest are counted in a "type to narrow" row. */
+    limit?: number;
     onchange?: (value: string) => void;
   } = $props();
 
@@ -42,6 +45,7 @@
   let query = $state('');
   let activeIndex = $state(0);
   let input = $state<HTMLInputElement | null>(null);
+  let popup = $state<HTMLDivElement | null>(null);
   let list = $state<HTMLUListElement | null>(null);
   let cleanup: (() => void) | null = null;
   const listId = $derived(`${id}-listbox`);
@@ -49,7 +53,9 @@
   const selected = $derived(
     options.find((option) => option.value === value) ?? null,
   );
-  const results = $derived(
+  // Rank every match, list the first `limit`, and say how many are left out
+  // instead of hiding them silently (UI-20).
+  const matches = $derived(
     rankItems(
       options.map((option) => ({
         id: option.value,
@@ -59,9 +65,19 @@
         keywords: option.keywords,
       })),
       query,
-      50,
-    ).map((item) => options.find((option) => option.value === item.id)!),
+      Infinity,
+    ),
   );
+  const byValue = $derived(
+    new Map(options.map((option) => [option.value, option])),
+  );
+  const results = $derived(
+    matches.slice(0, limit).flatMap((item) => {
+      const option = byValue.get(item.id);
+      return option ? [option] : [];
+    }),
+  );
+  const hidden = $derived(Math.max(0, matches.length - results.length));
 
   async function show() {
     if (disabled) return;
@@ -71,8 +87,8 @@
       results.findIndex((option) => option.value === value),
     );
     await tick();
-    if (input && list)
-      cleanup = attachFloating(input, list, {
+    if (input && popup)
+      cleanup = attachFloating(input, popup, {
         placement: 'bottom-start',
         gap: 4,
         matchWidth: true,
@@ -140,6 +156,7 @@
     aria-expanded={open}
     aria-controls={listId}
     aria-autocomplete="list"
+    aria-describedby={open && hidden ? `${listId}-more` : undefined}
     aria-activedescendant={open && results[activeIndex]
       ? `${listId}-${activeIndex}`
       : undefined}
@@ -161,26 +178,39 @@
   />
   <span class="chevron" aria-hidden="true"><ChevronDown /></span>
   {#if open}
-    <ul bind:this={list} id={listId} class="listbox" role="listbox">
-      {#if !results.length}
-        <li class="none">No matches</li>
+    <div class="popup" bind:this={popup}>
+      <ul
+        bind:this={list}
+        id={listId}
+        class="listbox"
+        role="listbox"
+        aria-label={label ?? 'Options'}
+      >
+        {#if !results.length}
+          <li class="none" role="presentation">No matches</li>
+        {/if}
+        {#each results as option, index (option.value)}
+          <li
+            id={`${listId}-${index}`}
+            data-index={index}
+            role="option"
+            aria-selected={option.value === value}
+            class:active={index === activeIndex}
+            onmousedown={(event) => event.preventDefault()}
+            onmousemove={() => (activeIndex = index)}
+            onmouseup={() => choose(option)}
+          >
+            <span class="label">{option.label}</span>
+            {#if option.hint}<span class="hint">{option.hint}</span>{/if}
+          </li>
+        {/each}
+      </ul>
+      {#if hidden}
+        <p class="more" id={`${listId}-more`} aria-live="polite">
+          {hidden} more, type to narrow
+        </p>
       {/if}
-      {#each results as option, index (option.value)}
-        <li
-          id={`${listId}-${index}`}
-          data-index={index}
-          role="option"
-          aria-selected={option.value === value}
-          class:active={index === activeIndex}
-          onmousedown={(event) => event.preventDefault()}
-          onmousemove={() => (activeIndex = index)}
-          onmouseup={() => choose(option)}
-        >
-          <span class="label">{option.label}</span>
-          {#if option.hint}<span class="hint">{option.hint}</span>{/if}
-        </li>
-      {/each}
-    </ul>
+    </div>
   {/if}
 </div>
 
@@ -193,17 +223,17 @@
     width: 100%;
     height: var(--control-h);
     padding: 0 32px 0 var(--space-3);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-subtle);
-    color: var(--text);
-    font-size: var(--text-sm);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-control);
+    background: var(--bg);
+    color: var(--fg);
+    font-size: var(--text-body);
   }
   input::placeholder {
-    color: var(--text-3);
+    color: var(--muted);
   }
   .open input::placeholder {
-    color: var(--text-2);
+    color: var(--muted);
   }
   input:focus {
     outline: none;
@@ -223,23 +253,26 @@
     right: 10px;
     display: inline-flex;
     align-items: center;
-    color: var(--text-3);
+    color: var(--muted);
     pointer-events: none;
   }
   .chevron :global(svg) {
     width: 14px;
     height: 14px;
   }
-  .listbox {
+  .popup {
     z-index: 70;
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-card);
+    background: var(--panel);
+    box-shadow: var(--shadow-overlay);
+  }
+  .listbox {
     max-height: 260px;
     margin: 0;
     padding: var(--space-1);
     overflow-y: auto;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    background: var(--surface);
-    box-shadow: var(--shadow-lg);
     list-style: none;
   }
   [role='option'] {
@@ -248,32 +281,39 @@
     gap: var(--space-3);
     min-height: 34px;
     padding: 0 var(--space-2);
-    border-radius: var(--radius-sm);
-    font-size: var(--text-sm);
+    border-radius: var(--radius-control);
+    font-size: var(--text-body);
     cursor: pointer;
   }
   [role='option'].active {
-    background: var(--surface-2);
+    background: var(--panel-2);
   }
   [role='option'][aria-selected='true'] .label {
     color: var(--accent-text);
   }
   .label {
-    font-weight: 500;
+    font-weight: var(--weight-medium);
   }
   .hint {
     flex: 1;
     min-width: 0;
-    color: var(--text-3);
+    color: var(--muted);
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-meta);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .more {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: var(--text-meta);
+  }
   .none {
     padding: var(--space-3);
-    color: var(--text-3);
-    font-size: var(--text-sm);
+    color: var(--muted);
+    font-size: var(--text-body);
   }
 </style>

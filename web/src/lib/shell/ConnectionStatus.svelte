@@ -42,11 +42,11 @@
     gap: var(--space-2);
     height: 28px;
     padding: 0 var(--space-2) 0 var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-full);
-    background: var(--bg-subtle);
-    color: var(--text-2);
-    font-size: var(--text-xs);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--bg);
+    color: var(--muted);
+    font-size: var(--text-mono);
     font-weight: 500;
     white-space: nowrap;
   }
@@ -80,7 +80,7 @@
     color: var(--ok-fg);
   }
   .time {
-    color: var(--text-3);
+    color: var(--muted);
   }
   @keyframes ping {
     0% {

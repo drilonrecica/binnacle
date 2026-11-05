@@ -148,7 +148,7 @@
 <style>
   .stack {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
   }
   .row {
     display: grid;
@@ -160,15 +160,15 @@
     display: grid;
     gap: var(--space-3);
     margin: 0;
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .methods div {
     display: grid;
     gap: 2px;
   }
   dt {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   dd {
     margin: 0;

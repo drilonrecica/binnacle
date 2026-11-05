@@ -74,13 +74,13 @@
       sortValue: (row) => row.message,
       cell: messageCell,
     },
-    { key: 'target', label: 'Target', hideBelow: 900, cell: targetCell },
+    { key: 'target', label: 'Target', cell: targetCell },
     {
       key: 'observed',
       label: 'Observed',
       align: 'right',
       width: '110px',
-      hideBelow: 1100,
+      hideBelow: 'lg',
       cell: observedCell,
     },
     {
@@ -182,11 +182,11 @@
     white-space: normal;
   }
   .family {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .mono {
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
+    font-size: var(--text-mono);
   }
 </style>

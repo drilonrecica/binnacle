@@ -122,7 +122,7 @@
 <style>
   .stack {
     display: grid;
-    gap: var(--space-5);
+    gap: var(--space-4);
   }
   .row {
     display: grid;

@@ -158,7 +158,6 @@
       label: 'Project',
       sortable: true,
       sortValue: (row) => resourceGroup(row),
-      hideBelow: 720,
     },
     {
       key: 'category',
@@ -166,7 +165,6 @@
       sortable: true,
       sortValue: (row) => row.category,
       cell: archivedCategory,
-      hideBelow: 900,
     },
     {
       key: 'archived',
@@ -438,13 +436,13 @@
   }
   .waiting {
     padding: var(--space-8);
-    color: var(--text-2);
+    color: var(--muted);
     text-align: center;
   }
   .error {
     padding: var(--space-4);
     color: var(--critical-fg);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .archived-name {
     display: grid;
@@ -454,12 +452,12 @@
     font-weight: 600;
   }
   .archived-group {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .note {
     margin-right: auto;
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
 </style>

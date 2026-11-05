@@ -136,15 +136,15 @@
     width: 100%;
     padding: var(--space-2);
     border: 1px solid transparent;
-    border-radius: var(--radius);
+    border-radius: var(--radius-card);
     background: none;
-    color: var(--text);
+    color: var(--fg);
     text-align: left;
   }
   .trigger:hover,
   .trigger[aria-expanded='true'] {
-    background: var(--surface-2);
-    border-color: var(--border);
+    background: var(--panel-2);
+    border-color: var(--line);
   }
   .trigger.collapsed {
     justify-content: center;
@@ -158,10 +158,10 @@
     flex: none;
     width: 30px;
     height: 30px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-control);
     background: var(--accent-bg);
     color: var(--accent-text);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     font-weight: 700;
   }
   .who {
@@ -171,29 +171,29 @@
     line-height: 1.2;
   }
   .name {
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .role {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
   .trigger :global(.chevron) {
     width: 14px;
     height: 14px;
-    color: var(--text-3);
+    color: var(--muted);
   }
   .session-meta {
     display: grid;
     gap: 2px;
     padding: var(--space-2) var(--space-2) var(--space-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-meta);
   }
   .session-meta span {
-    color: var(--text-3);
-    font-size: var(--text-xs);
+    color: var(--muted);
+    font-size: var(--text-mono);
   }
 </style>

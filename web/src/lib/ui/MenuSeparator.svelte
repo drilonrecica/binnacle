@@ -4,6 +4,6 @@
   .separator {
     height: 1px;
     margin: var(--space-1) 0;
-    background: var(--border);
+    background: var(--line);
   }
 </style>
