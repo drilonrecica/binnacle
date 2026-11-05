@@ -1,0 +1,29 @@
+{
+  "4b5e57f6eb2f42b9039b3d1e13929295f231749c510cbe341cd68036d9af97e2": {
+    "block_read_bps": 204800.0,
+    "block_write_bps": 409600.0,
+    "cpu_percent": 60.0,
+    "mem_usage_bytes": 201326592,
+    "online_cpus": 8,
+    "rx_bps": 1049576.0,
+    "tx_bps": 262644.0
+  },
+  "7bdc25d1694ef984782a16f6f1710c1c6bc83ba7a131b515baf532bea021d011": {
+    "block_read_bps": 100000.0,
+    "block_write_bps": 300000.0,
+    "cpu_percent": 20.0,
+    "mem_usage_bytes": 402653184,
+    "online_cpus": 8,
+    "rx_bps": 50000.0,
+    "tx_bps": 200000.0
+  },
+  "d4f0bc5a29de06b510f9aa428f1eedba926012b591fef7a518e776a7c9bd1824": {
+    "block_read_bps": 0.0,
+    "block_write_bps": 0.0,
+    "cpu_percent": 4.0,
+    "mem_usage_bytes": 41943040,
+    "online_cpus": 8,
+    "rx_bps": null,
+    "tx_bps": null
+  }
+}

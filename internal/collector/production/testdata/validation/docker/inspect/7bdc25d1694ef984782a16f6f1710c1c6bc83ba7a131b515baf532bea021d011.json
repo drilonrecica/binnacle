@@ -1,0 +1,36 @@
+{
+  "Config": {
+    "Env": [
+      "PATH=/usr/local/bin:/usr/bin",
+      "SECRET_TOKEN=do-not-read"
+    ],
+    "Image": "example/db:1",
+    "Labels": {
+      "com.docker.compose.project": "shop",
+      "com.docker.compose.service": "db"
+    },
+    "Tty": false
+  },
+  "Created": "2026-11-05T10:59:59Z",
+  "Id": "7bdc25d1694ef984782a16f6f1710c1c6bc83ba7a131b515baf532bea021d011",
+  "Mounts": [],
+  "Name": "/db",
+  "NetworkSettings": {
+    "Networks": {
+      "shop_internal": {}
+    }
+  },
+  "State": {
+    "Dead": false,
+    "Error": "",
+    "ExitCode": 0,
+    "FinishedAt": "0001-01-01T00:00:00Z",
+    "OOMKilled": false,
+    "Paused": false,
+    "Pid": 4242,
+    "Restarting": false,
+    "Running": true,
+    "StartedAt": "2026-11-05T11:00:00Z",
+    "Status": "running"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "Config": {
+    "Env": [
+      "PATH=/usr/local/bin:/usr/bin",
+      "SECRET_TOKEN=do-not-read"
+    ],
+    "Image": "example/agent:1",
+    "Labels": {},
+    "Tty": false
+  },
+  "Created": "2026-11-05T10:59:59Z",
+  "Id": "d4f0bc5a29de06b510f9aa428f1eedba926012b591fef7a518e776a7c9bd1824",
+  "Mounts": [],
+  "Name": "/agent",
+  "NetworkSettings": {
+    "Networks": {
+      "host": {}
+    }
+  },
+  "State": {
+    "Dead": false,
+    "Error": "",
+    "ExitCode": 0,
+    "FinishedAt": "0001-01-01T00:00:00Z",
+    "OOMKilled": false,
+    "Paused": false,
+    "Pid": 4242,
+    "Restarting": false,
+    "Running": true,
+    "StartedAt": "2026-11-05T11:00:00Z",
+    "Status": "running"
+  }
+}

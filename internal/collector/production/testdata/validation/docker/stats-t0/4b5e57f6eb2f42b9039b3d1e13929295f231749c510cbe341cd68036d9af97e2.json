@@ -1,0 +1,105 @@
+{
+  "blkio_stats": {
+    "io_merged_recursive": null,
+    "io_queue_recursive": null,
+    "io_service_bytes_recursive": [
+      {
+        "major": 8,
+        "minor": 0,
+        "op": "read",
+        "value": 104857600
+      },
+      {
+        "major": 8,
+        "minor": 0,
+        "op": "write",
+        "value": 52428800
+      },
+      {
+        "major": 8,
+        "minor": 16,
+        "op": "read",
+        "value": 4096
+      },
+      {
+        "major": 8,
+        "minor": 16,
+        "op": "write",
+        "value": 0
+      }
+    ],
+    "io_service_time_recursive": null,
+    "io_serviced_recursive": null,
+    "io_time_recursive": null,
+    "io_wait_time_recursive": null,
+    "sectors_recursive": null
+  },
+  "cpu_stats": {
+    "cpu_usage": {
+      "total_usage": 482113000000,
+      "usage_in_kernelmode": 120528250000,
+      "usage_in_usermode": 361584750000
+    },
+    "online_cpus": 8,
+    "system_cpu_usage": 9123400000000000,
+    "throttling_data": {
+      "periods": 0,
+      "throttled_periods": 0,
+      "throttled_time": 0
+    }
+  },
+  "id": "4b5e57f6eb2f42b9039b3d1e13929295f231749c510cbe341cd68036d9af97e2",
+  "memory_stats": {
+    "limit": 1073741824,
+    "stats": {
+      "active_file": 12582912,
+      "anon": 180355072,
+      "file": 79691776,
+      "inactive_file": 67108864
+    },
+    "usage": 260046848
+  },
+  "name": "/web",
+  "networks": {
+    "eth0": {
+      "rx_bytes": 10485760,
+      "rx_dropped": 0,
+      "rx_errors": 0,
+      "rx_packets": 8000,
+      "tx_bytes": 5242880,
+      "tx_dropped": 0,
+      "tx_errors": 0,
+      "tx_packets": 6000
+    },
+    "eth1": {
+      "rx_bytes": 1000,
+      "rx_dropped": 0,
+      "rx_errors": 0,
+      "rx_packets": 10,
+      "tx_bytes": 500,
+      "tx_dropped": 0,
+      "tx_errors": 0,
+      "tx_packets": 5
+    }
+  },
+  "num_procs": 0,
+  "pids_stats": {
+    "current": 12,
+    "limit": 4096
+  },
+  "precpu_stats": {
+    "cpu_usage": {
+      "total_usage": 0,
+      "usage_in_kernelmode": 0,
+      "usage_in_usermode": 0
+    },
+    "throttling_data": {
+      "periods": 0,
+      "throttled_periods": 0,
+      "throttled_time": 0
+    }
+  },
+  "preread": "0001-01-01T00:00:00Z",
+  "read": "2026-11-05T14:00:00.000000000Z",
+  "storage_stats": {}
+}

@@ -1,0 +1,4 @@
+sda
+sdb
+sdc
+zram0

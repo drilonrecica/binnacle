@@ -1,0 +1,72 @@
+[
+  {
+    "Command": "/entrypoint",
+    "Created": 1762300000,
+    "HostConfig": {
+      "NetworkMode": "bridge"
+    },
+    "Id": "4b5e57f6eb2f42b9039b3d1e13929295f231749c510cbe341cd68036d9af97e2",
+    "Image": "example/web:1",
+    "ImageID": "sha256:61fd6766cebfd37d7cb53d10866191d75b655450922d3c20155d7fdbb75553ef",
+    "Labels": {
+      "com.docker.compose.project": "shop",
+      "com.docker.compose.service": "web"
+    },
+    "Names": [
+      "/web"
+    ],
+    "State": "running",
+    "Status": "Up 3 hours"
+  },
+  {
+    "Command": "/entrypoint",
+    "Created": 1762300000,
+    "HostConfig": {
+      "NetworkMode": "bridge"
+    },
+    "Id": "7bdc25d1694ef984782a16f6f1710c1c6bc83ba7a131b515baf532bea021d011",
+    "Image": "example/db:1",
+    "ImageID": "sha256:54ab8c9a2776ad2e1fbae88a563a68f89931392a0bf81a4ae2352b4a2456271a",
+    "Labels": {
+      "com.docker.compose.project": "shop",
+      "com.docker.compose.service": "db"
+    },
+    "Names": [
+      "/db"
+    ],
+    "State": "running",
+    "Status": "Up 3 hours"
+  },
+  {
+    "Command": "/entrypoint",
+    "Created": 1762300000,
+    "HostConfig": {
+      "NetworkMode": "host"
+    },
+    "Id": "d4f0bc5a29de06b510f9aa428f1eedba926012b591fef7a518e776a7c9bd1824",
+    "Image": "example/agent:1",
+    "ImageID": "sha256:2e8f1113659c1fdd988c05bd9bd3871be306dce6143d4673e2a653994b029386",
+    "Labels": {},
+    "Names": [
+      "/agent"
+    ],
+    "State": "running",
+    "Status": "Up 3 hours"
+  },
+  {
+    "Command": "/entrypoint",
+    "Created": 1762300000,
+    "HostConfig": {
+      "NetworkMode": "bridge"
+    },
+    "Id": "5e8c9902207afaeb7120430c585a445f21e92932081d64bc99f80e4925bcb002",
+    "Image": "example/job:1",
+    "ImageID": "sha256:cc08dcd3fe7b689050aa1a8f5d8d3b48a9c9c4f3ce37c9335595f442e6da6ccb",
+    "Labels": {},
+    "Names": [
+      "/job"
+    ],
+    "State": "exited",
+    "Status": "Exited (0) 1 hour ago"
+  }
+]

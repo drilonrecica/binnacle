@@ -19,7 +19,7 @@ Docker interfaces, and how to verify them.
 
 | Binnacle metric | Reference | Semantics |
 | --- | --- | --- |
-| CPU host percent | `docker stats` `CPU %` | Ratio of container CPU time to system CPU time, expressed as a percent of one host core. |
+| CPU host percent | `docker stats` `CPU %` divided by the online CPUs | Ratio of container CPU time to system CPU time over the same interval, expressed as a percent of the whole host (all cores). |
 | CPU cores ratio | `docker stats` | `container_delta / system_delta`; multiply by host cores for absolute core usage. |
 | Memory working set | `docker stats` `MEM USAGE` | `usage - inactive_file` (`total_inactive_file` on cgroup v1), falling back to `usage` when cache data is unavailable. |
 | Memory percent | `docker stats` `MEM %` | Working set divided by container limit or host memory, whichever is smaller. |
@@ -92,9 +92,9 @@ observation unchanged.
 - **Memory working set:** Binnacle uses `usage - inactive_file`, the same convention
   as the Docker CLI. This intentionally excludes reclaimable page cache and can
   be significantly lower than raw `usage`.
-- **CPU host percent:** Binnacle reports percent of one host core. A container
-  using two full cores on a four-core host reports `200%` in `docker stats` but
-  `50%` host percent here.
+- **CPU host percent:** Binnacle reports the share of the whole host, `docker
+  stats` the share of one core. A container using two full cores on a
+  four-core host reports `200%` in `docker stats` but `50%` host percent here.
 - **Filesystems:** Binnacle reads the host's mount table from
   `<host proc>/1/mountinfo` (PID 1 is in the host mount namespace), keeps one
   mount per `maj:min` device with the shortest target, drops pseudo
@@ -105,14 +105,116 @@ observation unchanged.
   `host` collector reason; when the host root is not mounted no filesystems
   are reported and the `host` collector shows degraded.
 
-## Running the reference suite
+## Validating the collectors
 
-The fixture-backed suite lives in `internal/collector/reference` and covers
-normalization formulas plus live `/proc` sanity checks:
+Two layers check the collectors against the reference tools: fixture tests
+that run in every `make check`, and a script the owner runs on a real host
+before a release.
+
+### Fixture tests
+
+`internal/collector/production/validation_test.go` feeds the production
+sampler a recording of a real host and of Docker Engine API answers, and
+compares its output with the values the reference tools report for the same
+inputs:
+
+| Fixture file | What it holds |
+| --- | --- |
+| `proc/t0/`, `proc/t1/` | Two snapshots of the files the host collector reads (`stat`, `meminfo`, `loadavg`, `uptime`, `diskstats`, `1/net/dev`, `1/mountinfo`) |
+| `elapsed` | Seconds between the two snapshots |
+| `sys-block.txt` | The entries of `/sys/block` |
+| `statfs.tsv`, `df.txt` | `statfs` of every mount and `df -B1` read right after it |
+| `docker/containers.json`, `docker/inspect/`, `docker/stats-t0/`, `docker/stats-t1/`, `docker/elapsed` | Engine API list, inspect and two one-shot stats reads |
+| `reference.json`, `docker/reference.json` | Reference values computed by `scripts/validate-host.sh` from the files above, independently of the Go code: top's busy share, `MemTotal - MemAvailable`, the `/proc/net/dev` and `/proc/diskstats` deltas, and the Docker CLI's `docker stats` formulas |
+
+The host part was recorded on a workstation with btrfs `/` and `/home` on one
+device, CIFS shares behind autofs, zram, partitions and Docker bridges, so it
+exercises deduplication, pseudo-filesystem filtering and whole-device disk
+sums. The Docker part was written by hand to cover a cgroup v2 container on
+two networks, a cgroup v1 container (`total_inactive_file`, `Read`/`Write`
+next to `Sync` and `Total` in blkio), a host-network container and an exited
+one. The tests serve it from a Unix socket to the real Docker client, so the
+Engine API decoding is covered too.
 
 ```bash
+go test ./internal/collector/production/ -run Validation
 go test ./internal/collector/reference/...
 ```
 
-For release qualification, capture the same values from the reference tools on
-the target host and attach sanitized evidence to the release record.
+To add a host to the fixtures, record it and review the files for host
+names, user names and paths before committing; replace them with neutral
+values, as the committed fixture does with `nas.example` for its CIFS server:
+
+```bash
+scripts/validate-host.sh --record /tmp/fixture --window 4
+# edit, then recompute the reference values for the edited files:
+scripts/validate-host.sh --reference /tmp/fixture
+```
+
+The recording needs read access to `/proc/1` and, for the Docker part, to the
+Docker socket; the test expects every filesystem it keeps to have a `statfs.tsv`
+row and lists the expected mount points, so a new recording also updates that
+list.
+
+### Real-host procedure
+
+Run this on the release hardware, or on every server class a release targets,
+with Docker Engine 29.5.1 or newer:
+
+1. Build the binary: `make build`.
+2. Put the host under steady load for the run: a busy container
+   (`docker run -d --rm --name bnv-load alpine sh -c 'while :; do :; done'`),
+   a network transfer and some disk writes (for example
+   `dd if=/dev/zero of=/var/tmp/bnv bs=1M count=2000 oflag=direct`). Rates
+   are compared over a window, so bursty load makes the rate rows noisy.
+3. As a user that can read the Docker socket (a member of the `docker`
+   group, or root), run:
+
+   ```bash
+   scripts/validate-host.sh --window 30
+   ```
+
+   The script starts `bin/binnacle` on a free loopback port with a throwaway
+   data directory, `BINNACLE_HOST_PROC=/proc`, `BINNACLE_HOST_SYS=/sys`,
+   `BINNACLE_HOST_ROOT=/` and the Docker socket (`BINNACLE_DOCKER_SOCKET` to
+   override), claims setup with a random password, and reads `/api/v1/server`,
+   `/api/v1/resources`, `/api/v1/filesystems` and `/api/v1/collector-health`
+   once a second over the window. Around the window it reads `/proc/stat`,
+   `/proc/meminfo`, `/proc/1/net/dev`, `/proc/diskstats` and the Engine API
+   stats of up to 25 running containers (`VALIDATE_MAX_CONTAINERS`), and
+   runs `top`, `free`, `df` and `docker stats`. It only reads from Docker.
+4. Read the report. Each row shows Binnacle, the reference, the difference,
+   a verdict and the reference source:
+
+   | Rows | Reference | Tolerance |
+   | --- | --- | --- |
+   | CPU busy | `/proc/stat` delta and `top` (`100 - id - wa`) | 5 percentage points |
+   | Memory total, used | `/proc/meminfo`, `free -b` | exact; used 2 % or 64 MiB |
+   | Load | `/proc/loadavg` | 0.3 or 10 % |
+   | Network rx/tx | `/proc/net/dev` without `lo`, `veth*`, `docker*`, `br-*` (the unfiltered sum is shown for information) | 15 % or 128 KiB/s |
+   | Disk read/write, IOPS | `/proc/diskstats` over the whole devices in `/sys/block` | 15 % or 128 KiB/s, 10 IOPS |
+   | Filesystem size, used, avail | `df -B1` for the same mount point | 1 % or 256 MiB |
+   | Container CPU | Engine API stats delta over the window, `CPU % / online CPUs` (`docker stats` short sample shown for information) | 5 percentage points |
+   | Container memory | `docker stats` `MEM USAGE` (`usage - inactive_file`) | 5 % or 16 MiB |
+   | Container net, block I/O | Engine API stats deltas (`docker stats` `NET I/O`, `BLOCK I/O` totals) | 20 % or 64 KiB/s |
+
+   Binnacle rates are the mean of the 2 s ticks inside the window; the
+   reference is one delta over the window. The script also lists the `df`
+   mounts Binnacle leaves out (pseudo filesystems and second mounts of one
+   device) and the collector states, and exits 1 when any row reads `CHECK`
+   (outside tolerance, or unknown in Binnacle while the reference has a
+   value).
+5. A `CHECK` on a rate row under bursty load is expected; rerun with a longer
+   window under steady load. A `CHECK` that persists, any `CHECK` on a size or
+   memory total, an unexpected missing filesystem, or a collector that is not
+   `healthy` is a defect: note it in `imp-docs/FINDINGS.md`.
+6. For the release record, keep the report and the host description (kernel,
+   distribution, Docker version, cgroup version, filesystem types). Set
+   `VALIDATE_KEEP=1` to keep the raw inputs the script read; review them
+   before attaching anything.
+
+The script runs the binary directly on the host, so it validates the
+collectors, not the packaged container's view of the host through
+`/host/proc`, `/host/sys` and `/host/root`. The sampler tests cover those
+paths with fixtures; to check a packaged deployment, open its Host and
+Resources pages next to a report taken on the same host and compare.

@@ -1,0 +1,59 @@
+{
+  "blkio_stats": {
+    "io_merged_recursive": null,
+    "io_queue_recursive": null,
+    "io_service_bytes_recursive": null,
+    "io_service_time_recursive": null,
+    "io_serviced_recursive": null,
+    "io_time_recursive": null,
+    "io_wait_time_recursive": null,
+    "sectors_recursive": null
+  },
+  "cpu_stats": {
+    "cpu_usage": {
+      "total_usage": 5080000000,
+      "usage_in_kernelmode": 1270000000,
+      "usage_in_usermode": 3810000000
+    },
+    "online_cpus": 8,
+    "system_cpu_usage": 9123416000000000,
+    "throttling_data": {
+      "periods": 0,
+      "throttled_periods": 0,
+      "throttled_time": 0
+    }
+  },
+  "id": "d4f0bc5a29de06b510f9aa428f1eedba926012b591fef7a518e776a7c9bd1824",
+  "memory_stats": {
+    "limit": 33604382720,
+    "stats": {
+      "anon": 41943040,
+      "file": 10485760,
+      "inactive_file": 10485760
+    },
+    "usage": 52428800
+  },
+  "name": "/agent",
+  "num_procs": 0,
+  "pids_stats": {
+    "current": 4,
+    "limit": 4096
+  },
+  "precpu_stats": {
+    "cpu_usage": {
+      "total_usage": 5000000000,
+      "usage_in_kernelmode": 1250000000,
+      "usage_in_usermode": 3750000000
+    },
+    "online_cpus": 8,
+    "system_cpu_usage": 9123400000000000,
+    "throttling_data": {
+      "periods": 0,
+      "throttled_periods": 0,
+      "throttled_time": 0
+    }
+  },
+  "preread": "2026-11-05T14:00:00.000000000Z",
+  "read": "2026-11-05T14:00:02.000000000Z",
+  "storage_stats": {}
+}

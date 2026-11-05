@@ -1,0 +1,42 @@
+{
+  "Config": {
+    "Env": [
+      "PATH=/usr/local/bin:/usr/bin",
+      "SECRET_TOKEN=do-not-read"
+    ],
+    "Image": "example/web:1",
+    "Labels": {
+      "com.docker.compose.project": "shop",
+      "com.docker.compose.service": "web"
+    },
+    "Tty": false
+  },
+  "Created": "2026-11-05T10:59:59Z",
+  "Id": "4b5e57f6eb2f42b9039b3d1e13929295f231749c510cbe341cd68036d9af97e2",
+  "Mounts": [],
+  "Name": "/web",
+  "NetworkSettings": {
+    "Networks": {
+      "shop_default": {},
+      "shop_internal": {}
+    }
+  },
+  "State": {
+    "Dead": false,
+    "Error": "",
+    "ExitCode": 0,
+    "FinishedAt": "0001-01-01T00:00:00Z",
+    "Health": {
+      "FailingStreak": 0,
+      "Log": [],
+      "Status": "healthy"
+    },
+    "OOMKilled": false,
+    "Paused": false,
+    "Pid": 4242,
+    "Restarting": false,
+    "Running": true,
+    "StartedAt": "2026-11-05T11:00:00Z",
+    "Status": "running"
+  }
+}

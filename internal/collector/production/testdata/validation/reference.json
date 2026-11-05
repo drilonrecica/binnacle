@@ -1,0 +1,15 @@
+{
+  "cpu_busy_pct": 96.85379395434917,
+  "disk_read_bps": 80817.38816886512,
+  "disk_read_iops": 4.932701914603584,
+  "disk_write_bps": 241441.94715448454,
+  "disk_write_iops": 23.183698998636846,
+  "elapsed": 4.054573,
+  "load1": 3.4,
+  "mem_total_bytes": 33604382720,
+  "mem_used_bytes": 24810106880,
+  "net_rx_bps": 3624.0560966592534,
+  "net_rx_bps_all": 17816.919315548144,
+  "net_tx_bps": 7782.077175574344,
+  "net_tx_bps_all": 21974.940394463236
+}

@@ -1,0 +1,33 @@
+{
+  "Config": {
+    "Env": [
+      "PATH=/usr/local/bin:/usr/bin",
+      "SECRET_TOKEN=do-not-read"
+    ],
+    "Image": "example/job:1",
+    "Labels": {},
+    "Tty": false
+  },
+  "Created": "2026-11-05T10:59:59Z",
+  "Id": "5e8c9902207afaeb7120430c585a445f21e92932081d64bc99f80e4925bcb002",
+  "Mounts": [],
+  "Name": "/job",
+  "NetworkSettings": {
+    "Networks": {
+      "bridge": {}
+    }
+  },
+  "State": {
+    "Dead": false,
+    "Error": "",
+    "ExitCode": 0,
+    "FinishedAt": "2026-11-05T13:00:00Z",
+    "OOMKilled": false,
+    "Paused": false,
+    "Pid": 0,
+    "Restarting": false,
+    "Running": false,
+    "StartedAt": "2026-11-05T11:00:00Z",
+    "Status": "exited"
+  }
+}
