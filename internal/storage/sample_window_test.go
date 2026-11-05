@@ -36,6 +36,12 @@ func TestWindowRangesReachRawHistoryAndRollups(t *testing.T) {
 	}
 	engine := metrics.NewEngine(8)
 	bucket := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	// The storage worker runs a pass at boot, before the first batch; without
+	// it the first pass would treat the batch as pre-upgrade history and skip
+	// its partial hour (ADR 021 §8).
+	if err := m.RollupOnce(ctx, bucket); err != nil {
+		t.Fatal(err)
+	}
 	cpu := []float64{10, 95, 10, 10, 25}
 	for i, v := range cpu {
 		at := bucket.Add(time.Duration(i) * 2 * time.Second)

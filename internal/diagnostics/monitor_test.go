@@ -94,3 +94,21 @@ func TestMonitorReportsPoolWaitsAndUncleanShutdown(t *testing.T) {
 		}
 	}
 }
+
+type durationHealth struct{ health storage.Health }
+
+func (s durationHealth) Health() storage.Health { return s.health }
+
+func TestMonitorReportsRollupAndRetentionDurations(t *testing.T) {
+	monitor := &Monitor{DatabasePath: "/missing", DatabaseTarget: 100, QueueCapacity: 10, Storage: durationHealth{storage.Health{RollupDuration: 12 * time.Millisecond, RetentionDuration: 3 * time.Second}}}
+	byID := map[string]MonitorMetric{}
+	for _, value := range monitor.Snapshot().Metrics {
+		byID[value.ID] = value
+	}
+	if byID["rollup_duration"].Value != float64(12) || byID["rollup_duration"].Status != "normal" {
+		t.Fatalf("rollup_duration=%+v", byID["rollup_duration"])
+	}
+	if byID["retention_duration"].Value != float64(3000) || byID["retention_duration"].Status != "warning" {
+		t.Fatalf("retention_duration=%+v", byID["retention_duration"])
+	}
+}

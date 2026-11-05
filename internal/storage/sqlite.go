@@ -64,6 +64,12 @@ type Manager struct {
 	retention      RetentionCutoffs
 	budget         DatabaseBudget
 	emergencyPause bool
+	// rollupMu serializes rollup passes (the worker and RebuildRollups).
+	rollupMu sync.Mutex
+	// rollupDuration and retentionDuration are the wall-clock time of the
+	// latest pass of each worker, zero until one completed; guarded by mu.
+	rollupDuration    time.Duration
+	retentionDuration time.Duration
 }
 
 // RetentionCutoffs configures how long each resolution tier is kept.
@@ -132,12 +138,15 @@ type PoolStats struct {
 type Health struct {
 	UncleanShutdown bool
 	Writer, Reader  PoolStats
+	// RollupDuration and RetentionDuration are the wall-clock time of the
+	// latest pass of each worker; zero until the first pass completes.
+	RollupDuration, RetentionDuration time.Duration
 }
 
 func (m *Manager) Health() Health {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return Health{UncleanShutdown: m.uncleanShutdown, Writer: poolStats(m.writer), Reader: poolStats(m.reader)}
+	return Health{UncleanShutdown: m.uncleanShutdown, Writer: poolStats(m.writer), Reader: poolStats(m.reader), RollupDuration: m.rollupDuration, RetentionDuration: m.retentionDuration}
 }
 func poolStats(db *sql.DB) PoolStats {
 	if db == nil {

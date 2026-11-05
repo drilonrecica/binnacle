@@ -13,7 +13,9 @@ import (
 type HistoryStore interface {
 	HasMetricHistory(context.Context) (bool, error)
 	WriteBatch(context.Context, metrics.PersistenceBatch) error
-	RollupOnce(context.Context, time.Time) error
+	// RebuildRollups recomputes every bucket the seeded raw rows back; the
+	// incremental pass only covers recently closed buckets.
+	RebuildRollups(context.Context, time.Time) error
 }
 
 // SeedHistory gives a fresh demo database enough deterministic data to exercise
@@ -44,7 +46,7 @@ func SeedHistory(ctx context.Context, store HistoryStore, generator *Generator, 
 		}
 		at = at.Add(interval)
 	}
-	return store.RollupOnce(ctx, now)
+	return store.RebuildRollups(ctx, now)
 }
 
 func seedResources(ctx context.Context, db *storage.DB, generator *Generator, now time.Time) error {

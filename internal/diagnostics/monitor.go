@@ -72,6 +72,10 @@ func (m *Monitor) Snapshot() MonitorSnapshot {
 	if m.Collector != nil {
 		collectionDuration = m.Collector.CollectionDuration()
 	}
+	var health storage.Health
+	if m.Storage != nil {
+		health = m.Storage.Health()
+	}
 	dockerStatus := "unavailable"
 	if m.Engine != nil {
 		if value, ok := m.Engine.Snapshot().Collectors["docker"]; ok {
@@ -88,8 +92,8 @@ func (m *Monitor) Snapshot() MonitorSnapshot {
 		metric("queue", "Persistence queue", queue, "batches", queueStatus(queue, m.QueueCapacity), "Queued persistence batches."),
 		metric("dropped", "Dropped batches", int64(dropped), "batches", nonzeroStatus(dropped), "History batches dropped after queue overflow."),
 		metric("write_latency", "Persistence write latency", durationValue(writeLatency), "milliseconds", durationStatus(writeLatency, 50*time.Millisecond), "Latest SQLite persistence operation."),
-		metric("rollup_duration", "Rollup duration", nil, "milliseconds", "unavailable", "Not currently instrumented by the rollup worker."),
-		metric("retention_duration", "Retention duration", nil, "milliseconds", "unavailable", "Not currently instrumented by the retention worker."),
+		metric("rollup_duration", "Rollup duration", durationValue(health.RollupDuration), "milliseconds", durationStatus(health.RollupDuration, 500*time.Millisecond), "Latest incremental rollup pass over every tier; unavailable until the first pass."),
+		metric("retention_duration", "Retention duration", durationValue(health.RetentionDuration), "milliseconds", durationStatus(health.RetentionDuration, 2*time.Second), "Latest retention pass; unavailable until the first pass."),
 		metric("collection_duration", "Collector duration", durationValue(collectionDuration), "milliseconds", durationStatus(collectionDuration, 2*time.Second), "Latest host and Docker collection cycle."),
 		metric("sse_clients", "SSE clients", sseClients(m.Engine), "clients", "normal", "Currently connected live clients."),
 		metric("docker", "Docker API health", dockerStatus, "", dockerStatusValue(dockerStatus), "Current Docker collector state."),
@@ -112,7 +116,6 @@ func (m *Monitor) Snapshot() MonitorSnapshot {
 		)
 	}
 	if m.Storage != nil {
-		health := m.Storage.Health()
 		values = append(values,
 			metric("writer_pool_waits", "Writer pool waits", health.Writer.WaitCount, "count", "normal", "Statements that waited for the single SQLite write connection since start."),
 			metric("writer_pool_wait_time", "Writer pool wait time", float64(health.Writer.WaitDuration)/float64(time.Millisecond), "milliseconds", "normal", "Total time statements spent waiting for the write connection since start."),

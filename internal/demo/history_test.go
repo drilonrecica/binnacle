@@ -23,7 +23,7 @@ func (s *historyStore) WriteBatch(_ context.Context, batch metrics.PersistenceBa
 	s.batches = append(s.batches, batch)
 	return nil
 }
-func (s *historyStore) RollupOnce(_ context.Context, at time.Time) error {
+func (s *historyStore) RebuildRollups(_ context.Context, at time.Time) error {
 	s.rolledAt = at
 	return nil
 }

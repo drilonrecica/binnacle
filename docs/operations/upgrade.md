@@ -93,6 +93,16 @@ Schema 19 adds TOTP and proxy-authentication state; schemas 20 and 21 add hashed
 personal API-token metadata and typed, versioned administrator preferences. The
 migration chain through schema 21 remains intact.
 
+Schema 25 adds the `rollup_watermarks` table (ADR 021 §4). The first rollup
+pass after that upgrade is a one-off repair: it recomputes every 1 m, 15 m and
+1 h bucket that raw samples still back, from the first whole hour of raw data,
+in chunks of six hours per write transaction with a pause between chunks so
+persistence keeps up. Buckets older than the raw window cannot be repaired and
+are kept as they are; their `sample_count` (about 360 for a full hour) shows
+which hours were aggregated from partial data by earlier releases. The repair
+runs in the background after boot and resumes from its watermark if the
+process stops midway.
+
 Downgrades are not supported. If you need to revert, restore from a backup taken before the upgrade.
 
 ## Behaviour changes to check

@@ -17,6 +17,29 @@ disk space or reduce retention. Binnacle reevaluates the database budget every
 minute and automatically resumes raw persistence after usage falls below the
 emergency threshold; no restart is required.
 
+## History rollups and retention
+
+Rollups run every minute and are incremental (ADR 021 §4): each tier keeps a
+persisted watermark, `closed_until`, and a pass aggregates raw samples only
+from two minutes before that watermark (so a late persistence batch still
+repairs its bucket) up to the start of the current bucket. The 1 h tier
+therefore lags real time by up to 62 minutes; charts read raw or 1 m data for
+recent ranges, so the lag is not visible. A pass that fell behind, for example
+after the process was stopped for a day, catches up in chunks of six hours.
+
+Raw retention deletes 10-second samples only below a cutoff that is aligned
+down to a whole hour and never ahead of the 1 h tier's watermark, and it
+records that cutoff as `raw_deleted_below` before the first delete. No bucket
+below it is ever recomputed, so a 1 h bucket is either computed from the
+complete hour or left untouched; the retention edge can no longer overwrite
+long-term history with a partial aggregate. The other retention cutoffs are
+aligned down to the hour as well.
+
+`/api/v1/monitor-health` reports `rollup_duration` and `retention_duration`,
+the wall-clock time of the latest pass of each worker; both are `unavailable`
+until the first pass completes. A failed pass is logged at `level=ERROR` and
+retried on the next tick.
+
 ## Database integrity
 
 Binnacle opens SQLite through two pools (ADR 021): one write connection and
