@@ -3,7 +3,7 @@
 # Multi-stage build for the Binnacle monitoring service.
 # Supports linux/amd64 and linux/arm64 via buildx.
 
-FROM node:24-bookworm AS web
+FROM node:24-bookworm@sha256:e7add2a490bb17d97b485b8641bd88455fff7839ade0f5eba493c3508124d413 AS web
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json web/package.json
@@ -11,7 +11,7 @@ RUN corepack enable && pnpm --dir web install --frozen-lockfile
 COPY web/ web/
 RUN pnpm --dir web build
 
-FROM golang:1.26-bookworm AS build
+FROM golang:1.26-bookworm@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb AS build
 ARG VERSION=dev
 WORKDIR /src
 RUN apt-get update \
@@ -23,7 +23,7 @@ COPY . .
 COPY --from=web /src/internal/webembed/dist internal/webembed/dist
 RUN CGO_ENABLED=1 go build -ldflags="-s -w -X main.version=${VERSION}" -o /binnacle ./cmd/binnacle
 
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates libsqlite3-0 \
  && rm -rf /var/lib/apt/lists/* \

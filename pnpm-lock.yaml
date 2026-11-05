@@ -17,7 +17,7 @@ importers:
         specifier: 1.39.0
         version: 1.39.0(svelte@5.56.4(@typescript-eslint/types@8.63.0))
       svelte:
-        specifier: ^5.0.0
+        specifier: ^5.56.4
         version: 5.56.4(@typescript-eslint/types@8.63.0)
       uplot:
         specifier: ^1.6.32
@@ -30,7 +30,7 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.7.0)
       '@playwright/test':
-        specifier: ^1.0.0
+        specifier: ^1.61.1
         version: 1.61.1
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.2.0
@@ -42,34 +42,34 @@ importers:
         specifier: ^10.7.0
         version: 10.7.0
       eslint-config-prettier:
-        specifier: ^10.0.0
+        specifier: ^10.1.8
         version: 10.1.8(eslint@10.7.0)
       eslint-plugin-svelte:
-        specifier: ^3.0.0
+        specifier: ^3.20.0
         version: 3.20.0(eslint@10.7.0)(svelte@5.56.4(@typescript-eslint/types@8.63.0))
       globals:
         specifier: ^17.7.0
         version: 17.7.0
       prettier:
-        specifier: ^3.0.0
+        specifier: ^3.9.5
         version: 3.9.5
       prettier-plugin-svelte:
         specifier: ^4.1.1
         version: 4.1.1(prettier@3.9.5)(svelte@5.56.4(@typescript-eslint/types@8.63.0))
       svelte-check:
-        specifier: ^4.0.0
+        specifier: ^4.7.2
         version: 4.7.2(picomatch@4.0.5)(svelte@5.56.4(@typescript-eslint/types@8.63.0))(typescript@5.9.3)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
       typescript-eslint:
-        specifier: ^8.0.0
+        specifier: ^8.63.0
         version: 8.63.0(eslint@10.7.0)(typescript@5.9.3)
       vite:
         specifier: ^8.1.4
         version: 8.1.4(@types/node@24.13.3)
       vitest:
-        specifier: ^4.0.0
+        specifier: ^4.1.10
         version: 4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3))
 
 packages:

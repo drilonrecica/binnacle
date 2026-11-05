@@ -1,0 +1,32 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests", "docker:pinDigests"],
+  "baseBranches": ["master"],
+  "labels": ["dependencies"],
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "description": "Major upgrades are taken in a deliberate compatibility pass; never grouped with routine bumps.",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Security updates are raised immediately, outside the weekly schedule.",
+      "matchCategories": ["security"],
+      "schedule": ["at any time"]
+    },
+    {
+      "description": "Group GitHub Action bumps (tag comment and SHA move together).",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    },
+    {
+      "description": "Keep the socket proxy tag and digest bumping together in every packaging file.",
+      "matchPackageNames": ["ghcr.io/wollomatic/socket-proxy"],
+      "groupName": "socket-proxy"
+    }
+  ],
+  "vulnerabilityAlerts": { "labels": ["security"] }
+}

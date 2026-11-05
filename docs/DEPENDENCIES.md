@@ -4,7 +4,7 @@ Binnacle keeps its runtime and build dependency sets narrow. Manifest and
 workflow files are the authoritative inventories; this document records how to
 review them without duplicating version numbers that quickly become stale.
 
-Last reviewed: 2026-07-15
+Last reviewed: 2026-11-05
 
 ## Sources of truth
 
@@ -14,6 +14,7 @@ Last reviewed: 2026-07-15
 | Frontend toolchain and packages | [`package.json`](../package.json), [`web/package.json`](../web/package.json), [`pnpm-lock.yaml`](../pnpm-lock.yaml) |
 | Container base and sidecar images | [`packaging/docker/Dockerfile`](../packaging/docker/Dockerfile), [`packaging/docker/docker-compose.yml`](../packaging/docker/docker-compose.yml) |
 | GitHub Actions | [`.github/workflows/`](../.github/workflows/) |
+| Automated bumps | [`renovate.json`](../renovate.json) |
 | Vendored fonts and licenses | [`web/static/fonts/`](../web/static/fonts/), [`landing/assets/fonts/`](../landing/assets/fonts/) |
 
 Production uses a Go binary, SQLite through CGO, and embedded frontend assets.
@@ -35,8 +36,19 @@ Binnacle's required read paths through a private filtered Unix socket.
   or materially more complex.
 - Require an AGPL-3.0-compatible license. A new license category requires
   explicit review.
-- Avoid floating CI references such as `master` or an unqualified major tag
-  where a commit or sufficiently precise release pin is practical.
+- Pin every container base image (`FROM`) and sidecar image by `@sha256:`
+  digest, keeping the tag in front of it for readability.
+- Pin every GitHub Action by full 40-character commit SHA with the release
+  tag in a trailing comment (`uses: owner/repo@<sha> # v1.2.3`). Tags are
+  mutable; release jobs hold `packages: write`, so a moved tag is a
+  supply-chain path.
+- Set `web/package.json` ranges to a floor at the locked minor or patch
+  (for example `^5.56.4`), never `^major.0.0`; `pnpm-lock.yaml` fixes the
+  exact version and CI installs with `--frozen-lockfile`.
+- Let Renovate ([`renovate.json`](../renovate.json)) propose bumps for
+  digests, action SHAs, Go modules and npm packages. Digest and SHA bumps
+  are reviewed like any other change; major updates wait for approval on the
+  dependency dashboard, and security updates are raised immediately.
 - Record temporary compatibility exceptions next to the relevant manifest or
   in an ADR when they affect architecture.
 
