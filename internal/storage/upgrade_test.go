@@ -98,7 +98,7 @@ func TestUpgradeSchema17Through23PreservesExistingData(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer manager.Close()
-	if version, versionErr := manager.SchemaVersion(ctx); versionErr != nil || version != 26 {
+	if version, versionErr := manager.SchemaVersion(ctx); versionErr != nil || version != 27 {
 		t.Fatalf("schema version=%d err=%v", version, versionErr)
 	}
 	// Migration 023 drops the unused session fingerprints and adds the TOTP

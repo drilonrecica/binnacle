@@ -121,31 +121,14 @@ func (m *Manager) QueryEvents(ctx context.Context, q EventQuery) ([]HistoricalEv
 	if limit < 1 || limit > maxEventLimit {
 		limit = 100
 	}
-	query := "SELECT id,ts,type,severity,summary,details_json,correlation_key,container_instance_id,resource_id,source FROM events WHERE ts>=? AND ts<=?"
-	args := []any{q.From.UnixMilli(), q.To.UnixMilli()}
-	if q.ResourceID != "" {
-		query += " AND resource_id=?"
-		args = append(args, q.ResourceID)
-	}
-	if q.Severity != "" {
-		query += " AND severity=?"
-		args = append(args, q.Severity)
-	}
-	if len(q.Types) > 0 {
-		query += " AND type IN (?" + strings.Repeat(",?", len(q.Types)-1) + ")"
-		for _, value := range q.Types {
-			args = append(args, value)
-		}
-	}
+	var cursor *int64
 	if q.BeforeID != "" {
 		var cursorTS int64
 		if err := m.db.QueryRowContext(ctx, "SELECT ts FROM events WHERE id=?", q.BeforeID).Scan(&cursorTS); err == nil {
-			query += " AND (ts<? OR (ts=? AND id<?))"
-			args = append(args, cursorTS, cursorTS, q.BeforeID)
+			cursor = &cursorTS
 		}
 	}
-	query += " ORDER BY ts DESC,id DESC LIMIT ?"
-	args = append(args, limit)
+	query, args := eventQuerySQL(q, limit, cursor)
 	rows, err := m.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -175,4 +158,32 @@ func (m *Manager) QueryEvents(ctx context.Context, q EventQuery) ([]HistoricalEv
 		out = append(out, v)
 	}
 	return out, rows.Err()
+}
+
+// eventQuerySQL is the event feed query; cursor is the ts of q.BeforeID when
+// that event exists. The range is served by events_ts, or by
+// events_resource_ts for one resource.
+func eventQuerySQL(q EventQuery, limit int, cursor *int64) (string, []any) {
+	query := "SELECT id,ts,type,severity,summary,details_json,correlation_key,container_instance_id,resource_id,source FROM events WHERE ts>=? AND ts<=?"
+	args := []any{q.From.UnixMilli(), q.To.UnixMilli()}
+	if q.ResourceID != "" {
+		query += " AND resource_id=?"
+		args = append(args, q.ResourceID)
+	}
+	if q.Severity != "" {
+		query += " AND severity=?"
+		args = append(args, q.Severity)
+	}
+	if len(q.Types) > 0 {
+		query += " AND type IN (?" + strings.Repeat(",?", len(q.Types)-1) + ")"
+		for _, value := range q.Types {
+			args = append(args, value)
+		}
+	}
+	if cursor != nil {
+		query += " AND (ts<? OR (ts=? AND id<?))"
+		args = append(args, *cursor, *cursor, q.BeforeID)
+	}
+	query += " ORDER BY ts DESC,id DESC LIMIT ?"
+	return query, append(args, limit)
 }

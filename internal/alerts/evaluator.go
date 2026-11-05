@@ -94,7 +94,7 @@ func (e *Evaluator) Evaluate(ctx context.Context) error {
 			return err
 		}
 	}
-	if err := e.evaluateFilesystems(ctx, rules, now); err != nil {
+	if err := e.evaluateFilesystems(ctx, rules, snap.Filesystems, now); err != nil {
 		return err
 	}
 	if err := e.evaluateEvents(ctx, rules, now); err != nil {
@@ -170,48 +170,30 @@ func (e *Evaluator) evaluateChecks(ctx context.Context, rules []Rule, now time.T
 	return nil
 }
 
-func (e *Evaluator) evaluateFilesystems(ctx context.Context, rules []Rule, now time.Time) error {
-	rows, err := e.Repo.db.QueryContext(ctx, `SELECT f.mount_key,f.used_pct,f.inodes_used_pct FROM filesystem_samples_1m f JOIN (SELECT mount_key,MAX(ts) ts FROM filesystem_samples_1m GROUP BY mount_key) latest ON latest.mount_key=f.mount_key AND latest.ts=f.ts`)
-	if err != nil {
-		return err
-	}
-	type observation struct {
-		mount        string
-		used, inodes sql.NullFloat64
-	}
-	observations := []observation{}
-	for rows.Next() {
-		var v observation
-		if err = rows.Scan(&v.mount, &v.used, &v.inodes); err != nil {
-			rows.Close()
-			return err
-		}
-		observations = append(observations, v)
-	}
-	if err = rows.Err(); err != nil {
-		rows.Close()
-		return err
-	}
-	rows.Close()
-	for _, v := range observations {
+// evaluateFilesystems reads the current values from the engine snapshot, the
+// latest collection of every mounted filesystem, instead of a latest-per-mount
+// scan of filesystem_samples_1m on every tick (STO-7). A mount that is no
+// longer collected is no longer evaluated.
+func (e *Evaluator) evaluateFilesystems(ctx context.Context, rules []Rule, filesystems []metrics.FilesystemObservation, now time.Time) error {
+	for _, fs := range filesystems {
 		for _, rule := range rules {
 			if !rule.Enabled || rule.Threshold == nil || rule.RecoveryThreshold == nil {
 				continue
 			}
-			if effectiveRule(rules, rule.Family, "filesystem", v.mount).ID != rule.ID {
+			if effectiveRule(rules, rule.Family, "filesystem", fs.MountKey).ID != rule.ID {
 				continue
 			}
-			var value sql.NullFloat64
+			var value *float64
 			switch rule.Family {
 			case FamilyFilesystemWarning, FamilyFilesystemCritical:
-				value = v.used
+				value = fs.UsedPercent
 			case FamilyInodeWarning, FamilyInodeCritical:
-				value = v.inodes
+				value = fs.InodesUsedPercent
 			default:
 				continue
 			}
-			if value.Valid {
-				if err = e.evaluate(ctx, rule, "filesystem", v.mount, value.Float64, value.Float64 > *rule.Threshold, value.Float64 < *rule.RecoveryThreshold, now); err != nil {
+			if value != nil {
+				if err := e.evaluate(ctx, rule, "filesystem", fs.MountKey, *value, *value > *rule.Threshold, *value < *rule.RecoveryThreshold, now); err != nil {
 					return err
 				}
 			}

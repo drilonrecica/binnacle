@@ -118,6 +118,9 @@ type Manager struct {
 	// retentionWake carries one pending request for an immediate retention
 	// pass; SetRetention sends to it so a policy change takes effect at once.
 	retentionWake chan struct{}
+	// optimizeInterval and optimizeBootDelay schedule PRAGMA optimize; zero
+	// means defaultOptimizeInterval and defaultOptimizeBootDelay.
+	optimizeInterval, optimizeBootDelay time.Duration
 	// freeDisk overrides the free-space measurement in tests; nil uses statfs.
 	freeDisk func(path string) (uint64, error)
 }
@@ -160,10 +163,11 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.mu.Lock()
 	m.workerCancel = cancel
 	m.mu.Unlock()
-	m.workerWG.Add(3)
+	m.workerWG.Add(4)
 	go func() { defer m.workerWG.Done(); m.runDeletionWorker(workerCtx) }()
 	go func() { defer m.workerWG.Done(); m.runRollups(workerCtx) }()
 	go func() { defer m.workerWG.Done(); m.runRetentionAndBudget(workerCtx) }()
+	go func() { defer m.workerWG.Done(); m.runOptimize(workerCtx) }()
 	return nil
 }
 func (m *Manager) Stop(context.Context) error {

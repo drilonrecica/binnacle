@@ -103,6 +103,13 @@ which hours were aggregated from partial data by earlier releases. The repair
 runs in the background after boot and resumes from its watermark if the
 process stops midway.
 
+Schema 27 adds `ts` indexes to the raw host, resource and container sample
+tables and a `(collector_name, ts)` index to `collector_state_events`, so
+sparklines, history gaps and retention search a range instead of scanning the
+table. Building them reads each raw table once during the migration at
+startup; on a database near the 1 GB budget expect the first start after the
+upgrade to take some seconds longer. No data is rewritten.
+
 Downgrades are not supported. If you need to revert, restore from a backup taken before the upgrade.
 
 ## Behaviour changes to check

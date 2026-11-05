@@ -73,7 +73,7 @@ type MetricsResponse struct {
 
 func (m *Manager) HasMetricHistory(ctx context.Context) (bool, error) {
 	var exists bool
-	err := m.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM host_samples_10s LIMIT 1)").Scan(&exists)
+	err := m.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM host_samples_10s WHERE host_id=?)", hostID).Scan(&exists)
 	return exists, err
 }
 
@@ -168,9 +168,19 @@ func (m *Manager) QueryMetrics(ctx context.Context, q MetricQuery) (MetricsRespo
 	return r, nil
 }
 
+// The gap classifier's lookups. Each is a SEARCH: events_ts,
+// collector_state_events_collector_ts (STO-7) and the resource_samples_10s
+// primary key.
+const (
+	gapPersistenceSQL      = `SELECT COUNT(*) FROM events WHERE ts>=? AND ts<? AND type IN ('persistence_degraded','persistence_gap')`
+	gapCollectorStateSQL   = `SELECT new_state FROM collector_state_events WHERE collector_name=? AND ts<=? ORDER BY ts DESC LIMIT 1`
+	gapCollectorDownSQL    = `SELECT COUNT(*) FROM collector_state_events WHERE collector_name=? AND ts>=? AND ts<? AND new_state IN ('degraded','down')`
+	gapResourceActivitySQL = `SELECT COALESCE(status,''),active_instance_count FROM resource_samples_10s WHERE resource_id=? AND ts<? ORDER BY ts DESC LIMIT 1`
+)
+
 func (m *Manager) classifyGap(ctx context.Context, q MetricQuery, gap Gap) string {
 	var count int
-	_ = m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE ts>=? AND ts<? AND type IN ('persistence_degraded','persistence_gap')`, gap.From.UnixMilli(), gap.To.UnixMilli()).Scan(&count)
+	_ = m.db.QueryRowContext(ctx, gapPersistenceSQL, gap.From.UnixMilli(), gap.To.UnixMilli()).Scan(&count)
 	if count > 0 {
 		return "persistence_failure"
 	}
@@ -179,18 +189,18 @@ func (m *Manager) classifyGap(ctx context.Context, q MetricQuery, gap Gap) strin
 		collector = "docker"
 	}
 	var state string
-	_ = m.db.QueryRowContext(ctx, "SELECT new_state FROM collector_state_events WHERE collector_name=? AND ts<=? ORDER BY ts DESC LIMIT 1", collector, gap.From.UnixMilli()).Scan(&state)
+	_ = m.db.QueryRowContext(ctx, gapCollectorStateSQL, collector, gap.From.UnixMilli()).Scan(&state)
 	if state == "degraded" || state == "down" {
 		return "collector_unavailable"
 	}
-	_ = m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM collector_state_events WHERE collector_name=? AND ts>=? AND ts<? AND new_state IN ('degraded','down')`, collector, gap.From.UnixMilli(), gap.To.UnixMilli()).Scan(&count)
+	_ = m.db.QueryRowContext(ctx, gapCollectorDownSQL, collector, gap.From.UnixMilli(), gap.To.UnixMilli()).Scan(&count)
 	if count > 0 {
 		return "collector_unavailable"
 	}
 	if q.Scope == "resource" {
 		var status string
 		var active int
-		_ = m.db.QueryRowContext(ctx, `SELECT COALESCE(status,''),active_instance_count FROM resource_samples_10s WHERE resource_id=? AND ts<? ORDER BY ts DESC LIMIT 1`, q.ID, gap.To.UnixMilli()).Scan(&status, &active)
+		_ = m.db.QueryRowContext(ctx, gapResourceActivitySQL, q.ID, gap.To.UnixMilli()).Scan(&status, &active)
 		if active == 0 || status == "paused" || status == "archived" {
 			return "inactive"
 		}
@@ -198,28 +208,9 @@ func (m *Manager) classifyGap(ctx context.Context, q MetricQuery, gap Gap) strin
 	return "missing"
 }
 func (m *Manager) metricPoints(ctx context.Context, q MetricQuery, metric Metric, res Resolution) ([]Point, error) {
-	minColumn, avgColumn, maxColumn, countColumn, table, err := metricSource(q.Scope, metric, res)
+	query, args, err := metricPointsSQL(q, metric, res)
 	if err != nil {
 		return nil, err
-	}
-	var query string
-	args := []any{}
-	if res == ResolutionRaw {
-		query = "SELECT ts," + minColumn + "," + avgColumn + "," + maxColumn + " FROM " + table + " WHERE ts>=? AND ts<=?"
-		args = []any{q.From.UnixMilli(), q.To.UnixMilli()}
-		if q.Scope == "resource" {
-			query += " AND resource_id=?"
-			args = append(args, q.ID)
-		}
-		query += " ORDER BY ts"
-	} else {
-		query = "SELECT ts," + minColumn + "," + avgColumn + "," + maxColumn + "," + countColumn + " FROM " + table + " WHERE ts>=? AND ts<=?"
-		args = []any{q.From.UnixMilli(), q.To.UnixMilli()}
-		if q.Scope == "resource" {
-			query += " AND resource_id=?"
-			args = append(args, q.ID)
-		}
-		query += " ORDER BY ts"
 	}
 	rows, err := m.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -246,6 +237,32 @@ func (m *Manager) metricPoints(ctx context.Context, q MetricQuery, metric Metric
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// metricPointsSQL is the history query of one metric at one resolution.
+func metricPointsSQL(q MetricQuery, metric Metric, res Resolution) (string, []any, error) {
+	minColumn, avgColumn, maxColumn, countColumn, table, err := metricSource(q.Scope, metric, res)
+	if err != nil {
+		return "", nil, err
+	}
+	columns := "ts," + minColumn + "," + avgColumn + "," + maxColumn
+	if res != ResolutionRaw {
+		columns += "," + countColumn
+	}
+	query := "SELECT " + columns + " FROM " + table + " WHERE ts>=? AND ts<=?"
+	args := []any{q.From.UnixMilli(), q.To.UnixMilli()}
+	switch {
+	case q.Scope == "resource":
+		query += " AND resource_id=?"
+		args = append(args, q.ID)
+	case res == ResolutionRaw:
+		// The host rollup tables are keyed by ts alone; host_samples_10s is
+		// keyed (host_id, ts), so the range needs host_id to search it (STO-7).
+		query += " AND host_id=?"
+		args = append(args, hostID)
+	}
+	query += " ORDER BY ts"
+	return query, args, nil
 }
 func metricSource(scope string, metric Metric, res Resolution) (string, string, string, string, string, error) {
 	raw := map[Metric]string{

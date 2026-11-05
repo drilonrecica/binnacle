@@ -390,7 +390,7 @@ func (m *Manager) applyRetention(ctx context.Context, now time.Time, r Retention
 // between batches so persistence batches interleave. It returns
 // errRetentionBudgetExhausted when the deadline passes before it is done.
 func (m *Manager) deleteBatches(ctx context.Context, table, where string, args []any, limit int, deadline time.Time) error {
-	query := "DELETE FROM " + table + " WHERE rowid IN (SELECT rowid FROM " + table + " WHERE " + where + " LIMIT ?)"
+	query := deleteBatchSQL(table, where)
 	for {
 		if time.Now().After(deadline) {
 			return errRetentionBudgetExhausted
@@ -410,6 +410,13 @@ func (m *Manager) deleteBatches(ctx context.Context, table, where string, args [
 			return err
 		}
 	}
+}
+
+// deleteBatchSQL deletes up to one batch (the last argument) of the rows of
+// table matching where. A raw sample table's ts range is served by its ts
+// index (STO-7).
+func deleteBatchSQL(table, where string) string {
+	return "DELETE FROM " + table + " WHERE rowid IN (SELECT rowid FROM " + table + " WHERE " + where + " LIMIT ?)"
 }
 
 // archivedUnreferenced is the predicate of ADR 021 §6 for an archived

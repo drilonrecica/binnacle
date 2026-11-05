@@ -71,13 +71,7 @@ func (m *Manager) ResourceSparklines(ctx context.Context, q SparklineQuery) (Spa
 	origin := from.UnixMilli()
 	slots := min(int((to.UnixMilli()-origin)/stepMs)+1, sparklineSlots+1)
 
-	columns := ""
-	for _, metric := range q.Metrics {
-		columns += ", AVG(" + sparklineColumn(metric) + ")"
-	}
-	query := "SELECT resource_id, ((ts - ?) / ?) AS slot" + columns +
-		" FROM resource_samples_10s WHERE ts>=? AND ts<=? AND active_instance_count>0 GROUP BY resource_id, slot ORDER BY resource_id, slot"
-	rows, err := m.db.QueryContext(ctx, query, origin, stepMs, origin, to.UnixMilli())
+	rows, err := m.db.QueryContext(ctx, sparklineSQL(q.Metrics), origin, stepMs, origin, to.UnixMilli())
 	if err != nil {
 		return SparklineResponse{}, err
 	}
@@ -120,4 +114,16 @@ func (m *Manager) ResourceSparklines(ctx context.Context, q SparklineQuery) (Spa
 		}
 	}
 	return out, rows.Err()
+}
+
+// sparklineSQL buckets every resource's raw samples in the range; the range
+// is served by resource_samples_10s_ts (STO-7). Its arguments are origin,
+// step, from and to in milliseconds.
+func sparklineSQL(metrics []Metric) string {
+	columns := ""
+	for _, metric := range metrics {
+		columns += ", AVG(" + sparklineColumn(metric) + ")"
+	}
+	return "SELECT resource_id, ((ts - ?) / ?) AS slot" + columns +
+		" FROM resource_samples_10s WHERE ts>=? AND ts<=? AND active_instance_count>0 GROUP BY resource_id, slot ORDER BY resource_id, slot"
 }

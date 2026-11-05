@@ -115,3 +115,30 @@ func TestEvaluatorWritesDeploymentGraceOnce(t *testing.T) {
 		t.Fatalf("ended grace period rows=%d err=%v", rows, err)
 	}
 }
+
+// STO-7: current filesystem values come from the engine snapshot, not from a
+// latest-per-mount scan of filesystem_samples_1m on every tick. The table is
+// left empty here, so only the snapshot can make the rule go pending.
+func TestEvaluatorReadsFilesystemsFromSnapshot(t *testing.T) {
+	ctx := context.Background()
+	store, repo := healthStore(t)
+	engine := metrics.NewEngine(4)
+	evaluator := alerts.NewEvaluator(repo, engine)
+	evaluator.Now = func() time.Time { return time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC) }
+	hostCPU(engine, 20)
+	used := 97.0
+	engine.PublishFilesystems([]metrics.FilesystemObservation{{At: time.Now().UTC(), MountKey: "root", MountPoint: "/", UsedPercent: &used}})
+	if err := evaluator.Evaluate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var samples int
+	if err := store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM filesystem_samples_1m`).Scan(&samples); err != nil || samples != 0 {
+		t.Fatalf("filesystem samples=%d err=%v", samples, err)
+	}
+	for _, key := range []string{"filesystem_warning:root", "filesystem_critical:root"} {
+		var phase string
+		if err := store.DB().QueryRowContext(ctx, `SELECT phase FROM alert_evaluation_state WHERE dedup_key=?`, key).Scan(&phase); err != nil || phase != "pending" {
+			t.Fatalf("%s phase=%q err=%v", key, phase, err)
+		}
+	}
+}

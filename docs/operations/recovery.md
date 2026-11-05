@@ -51,6 +51,17 @@ logs the duration; otherwise it logs a warning, reports `vacuum_pending` in
 `/api/v1/monitor-health`, keeps running without reclaiming space, and retries
 at the next start. Free the disk and restart to complete the conversion.
 
+## Query planner statistics
+
+Two minutes after boot and then every six hours Binnacle runs
+`PRAGMA optimize` on its write connection, with `analysis_limit=400` so a pass
+reads a bounded sample of each index whatever the database size. SQLite only
+analyzes tables that were never analyzed or whose row count changed
+substantially since; the statistics in `sqlite_stat1` let the planner keep
+choosing index searches for history, sparkline and event queries as the data
+grows. A failed pass is logged as a
+warning and retried at the next interval.
+
 ## History rollups and retention
 
 Rollups run every minute and are incremental (ADR 021 §4): each tier keeps a
