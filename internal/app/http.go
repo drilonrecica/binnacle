@@ -20,7 +20,21 @@ const (
 	ReadHeaderTimeout = 10 * time.Second
 	IdleTimeout       = 120 * time.Second
 	MaxHeaderBytes    = 64 << 10
+	// HTTPStopBudget bounds Shutdown: streams end at once through the base
+	// context, other requests get this long to finish (RUN-1).
+	HTTPStopBudget = 3 * time.Second
+	// ReadinessTimeout bounds the database probe behind /readyz.
+	ReadinessTimeout = 2 * time.Second
 )
+
+// Readiness is what the readiness probe reports besides the lifecycle state:
+// "ok" or "unavailable" for the database, and the state word of every
+// collector (healthy, degraded, down, unknown). Reasons are left out because
+// /readyz is unauthenticated (SEC-21); the UI shows them behind a session.
+type Readiness struct {
+	Database   string            `json:"database"`
+	Collectors map[string]string `json:"collectors"`
+}
 
 // Routes are the handlers mounted on the root mux. Middleware, when set, wraps
 // the whole mux so the UI document, assets, /healthz and /metrics get the same
@@ -30,22 +44,36 @@ type Routes struct {
 	Static     http.Handler
 	Metrics    http.Handler
 	Middleware func(http.Handler) http.Handler
+	// Ready reports database and collector state for /readyz. When nil the
+	// database is reported "unknown" and only the lifecycle state counts.
+	Ready func(context.Context) Readiness
 }
 
-// HTTPServer serves the root mux, including the unauthenticated /healthz.
+// HTTPServer serves the root mux, including the unauthenticated /healthz
+// (liveness) and /readyz (readiness).
+//
+// Every request context derives from a base context that Shutdown cancels
+// through RegisterOnShutdown. Server.Shutdown alone only waits for active
+// connections to go idle, which a live stream or a followed log never does,
+// so without it shutdown used to wait out its whole budget (RUN-1).
 type HTTPServer struct {
-	address  string
-	app      *Application
-	server   *http.Server
-	listener net.Listener
-	mu       sync.Mutex
-	done     chan struct{}
+	address    string
+	app        *Application
+	server     *http.Server
+	ready      func(context.Context) Readiness
+	listener   net.Listener
+	mu         sync.Mutex
+	done       chan struct{}
+	base       context.Context
+	cancelBase context.CancelFunc
 }
 
 func NewHTTPServer(address string, application *Application, routes Routes) *HTTPServer {
-	h := &HTTPServer{address: address, app: application}
+	base, cancelBase := context.WithCancel(context.Background())
+	h := &HTTPServer{address: address, app: application, ready: routes.Ready, base: base, cancelBase: cancelBase}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", h.health)
+	mux.HandleFunc("/readyz", h.readiness)
 	if routes.Metrics != nil {
 		mux.Handle("/metrics", routes.Metrics)
 	}
@@ -65,9 +93,14 @@ func NewHTTPServer(address string, application *Application, routes Routes) *HTT
 		ReadHeaderTimeout: ReadHeaderTimeout,
 		IdleTimeout:       IdleTimeout,
 		MaxHeaderBytes:    MaxHeaderBytes,
+		BaseContext:       func(net.Listener) context.Context { return base },
 	}
+	h.server.RegisterOnShutdown(cancelBase)
 	return h
 }
+
+func (h *HTTPServer) Name() string              { return "http" }
+func (h *HTTPServer) StopBudget() time.Duration { return HTTPStopBudget }
 
 // Handler returns the root handler, middleware included.
 func (h *HTTPServer) Handler() http.Handler { return h.server.Handler }
@@ -107,8 +140,15 @@ func (h *HTTPServer) fail(err error) {
 	}
 }
 
+// Stop closes the listener, cancels every request context so streams end,
+// and waits for in-flight requests within ctx. Connections still open at the
+// deadline are closed.
 func (h *HTTPServer) Stop(ctx context.Context) error {
 	err := h.server.Shutdown(ctx)
+	h.cancelBase()
+	if err != nil {
+		err = errors.Join(err, h.server.Close())
+	}
 	h.mu.Lock()
 	done := h.done
 	h.mu.Unlock()
@@ -119,6 +159,46 @@ func (h *HTTPServer) Stop(ctx context.Context) error {
 		}
 	}
 	return err
+}
+
+// readiness answers 200 while the application is running and the database
+// answers a query, 503 otherwise. Collectors are reported but never make
+// Binnacle unready: a degraded collector is shown in the UI, not hidden
+// behind a failing probe (degrade explicitly).
+func (h *HTTPServer) readiness(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	state := StateStarting
+	if h.app != nil {
+		state = h.app.State()
+	}
+	report := Readiness{Database: "unknown", Collectors: map[string]string{}}
+	if h.ready != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), ReadinessTimeout)
+		report = h.ready(ctx)
+		cancel()
+		if report.Collectors == nil {
+			report.Collectors = map[string]string{}
+		}
+	}
+	ready := state == StateRunning && (h.ready == nil || report.Database == "ok")
+	status := http.StatusServiceUnavailable
+	if ready {
+		status = http.StatusOK
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	if r.Method != http.MethodHead {
+		_ = json.NewEncoder(w).Encode(struct {
+			Ready bool  `json:"ready"`
+			State State `json:"state"`
+			Readiness
+		}{ready, state, report})
+	}
 }
 
 // health reports only the lifecycle state. The exact version is not exposed

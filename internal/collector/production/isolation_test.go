@@ -305,3 +305,20 @@ func TestSkippedContainerLogIsCoalesced(t *testing.T) {
 		t.Fatal("skip not logged again after a minute")
 	}
 }
+
+// RUN-3: before a supported Engine is verified the gate refuses List. The
+// docker collector is degraded with the gate's reason from the first tick,
+// not healthy-with-a-reason until three failures accumulate.
+func TestUnverifiedEngineDegradesDockerFromFirstTick(t *testing.T) {
+	docker := newScriptedDocker()
+	docker.add("c1", "web", "running", "")
+	docker.listErr = fmt.Errorf("%w: Docker Engine 28.0.0 is unsupported; version %s or newer is required", dockerapi.ErrEngineUnverified, dockerapi.MinimumEngineVersion)
+	engine := metrics.NewEngine(16)
+	s := &Sampler{Engine: engine, Docker: docker, Cache: dockercollector.NewCache(), HostProc: t.TempDir()}
+	s.hostTick()
+	s.dockerTick(context.Background())
+	h := engine.Snapshot().Collectors["docker"]
+	if h.State != metrics.CollectorDegraded || !strings.Contains(h.Reason, "28.0.0 is unsupported") {
+		t.Fatalf("docker health = %+v, want degraded with the version reason", h)
+	}
+}

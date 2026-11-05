@@ -44,10 +44,21 @@ type Persistence struct {
 	LastWriteNanos atomic.Int64
 	Paused         atomic.Bool
 	cancel         context.CancelFunc
-	wg             sync.WaitGroup
-	mu             sync.Mutex
-	carry          carried
+	// cancelWrites aborts the write in flight; Stop calls it at its deadline.
+	cancelWrites context.CancelFunc
+	// stopping is closed by Stop once no more batches are enqueued; the
+	// writer then drains what is queued and returns.
+	stopping chan struct{}
+	tickWG   sync.WaitGroup
+	writerWG sync.WaitGroup
+	mu       sync.Mutex
+	carry    carried
 }
+
+// PersistenceStopBudget is how long Stop may spend draining the queue before
+// the database closes (RUN-1). Batches still queued at the deadline are
+// counted as dropped.
+const PersistenceStopBudget = 3 * time.Second
 
 // queued is one batch in the writer queue; gapID is the id of the
 // persistence_gap event it carries, "" for none.
@@ -155,6 +166,11 @@ func (p *Persistence) Start(parent context.Context) error {
 	}
 	ctx, cancel := context.WithCancel(parent)
 	p.cancel = cancel
+	// Writes are not cancelled with the ticker: Stop drains the queue on this
+	// context and cancels it only when its own deadline passes.
+	writeCtx, cancelWrites := context.WithCancel(context.WithoutCancel(parent))
+	p.cancelWrites = cancelWrites
+	p.stopping = make(chan struct{})
 	queue := make(chan queued, p.QueueLimit)
 	enqueue := func() {
 		batch := p.Engine.PersistenceBatch()
@@ -187,9 +203,9 @@ func (p *Persistence) Start(parent context.Context) error {
 		}
 		p.QueueDepth.Store(int64(len(queue)))
 	}
-	p.wg.Add(2)
+	p.tickWG.Add(1)
 	go func() {
-		defer p.wg.Done()
+		defer p.tickWG.Done()
 		ticker := time.NewTicker(p.Interval)
 		defer ticker.Stop()
 		enqueue()
@@ -202,35 +218,88 @@ func (p *Persistence) Start(parent context.Context) error {
 			}
 		}
 	}()
+	p.writerWG.Add(1)
 	go func() {
-		defer p.wg.Done()
+		defer p.writerWG.Done()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-p.stopping:
+				p.drain(writeCtx, queue)
 				return
 			case item := <-queue:
 				p.QueueDepth.Store(int64(len(queue)))
-				started := time.Now()
-				err := Retry(ctx, func() error { return p.Store.WriteBatch(ctx, item.batch) })
-				p.LastWriteNanos.Store(time.Since(started).Nanoseconds())
-				if err != nil && ctx.Err() == nil {
-					p.Store.logger().Error("persistence batch was not stored", "at", item.batch.Snapshot.At, "events", len(item.batch.Events), "error", err)
-					p.Dropped.Add(1)
-					p.lose(item, gapWriteFailed)
-				}
+				p.write(writeCtx, item)
 			}
 		}
 	}()
 	return nil
 }
+
+// write stores one batch; a failure keeps its events and gap for the next.
+func (p *Persistence) write(ctx context.Context, item queued) {
+	started := time.Now()
+	err := Retry(ctx, func() error { return p.Store.WriteBatch(ctx, item.batch) })
+	p.LastWriteNanos.Store(time.Since(started).Nanoseconds())
+	if err == nil {
+		return
+	}
+	p.Dropped.Add(1)
+	p.lose(item, gapWriteFailed)
+	if ctx.Err() == nil {
+		p.Store.logger().Error("persistence batch was not stored", "at", item.batch.Snapshot.At, "events", len(item.batch.Events), "error", err)
+	}
+}
+
+// drain writes every queued batch until the queue is empty or ctx is done.
+// Batches left at the deadline are counted as dropped and logged once.
+func (p *Persistence) drain(ctx context.Context, queue chan queued) {
+	stored := 0
+	for {
+		select {
+		case item := <-queue:
+			p.QueueDepth.Store(int64(len(queue)))
+			if ctx.Err() != nil {
+				p.Dropped.Add(1)
+				p.lose(item, gapWriteFailed)
+				continue
+			}
+			p.write(ctx, item)
+			stored++
+		default:
+			if ctx.Err() != nil {
+				p.Store.logger().Error("persistence queue not drained before the shutdown deadline", "dropped_total", p.Dropped.Load())
+			} else if stored > 0 {
+				p.Store.logger().Info("persistence queue drained", "batches", stored)
+			}
+			return
+		}
+	}
+}
+
 func (p *Persistence) Queue() int64                { return p.QueueDepth.Load() }
 func (p *Persistence) DroppedCount() uint64        { return p.Dropped.Load() }
 func (p *Persistence) EventsLostCount() uint64     { return p.EventsLost.Load() }
 func (p *Persistence) WriteLatency() time.Duration { return time.Duration(p.LastWriteNanos.Load()) }
-func (p *Persistence) Stop(context.Context) error {
-	if p.cancel != nil {
-		p.cancel()
+func (p *Persistence) Name() string                { return "persistence" }
+func (p *Persistence) StopBudget() time.Duration   { return PersistenceStopBudget }
+
+// Stop stops closing windows, then drains the queue within ctx before it
+// returns, so the database is closed only after the last queued batch was
+// written or the deadline passed (RUN-1).
+func (p *Persistence) Stop(ctx context.Context) error {
+	if p.cancel == nil {
+		return nil
 	}
-	p.wg.Wait()
+	p.cancel()
+	p.tickWG.Wait()
+	close(p.stopping)
+	release := context.AfterFunc(ctx, p.cancelWrites)
+	defer release()
+	p.writerWG.Wait()
+	p.cancelWrites()
+	p.cancel = nil
+	if ctx.Err() != nil {
+		return fmt.Errorf("persistence drain: %w", ctx.Err())
+	}
 	return nil
 }

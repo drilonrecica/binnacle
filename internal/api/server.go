@@ -114,7 +114,7 @@ func (s *Server) setDeadlines(w http.ResponseWriter, r *http.Request, deadline t
 func (s *Server) logRequest(r *http.Request, id string, status int, started time.Time) {
 	level := slog.LevelInfo
 	// Health probes and immutable assets are frequent and uninteresting.
-	if r.URL.Path == "/healthz" || strings.HasPrefix(r.URL.Path, "/assets/") {
+	if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || strings.HasPrefix(r.URL.Path, "/assets/") {
 		level = slog.LevelDebug
 	}
 	s.logger.LogAttrs(r.Context(), level, "http request",

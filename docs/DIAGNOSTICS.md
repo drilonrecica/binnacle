@@ -9,8 +9,11 @@ Responses default to 500 lines and cannot exceed the configured 5,000-line or
 1 MiB ceilings. A resource can contain at most 32 log components. Follow
 sessions stop after 30 minutes, as soon as the browser disconnects, or when
 the browser session is signed out or expires; the session is re-checked on
-every 20-second heartbeat. At most four log reads, follows included, run at
-once across all users; further reads wait. Log reads do not share the Docker
+every 20-second heartbeat, or when Binnacle shuts down. Following a resource
+streams all of its components at once, from the start of the selected range
+with no end time. At most four log reads, follows included, run at
+once across all users; further reads wait, so a resource with more than four
+components follows the first four until a slot frees. Log reads do not share the Docker
 call slots used for metric collection, so open log views cannot stall it.
 
 Redaction covers common authorization headers, password/token/API-key

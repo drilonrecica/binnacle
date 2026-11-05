@@ -66,6 +66,7 @@ func main() {
 		os.Exit(0)
 	}
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	applyMemoryLimit(log, cgroupRoot)
 	config, effectiveSettings, err := settings.Load()
 	if err != nil {
 		log.Error("configuration is invalid", "error", err)
@@ -137,7 +138,7 @@ func main() {
 	if *demoMode || config.Demo {
 		generator := demo.New(*demoSeed, realClock{})
 		generator.Containers = *demoContainers
-		application.Add(app.ComponentFuncs{StartFunc: func(ctx context.Context) error {
+		application.Add(app.ComponentFuncs{Label: "demo-history", StartFunc: func(ctx context.Context) error {
 			if err := demo.SeedHistory(ctx, store, generator, time.Now()); err != nil {
 				return fmt.Errorf("seed demo history: %w", err)
 			}
@@ -155,18 +156,15 @@ func main() {
 		var socketAccess atomic.Value
 		socketAccess.Store("")
 		dockerSocket = func() string { return socketAccess.Load().(string) }
-		application.Add(app.ComponentFuncs{
-			StartFunc: func(ctx context.Context) error {
-				if err := dockerapi.RequireSupportedEngine(ctx, limitedDocker); err != nil {
-					_ = rawEngine.Close()
-					return err
-				}
-				probeDockerSocket(ctx, log, rawEngine, &socketAccess)
-				return nil
-			},
-			StopFunc: func(context.Context) error { return rawEngine.Close() },
-		})
-		dockerEngine, dockerLogs = limitedDocker, limitedDocker
+		// The gate keeps the Engine requirement fail-closed without failing
+		// startup: until a supported release answers, every Docker call is
+		// refused and the docker collector is degraded with the reason; the
+		// probe retries with backoff (RUN-3).
+		gate := dockerapi.NewGate(limitedDocker, log)
+		gate.OnOpen = func(ctx context.Context) { probeDockerSocket(ctx, log, rawEngine, &socketAccess) }
+		application.Add(app.ComponentFuncs{Label: "docker-client", StopFunc: func(context.Context) error { return rawEngine.Close() }})
+		application.Add(gate)
+		dockerEngine, dockerLogs = gate, gate
 		onboardingService.SetDocker(dockerEngine)
 		cache := dockercollector.NewCache()
 		productionSampler = &production.Sampler{Engine: engine, Logger: log, Docker: dockerEngine, Cache: cache, Store: store, HostProc: config.Paths.HostProc, HostSys: config.Paths.HostSys, HostRoot: config.Paths.HostRoot, DataDir: config.Paths.DataDir, MaxDockerConcurrency: config.Docker.MaxConcurrency, Interval: func() time.Duration {
@@ -177,7 +175,7 @@ func main() {
 		application.Add(productionSampler)
 	}
 
-	application.Add(app.ComponentFuncs{StartFunc: func(ctx context.Context) error {
+	application.Add(app.ComponentFuncs{Label: "bootstrap", StartFunc: func(ctx context.Context) error {
 		setup.SetDB(store.DB())
 		credentials.SetDB(store.DB())
 		sessions.SetDB(store.DB())
@@ -351,7 +349,10 @@ func main() {
 	processScanner.Redact = logService.Redact
 	apiServer.EnableProcesses(processScanner, sessions)
 	prometheusHandler := &api.PrometheusHandler{Enabled: config.Features.Portability && config.Prometheus.Enabled, Tokens: tokenRepository, Engine: engine, Checks: checkRepository, Monitor: monitor}
-	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, application, app.Routes{API: apiServer.Routes(), Static: webembed.Handler(), Metrics: prometheusHandler, Middleware: apiServer.Middleware}))
+	ready := func(ctx context.Context) app.Readiness {
+		return app.Readiness{Database: databaseReadiness(ctx, store), Collectors: collectorStates(engine.Snapshot().Collectors)}
+	}
+	application.Add(app.NewHTTPServer(config.HTTP.ListenAddress, application, app.Routes{API: apiServer.Routes(), Static: webembed.Handler(), Metrics: prometheusHandler, Middleware: apiServer.Middleware, Ready: ready}))
 	if err := application.Run(ctx); err != nil {
 		log.Error("application exited with error", "error", err)
 		os.Exit(1)

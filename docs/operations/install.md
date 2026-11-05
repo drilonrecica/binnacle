@@ -20,9 +20,12 @@ Binnacle is distributed as a container image. The supported paths are Coolify
 
 ## Generate a setup token
 
-Binnacle checks the daemon release during production startup and fails closed
-if the version is missing, malformed, or older than 29.5.1. Upgrade the host
-Engine before deploying Binnacle. A distribution security backport reported
+Binnacle checks the daemon release at startup and fails closed if the version
+is missing, malformed, or older than 29.5.1: it makes no other Docker call, the
+UI shows Docker collection degraded with the reason, and the probe is repeated
+with backoff (5 s, doubling to 5 min). The process keeps running, so the
+container does not crash-loop; it starts collecting once a supported Engine
+answers, without a restart. Upgrade the host Engine before deploying Binnacle. A distribution security backport reported
 under an older release string does not satisfy this requirement. Demo mode
 does not connect to Docker and has no Engine requirement.
 
@@ -224,6 +227,29 @@ and does not reveal the version.
 `binnacle --healthcheck` reads the same configuration as the server and dials
 `/healthz` on the configured listen address (an unspecified host such as
 `:8080` or `0.0.0.0` means `127.0.0.1`), giving up after 3 s.
+
+`/healthz` is the liveness probe. `/readyz` is the readiness probe: it answers
+`200` while Binnacle is running and the database answers a query within 2 s,
+and `503` otherwise. Its body carries `ready`, the lifecycle `state`,
+`database` (`ok`, `unavailable`) and the state word of each collector
+(`healthy`, `degraded`, `down`, `unknown`), without reasons or the version. A
+degraded collector does not make Binnacle unready.
+
+### Shutdown
+
+On `SIGTERM` Binnacle stops within 9 s, inside Docker's default 10 s grace:
+the listener closes and live streams and followed logs end at once, the
+collectors stop, queued history windows are written (up to 3 s), and only then
+does the database close. Batches that could not be written by the deadline are
+counted as dropped in monitor-health. See ADR 024.
+
+### Memory limit
+
+Unless `GOMEMLIMIT` is set, Binnacle sets the Go soft memory limit to 90 % of
+the container's cgroup memory limit at startup (115 MiB of the template's
+128 MiB), so the garbage collector works harder before the kernel would kill
+the process. Without a cgroup limit no soft limit is set. Set `GOMEMLIMIT`
+(for example `GOMEMLIMIT=100MiB`) to choose a value yourself.
 
 The SQLite database file is created with mode `0600`; an existing file that
 other users can read is tightened on start.

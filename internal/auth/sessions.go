@@ -66,6 +66,8 @@ type Sessions struct {
 	mu      sync.RWMutex
 	cfg     SessionConfig
 	proxies TrustedProxies
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
 }
 
 func NewSessions(db *storage.DB, cfg SessionConfig) *Sessions {
@@ -281,7 +283,10 @@ func (s *Sessions) Cleanup(ctx context.Context, limit int) (int64, error) {
 }
 
 func (s *Sessions) Start(ctx context.Context) error {
+	ctx, s.cancel = context.WithCancel(ctx)
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		ticker := time.NewTicker(time.Hour)
 		defer ticker.Stop()
 		for {
@@ -300,7 +305,17 @@ func (s *Sessions) Start(ctx context.Context) error {
 	}()
 	return nil
 }
-func (s *Sessions) Stop(context.Context) error { return nil }
+func (s *Sessions) Name() string { return "sessions" }
+
+// Stop ends the cleanup loop; the application no longer cancels the start
+// context before Stop (RUN-1).
+func (s *Sessions) Stop(context.Context) error {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	s.wg.Wait()
+	return nil
+}
 
 func SetSessionCookie(w http.ResponseWriter, token string, secure bool, expires time.Time) {
 	http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Value: token, Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, Expires: expires.UTC()})

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/dockerapi"
@@ -171,30 +172,44 @@ func (s *LogService) Read(ctx context.Context, request LogRequest, emit func(Log
 		defer cancel()
 	}
 	result := LogResult{Entries: make([]LogEntry, 0, min(limit, 256)), Redaction: "best-effort"}
+	// accept applies the shared line and byte limits; callers hold mu when
+	// components are read concurrently.
 	var bytes int64
-	for _, component := range request.Components {
+	var mu sync.Mutex
+	accept := func(component, stream, message string) error {
+		entry := parseLogEntry(component, stream, message)
+		if request.Search != "" && !strings.Contains(entry.Message, request.Search) {
+			return nil
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		entryBytes := int64(len(entry.Message) + len(entry.Component) + 64)
+		if len(result.Entries) >= limit || bytes+entryBytes > s.MaxBytes {
+			result.Truncated = true
+			return errLogLimit
+		}
+		bytes += entryBytes
+		if emit != nil {
+			return emit(entry)
+		}
+		result.Entries = append(result.Entries, entry)
+		return nil
+	}
+	read := func(ctx context.Context, component string, options dockerapi.LogOptions) error {
 		redactor := &lineRedactor{service: s}
-		err := s.Docker.ReadLogs(ctx, component, dockerapi.LogOptions{Since: request.From, Until: request.To, Tail: limit + 1, Follow: request.Follow}, func(stream, raw string) error {
+		return s.Docker.ReadLogs(ctx, component, options, func(stream, raw string) error {
 			message, keep := redactor.next(raw)
 			if !keep {
 				return nil
 			}
-			entry := parseLogEntry(component, stream, message)
-			if request.Search != "" && !strings.Contains(entry.Message, request.Search) {
-				return nil
-			}
-			entryBytes := int64(len(entry.Message) + len(entry.Component) + 64)
-			if len(result.Entries) >= limit || bytes+entryBytes > s.MaxBytes {
-				result.Truncated = true
-				return errLogLimit
-			}
-			bytes += entryBytes
-			if emit != nil {
-				return emit(entry)
-			}
-			result.Entries = append(result.Entries, entry)
-			return nil
+			return accept(component, stream, message)
 		})
+	}
+	if request.Follow {
+		return s.follow(ctx, request, limit, read, &result, &mu)
+	}
+	for _, component := range request.Components {
+		err := read(ctx, component, dockerapi.LogOptions{Since: request.From, Until: request.To, Tail: limit + 1})
 		if errors.Is(err, errLogLimit) {
 			break
 		}
@@ -203,6 +218,43 @@ func (s *LogService) Read(ctx context.Context, request LogRequest, emit func(Log
 		}
 	}
 	return result, nil
+}
+
+// follow reads every component at once: a followed stream never ends, so
+// reading them one after another would show only the first (RUN-6). Until is
+// left out, since a follow bounded by "now" ends as soon as it starts. The
+// first error other than the shared limit ends every stream and is returned;
+// a follow ended by ctx returns ctx's error, as a single stream does.
+func (s *LogService) follow(parent context.Context, request LogRequest, limit int, read func(context.Context, string, dockerapi.LogOptions) error, result *LogResult, mu *sync.Mutex) (LogResult, error) {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+	var wg sync.WaitGroup
+	var first error
+	var once sync.Once
+	for _, component := range request.Components {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := read(ctx, component, dockerapi.LogOptions{Since: request.From, Tail: limit + 1, Follow: true})
+			if err == nil || ctx.Err() != nil && !errors.Is(err, errLogLimit) {
+				return
+			}
+			once.Do(func() {
+				if !errors.Is(err, errLogLimit) {
+					first = err
+				}
+				cancel()
+			})
+		}()
+	}
+	wg.Wait()
+	if first == nil && !result.Truncated {
+		// The caller ended the follow (session, shutdown, duration cap).
+		first = parent.Err()
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	return *result, first
 }
 
 var errLogLimit = errors.New("log response limit reached")

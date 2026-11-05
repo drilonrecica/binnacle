@@ -3,6 +3,7 @@ package demo
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/drilonrecica/binnacle/internal/metrics"
@@ -12,13 +13,18 @@ type Component struct {
 	Generator *Generator
 	Engine    *metrics.Engine
 	Interval  time.Duration
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
 }
 
 func (c *Component) Start(ctx context.Context) error {
 	if c.Interval <= 0 {
 		c.Interval = 2 * time.Second
 	}
+	ctx, c.cancel = context.WithCancel(ctx)
+	c.wg.Add(1)
 	go func() {
+		defer c.wg.Done()
 		tick := uint64(0)
 		t := time.NewTicker(c.Interval)
 		defer t.Stop()
@@ -36,4 +42,11 @@ func (c *Component) Start(ctx context.Context) error {
 	}()
 	return nil
 }
-func (c *Component) Stop(context.Context) error { return nil }
+func (c *Component) Name() string { return "demo" }
+func (c *Component) Stop(context.Context) error {
+	if c.cancel != nil {
+		c.cancel()
+	}
+	c.wg.Wait()
+	return nil
+}

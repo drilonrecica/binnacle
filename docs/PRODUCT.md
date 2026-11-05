@@ -39,8 +39,11 @@ claim automatic root-cause analysis.
 
 One Binnacle instance monitors one Linux Docker server. Supported production
 targets are Ubuntu 22.04/24.04 and Debian 12/13 on amd64 or arm64 with Docker
-Engine 29.5.1 or newer. Production startup fails closed when the daemon release
-is older, missing, or malformed; operators must upgrade the host first.
+Engine 29.5.1 or newer. The Engine requirement fails closed: when the daemon
+release is older, missing, or malformed, or the daemon is unreachable, Binnacle
+makes no Docker call besides the version probe, reports Docker collection as
+degraded with the reason, and retries the probe with backoff; operators must
+upgrade the host (ADR 024).
 Coolify-managed Docker is the primary deployment path;
 Docker Compose is the portable alternative.
 

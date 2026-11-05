@@ -317,6 +317,11 @@ func (s *Sampler) dockerTick(ctx context.Context) {
 	if err != nil {
 		s.dockerFailures++
 		h = health("docker", s.dockerFailures, err, s.dockerFreshAt)
+		if errors.Is(err, dockerapi.ErrEngineUnverified) && h.State == metrics.CollectorHealthy {
+			// No supported Engine verified yet: degraded from the first tick
+			// with the gate's reason, not healthy for three ticks (RUN-3).
+			h.State = metrics.CollectorDegraded
+		}
 		resources = staleResources(s.lastResources)
 	} else {
 		s.dockerFailures = 0
