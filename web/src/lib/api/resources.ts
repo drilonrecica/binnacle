@@ -23,10 +23,25 @@ export function listResources(signal?: AbortSignal) {
   });
 }
 
-export function listArchivedResources(signal?: AbortSignal) {
+/** Page size of the archived list; the server accepts 1 to 500. */
+export const ARCHIVED_PAGE_SIZE = 100;
+
+/**
+ * One page of archived resources, newest first. Pass the id of the last row
+ * of the previous page as `before` to fetch the next one; a page shorter than
+ * ARCHIVED_PAGE_SIZE is the last.
+ */
+export function listArchivedResources(
+  options: { before?: string; signal?: AbortSignal } = {},
+) {
+  const query: Record<string, string> = {
+    state: 'archived',
+    limit: String(ARCHIVED_PAGE_SIZE),
+  };
+  if (options.before) query.before = options.before;
   return api.get<ArchivedResource[]>('/api/v1/resources', {
-    query: { state: 'archived' },
-    signal,
+    query,
+    signal: options.signal,
     fallback: 'Archived resources are unavailable.',
   });
 }

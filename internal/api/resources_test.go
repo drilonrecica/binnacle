@@ -84,3 +84,53 @@ func TestFilesystemsEndpointAndSnapshotCarryMounts(t *testing.T) {
 		t.Fatalf("empty status=%d body=%q", response.Code, response.Body.String())
 	}
 }
+
+// STO-9: the archived list is paginated with limit and a before cursor, the
+// same convention as events.
+func TestArchivedResourcesEndpointPaginates(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	manager := storage.New(filepath.Join(dir, "db"), filepath.Join(dir, "run"))
+	if err := manager.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	if err := manager.UpsertHost(ctx, "host", storage.HostIdentity("", "test"), "Server"); err != nil {
+		t.Fatal(err)
+	}
+	for i, id := range []string{"res_a", "res_b", "res_c"} {
+		if err := manager.UpsertResource(ctx, storage.Resource{ID: id, HostID: "host", StableKey: id, SourceKind: "compose", Name: id, Category: "service", Status: "healthy"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := manager.DB().ExecContext(ctx, "UPDATE resources SET status='archived',archived_at=? WHERE id=?", time.Now().Add(-time.Duration(3-i)*time.Hour).UnixMilli(), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := New()
+	server.EnableResources(metrics.NewEngine(10), DemoAuthorizer(true), manager, auth.NewProtection(4096, auth.TrustedProxies{}))
+	get := func(query string) []storage.Resource {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, "http://binnacle.test/api/v1/resources?"+query, nil)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		var page []storage.Resource
+		if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &page) != nil {
+			t.Fatalf("%s status=%d body=%s", query, response.Code, response.Body.String())
+		}
+		return page
+	}
+	first := get("state=archived&limit=2")
+	if len(first) != 2 || first[0].ID != "res_c" || first[1].ID != "res_b" {
+		t.Fatalf("first page=%+v", first)
+	}
+	second := get("state=archived&limit=2&before=" + first[1].ID)
+	if len(second) != 1 || second[0].ID != "res_a" {
+		t.Fatalf("second page=%+v", second)
+	}
+	request := httptest.NewRequest(http.MethodGet, "http://binnacle.test/api/v1/resources?state=archived&limit=0", nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != 400 {
+		t.Fatalf("limit=0 status=%d body=%s", response.Code, response.Body.String())
+	}
+}

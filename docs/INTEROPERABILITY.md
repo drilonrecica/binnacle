@@ -30,6 +30,12 @@ failed its last tick: the resource is the last-known one, its metrics are
 `null`, its status is `unknown` and `lastSeenAt` is the time it was last
 measured. The Prometheus exporter omits those metrics.
 
+`/api/v1/resources?state=archived` lists archived resources newest first and
+is paginated like the event history: `limit` is 1 to 500 (default 100) and
+`before=<id>` returns the resources archived before that one. A page shorter
+than `limit` is the last. `/api/v1/exports/resources.json` walks every page
+for you.
+
 ## Attachment exports
 
 | Endpoint | Required scope |

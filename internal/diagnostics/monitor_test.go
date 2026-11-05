@@ -115,3 +115,45 @@ func TestMonitorReportsRollupAndRetentionDurations(t *testing.T) {
 		t.Fatalf("retention_duration=%+v", byID["retention_duration"])
 	}
 }
+
+type fakeStorageHealth struct{ health storage.Health }
+
+func (f fakeStorageHealth) Health() storage.Health { return f.health }
+
+// STO-5 / STO-9: the budget measured from live pages, the persistence pause,
+// shortened retention, pending vacuum and an incomplete pass are visible in
+// monitor-health (ADR 021 §7).
+func TestMonitorReportsBudgetPauseAndVacuumState(t *testing.T) {
+	health := storage.Health{
+		Budget:              storage.DatabaseBudget{UsedBytes: 990, TargetBytes: 1000, State: storage.BudgetEmergency, Paused: true, Shortened: []string{"raw", "1m"}},
+		VacuumDuration:      40 * time.Millisecond,
+		VacuumPending:       true,
+		RetentionIncomplete: true,
+	}
+	monitor := &Monitor{DatabasePath: "/missing", DatabaseTarget: 1000, QueueCapacity: 10, Storage: fakeStorageHealth{health}}
+	byID := map[string]MonitorMetric{}
+	for _, value := range monitor.Snapshot().Metrics {
+		byID[value.ID] = value
+	}
+	if byID["database_budget"].Value != int64(990) || byID["database_budget"].Status != "critical" {
+		t.Fatalf("database_budget=%+v", byID["database_budget"])
+	}
+	if byID["persistence_paused"].Value != true || byID["persistence_paused"].Status != "critical" {
+		t.Fatalf("persistence_paused=%+v", byID["persistence_paused"])
+	}
+	if byID["retention_shortened"].Value != "raw, 1m" || byID["retention_shortened"].Status != "warning" {
+		t.Fatalf("retention_shortened=%+v", byID["retention_shortened"])
+	}
+	if byID["vacuum_duration"].Value != float64(40) || byID["vacuum_pending"].Status != "warning" || byID["retention_incomplete"].Status != "warning" {
+		t.Fatalf("vacuum_duration=%+v vacuum_pending=%+v retention_incomplete=%+v", byID["vacuum_duration"], byID["vacuum_pending"], byID["retention_incomplete"])
+	}
+
+	quiet := &Monitor{DatabasePath: "/missing", DatabaseTarget: 1000, QueueCapacity: 10, Storage: fakeStorageHealth{storage.Health{Budget: storage.DatabaseBudget{UsedBytes: 10, TargetBytes: 1000, State: storage.BudgetOK}}}}
+	byID = map[string]MonitorMetric{}
+	for _, value := range quiet.Snapshot().Metrics {
+		byID[value.ID] = value
+	}
+	if byID["database_budget"].Status != "normal" || byID["persistence_paused"].Status != "normal" || byID["retention_shortened"].Value != "none" || byID["retention_shortened"].Status != "normal" || byID["vacuum_pending"].Status != "normal" {
+		t.Fatalf("quiet metrics: budget=%+v paused=%+v shortened=%+v pending=%+v", byID["database_budget"], byID["persistence_paused"], byID["retention_shortened"], byID["vacuum_pending"])
+	}
+}

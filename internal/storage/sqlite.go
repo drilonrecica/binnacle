@@ -100,6 +100,26 @@ type Manager struct {
 	// latest pass of each worker, zero until one completed; guarded by mu.
 	rollupDuration    time.Duration
 	retentionDuration time.Duration
+	// vacuumDuration is the wall-clock time of the latest incremental vacuum.
+	vacuumDuration time.Duration
+	// retentionIncomplete is set when the latest pass stopped at its budget.
+	retentionIncomplete bool
+	// vacuumPending is set when the one-time auto_vacuum conversion of
+	// ADR 021 §8 was skipped for lack of disk space.
+	vacuumPending bool
+	// retentionBootDelay is how long after Start the first retention pass
+	// runs; zero means defaultRetentionBootDelay.
+	retentionBootDelay time.Duration
+	// retentionPassBudget bounds one pass; zero means defaultRetentionPassBudget.
+	retentionPassBudget time.Duration
+	// archivedResourceCap bounds archived resources when the 1h tier is
+	// unlimited; zero means defaultArchivedResourceCap.
+	archivedResourceCap int
+	// retentionWake carries one pending request for an immediate retention
+	// pass; SetRetention sends to it so a policy change takes effect at once.
+	retentionWake chan struct{}
+	// freeDisk overrides the free-space measurement in tests; nil uses statfs.
+	freeDisk func(path string) (uint64, error)
 }
 
 // RetentionCutoffs configures how long each resolution tier is kept.
@@ -107,14 +127,26 @@ type RetentionCutoffs struct {
 	Raw, OneMinute, FifteenMinute, OneHour time.Duration
 }
 
-// DatabaseBudget exposes the current budget state to callers.
+// DatabaseBudget exposes the current budget state to callers (ADR 021 §7).
 type DatabaseBudget struct {
+	// UsedBytes is live data: (page_count - freelist_count) * page_size.
 	UsedBytes   int64
 	TargetBytes int64
-	State       BudgetState
+	// FreeBytes is the free space on the database's filesystem at the last
+	// measurement; zero when it could not be measured.
+	FreeBytes int64
+	State     BudgetState
+	// Paused reports that raw persistence is paused; it is set at emergency
+	// and cleared below critical.
+	Paused bool
+	// Shortened lists the tiers ("raw", "1m") the latest retention pass cut
+	// to half their configured length because the budget was at emergency.
+	Shortened []string
 }
 
-func New(path, runtimeDir string) *Manager { return &Manager{Path: path, RuntimeDir: runtimeDir} }
+func New(path, runtimeDir string) *Manager {
+	return &Manager{Path: path, RuntimeDir: runtimeDir, retentionWake: make(chan struct{}, 1)}
+}
 func (m *Manager) Start(ctx context.Context) error {
 	if err := m.Open(ctx); err != nil {
 		return err
@@ -171,6 +203,16 @@ type Health struct {
 	// RollupDuration and RetentionDuration are the wall-clock time of the
 	// latest pass of each worker; zero until the first pass completes.
 	RollupDuration, RetentionDuration time.Duration
+	// VacuumDuration is the wall-clock time of the latest incremental vacuum.
+	VacuumDuration time.Duration
+	// RetentionIncomplete reports that the latest retention pass stopped at
+	// its duration budget and resumes on the next tick.
+	RetentionIncomplete bool
+	// VacuumPending reports that the database still uses auto_vacuum=none
+	// because the one-time conversion found no disk room (ADR 021 §8).
+	VacuumPending bool
+	// Budget is the latest database budget evaluation.
+	Budget DatabaseBudget
 	// WriteTransactions is the process-wide count of committed row-changing
 	// transactions (see WriteTransactions).
 	WriteTransactions uint64
@@ -179,8 +221,15 @@ type Health struct {
 func (m *Manager) Health() Health {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return Health{UncleanShutdown: m.uncleanShutdown, Writer: poolStats(m.writer), Reader: poolStats(m.reader), RollupDuration: m.rollupDuration, RetentionDuration: m.retentionDuration, WriteTransactions: WriteTransactions()}
+	return Health{UncleanShutdown: m.uncleanShutdown, Writer: poolStats(m.writer), Reader: poolStats(m.reader), RollupDuration: m.rollupDuration, RetentionDuration: m.retentionDuration, VacuumDuration: m.vacuumDuration, RetentionIncomplete: m.retentionIncomplete, VacuumPending: m.vacuumPending, Budget: m.budget.copy(), WriteTransactions: WriteTransactions()}
 }
+
+// execQueryer is the writer handle the one-time conversion runs on.
+type execQueryer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
 func poolStats(db *sql.DB) PoolStats {
 	if db == nil {
 		return PoolStats{}
@@ -245,7 +294,7 @@ func (m *Manager) Open(ctx context.Context) error {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if err := freeSpace(filepath.Dir(m.Path)); err != nil {
+	if err := m.requireFreeSpace(filepath.Dir(m.Path)); err != nil {
 		return err
 	}
 	if err := ensurePrivateFile(m.Path); err != nil {
@@ -273,6 +322,9 @@ func (m *Manager) Open(ctx context.Context) error {
 	}
 	if integrity != "ok" {
 		return fail(fmt.Errorf("sqlite quick check failed: %s", sanitize(integrity)))
+	}
+	if err := m.convertAutoVacuum(ctx, writer); err != nil {
+		return fail(err)
 	}
 	if err := m.migrate(ctx, writer); err != nil {
 		_ = writeMarker(marker)
@@ -404,12 +456,22 @@ func ensurePrivateFile(path string) error {
 	return nil
 }
 func (m *Manager) markerPath() string { return filepath.Join(m.RuntimeDir, "migration.failed") }
-func freeSpace(path string) error {
+
+// freeDiskBytes is the space available to this process on the filesystem
+// holding path.
+func freeDiskBytes(path string) (uint64, error) {
 	var stat unix.Statfs_t
 	if err := unix.Statfs(path, &stat); err != nil {
+		return 0, err
+	}
+	return stat.Bavail * uint64(stat.Bsize), nil
+}
+func (m *Manager) requireFreeSpace(path string) error {
+	free, err := m.diskFree(path)
+	if err != nil {
 		return err
 	}
-	if stat.Bavail*uint64(stat.Bsize) < MinimumFreeSpace {
+	if free < MinimumFreeSpace {
 		return fmt.Errorf("insufficient free disk space for migration (need %d bytes)", MinimumFreeSpace)
 	}
 	return nil

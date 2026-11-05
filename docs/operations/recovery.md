@@ -4,18 +4,52 @@ Notification deliveries left in progress by a crash return to pending on
 startup with the same idempotency key. Use Delivery History for manual retry so
 the audit record remains intact.
 
-## Disk-full condition
+## Database budget and disk-full condition
 
-When the database or WAL grows past configured thresholds, Binnacle enters a degraded persistence state:
+The budget (`database.target_budget_bytes`, 1 GiB by default) is compared
+against live data every minute: `(page_count - freelist_count) x page_size`,
+read with pragmas on a read-only connection (ADR 021 §7). The WAL and shm
+files are not counted; they are bounded separately by a 64 MiB
+`journal_size_limit` and by the `wal_checkpoint(TRUNCATE)` that ends every
+retention pass. When the free space on the database's filesystem drops under
+64 MiB the state is emergency regardless of the budget, because SQLite needs
+disk to recover.
 
-- **Warning** — expired data is cleaned aggressively.
-- **Critical** — additional expired cleanup runs.
-- **Emergency** — raw 10-second persistence pauses; rollups, settings, and events are preserved.
+The thresholds are 80 % (warning), 95 % (critical) and 98 % (emergency) of
+the target:
 
-The live Metrics Engine and SSE continue to work during storage pressure. Free
-disk space or reduce retention. Binnacle reevaluates the database budget every
-minute and automatically resumes raw persistence after usage falls below the
-emergency threshold; no restart is required.
+- **Warning** — reported only.
+- **Critical** — retention passes delete in larger batches (2,000 rows).
+- **Emergency** — the retention pass shortens retention instead of only
+  pausing: it deletes the oldest raw samples down to half the configured raw
+  retention, reclaims the space and re-measures; if still at emergency it
+  deletes the oldest 1 m rollups down to half their retention and re-measures;
+  only if that is not enough does raw 10-second persistence pause. The 15 m
+  and 1 h tiers are never shortened. The shortening is logged, recorded as a
+  `retention_shortened` event and shown in Settings › System as
+  `retention_shortened`.
+
+The pause is recorded as a `persistence_emergency` event and shown as
+`persistence_paused`. It clears once usage falls below the **critical**
+threshold, not merely below emergency, so the state cannot flap; the
+`persistence_resumed` event marks the transition. No restart is required.
+Rollups, settings and events are always preserved, and the live Metrics
+Engine and SSE keep working during storage pressure.
+
+## Space reclamation
+
+Databases use SQLite's incremental auto-vacuum. After the deletes of each
+retention pass Binnacle runs `PRAGMA incremental_vacuum` in batches of 1,000
+pages (about 4 MiB) with a pause between batches, until the freelist is under
+10 % of the file or 25,000 pages (about 100 MiB) were returned in that pass,
+then truncates the WAL. A full `VACUUM` never runs on a schedule.
+
+A database created before v1.0 uses `auto_vacuum=none`. At the first start
+after the upgrade Binnacle converts it once: when free disk space is at least
+the database size plus 64 MiB it runs `VACUUM` before the workers start and
+logs the duration; otherwise it logs a warning, reports `vacuum_pending` in
+`/api/v1/monitor-health`, keeps running without reclaiming space, and retries
+at the next start. Free the disk and restart to complete the conversion.
 
 ## History rollups and retention
 
@@ -35,10 +69,29 @@ complete hour or left untouched; the retention edge can no longer overwrite
 long-term history with a partial aggregate. The other retention cutoffs are
 aligned down to the hour as well.
 
-`/api/v1/monitor-health` reports `rollup_duration` and `retention_duration`,
-the wall-clock time of the latest pass of each worker; both are `unavailable`
-until the first pass completes. A failed pass is logged at `level=ERROR` and
-retried on the next tick.
+Retention runs one minute after boot, then hourly, and immediately when the
+retention settings change, so a process that is restarted often still prunes
+(ADR 021 §5). Deletes run in batches of 500 rows (2,000 when the budget is
+critical or worse) with a short pause between batches so persistence keeps
+flowing. A pass has a 30-second budget; when it runs out the pass stops,
+`retention_incomplete` is reported, and the next pass resumes the work.
+
+Besides the sample and rollup tables, retention prunes (ADR 021 §6):
+
+| Table | Rule |
+| --- | --- |
+| Container instances | Instances whose stop or destruction time is older than the 1 m retention. Running instances are never deleted. |
+| Archived resources | Archived before the 1 h retention cutoff and referenced by no check, incident, sample, rollup or event; their container instance rows go with them. When the 1 h tier is unlimited, at most 1,000 archived resources are kept: the oldest beyond that is handed to the history deletion job (visible in Settings), one per pass, so its history is removed with it. Resources with a check or an incident are never removed automatically. |
+| Coolify deployments | Rows not updated within the raw retention. |
+| Alert evaluation state | Targets not evaluated within the raw retention. |
+
+`/api/v1/monitor-health` reports `rollup_duration`, `retention_duration` and
+`vacuum_duration`, the wall-clock time of the latest pass of each kind; each
+is `unavailable` until the first pass completes. `database_budget` is the live
+data measured against the target, and `persistence_paused`,
+`retention_shortened`, `retention_incomplete` and `vacuum_pending` carry the
+states described above. A failed pass is logged at `level=ERROR` and retried
+on the next tick.
 
 ## Database integrity
 

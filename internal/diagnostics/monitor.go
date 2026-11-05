@@ -123,9 +123,40 @@ func (m *Monitor) Snapshot() MonitorSnapshot {
 			metric("reader_pool_wait_time", "Reader pool wait time", float64(health.Reader.WaitDuration)/float64(time.Millisecond), "milliseconds", "normal", "Total time statements spent waiting for a read-only connection since start."),
 			metric("write_transactions", "Write transactions", health.WriteTransactions, "count", "normal", "SQLite write transactions committed since start; the benchmark reports the rate."),
 			metric("unclean_shutdown", "Unclean shutdown", health.UncleanShutdown, "", uncleanShutdownStatus(health.UncleanShutdown), "The previous process did not close storage. SQLite recovered the WAL; run a diagnostics bundle for the full integrity check."),
+			// ADR 021 §7: the budget compares live pages, not file size, and
+			// shortened retention and the pause are reported here and as events.
+			metric("database_budget", "Database budget used", health.Budget.UsedBytes, "bytes", budgetStateStatus(health.Budget.State), "Live data, (page_count - freelist_count) x page_size, against the configured budget; the WAL is bounded separately."),
+			metric("persistence_paused", "Raw persistence paused", health.Budget.Paused, "", flagStatus(health.Budget.Paused, "critical"), "Raw 10 s history is not being stored because the budget stayed at emergency after retention was shortened; it resumes below the critical threshold."),
+			metric("retention_shortened", "Retention shortened", shortenedValue(health.Budget.Shortened), "", flagStatus(len(health.Budget.Shortened) > 0, "warning"), "Tiers the latest retention pass cut to half their configured length because the budget was at emergency; 15 m and 1 h history are never shortened."),
+			metric("retention_incomplete", "Retention pass incomplete", health.RetentionIncomplete, "", flagStatus(health.RetentionIncomplete, "warning"), "The latest retention pass stopped at its duration budget and resumes on the next tick."),
+			metric("vacuum_duration", "Vacuum duration", durationValue(health.VacuumDuration), "milliseconds", durationStatus(health.VacuumDuration, 2*time.Second), "Latest incremental vacuum after retention; unavailable until the first pass."),
+			metric("vacuum_pending", "Vacuum conversion pending", health.VacuumPending, "", flagStatus(health.VacuumPending, "warning"), "The database still uses auto_vacuum=none because the one-time conversion found no free disk space; space is not reclaimed until it runs at a later start."),
 		)
 	}
 	return MonitorSnapshot{At: now, Metrics: values}
+}
+func budgetStateStatus(state storage.BudgetState) string {
+	switch state {
+	case storage.BudgetEmergency, storage.BudgetCritical:
+		return "critical"
+	case storage.BudgetWarning:
+		return "warning"
+	case "":
+		return "unavailable"
+	}
+	return "normal"
+}
+func flagStatus(set bool, status string) string {
+	if set {
+		return status
+	}
+	return "normal"
+}
+func shortenedValue(tiers []string) any {
+	if len(tiers) == 0 {
+		return "none"
+	}
+	return strings.Join(tiers, ", ")
 }
 func uncleanShutdownStatus(unclean bool) string {
 	if unclean {

@@ -4,6 +4,7 @@
   import Search from '@lucide/svelte/icons/search';
   import type { LiveStore } from '../live.svelte';
   import {
+    ARCHIVED_PAGE_SIZE,
     listArchivedResources,
     resourceGroup,
     type ArchivedResource,
@@ -17,6 +18,7 @@
   import { prioritizedResources, staleResource } from '../watch';
   import ResourceTable from '../resources/ResourceTable.svelte';
   import Badge from '../ui/Badge.svelte';
+  import Button from '../ui/Button.svelte';
   import Card from '../ui/Card.svelte';
   import DataTable, {
     type Column,
@@ -51,6 +53,8 @@
   let archived = $state<ArchivedResource[]>([]);
   let archivedLoading = $state(false);
   let archivedError = $state('');
+  /** True while the last page was full, so another page may exist. */
+  let archivedHasMore = $state(false);
   let archivedSort = $state<SortState | undefined>({
     key: 'archived',
     direction: 'desc',
@@ -174,11 +178,14 @@
     },
   ];
 
-  async function loadArchived() {
+  async function loadArchived(more = false) {
     archivedLoading = true;
     archivedError = '';
     try {
-      archived = await listArchivedResources();
+      const before = more ? archived.at(-1)?.id : undefined;
+      const page = await listArchivedResources({ before });
+      archived = more ? [...archived, ...page] : page;
+      archivedHasMore = page.length === ARCHIVED_PAGE_SIZE;
     } catch (reason) {
       archivedError = errorMessage(reason);
     } finally {
@@ -397,9 +404,19 @@
       {/if}
       {#snippet footer()}
         <p class="note">
-          Archived resources keep their history until it is deleted. Binnacle
-          never restores or controls workloads.
+          Archived resources keep their history for the configured retention and
+          are removed once nothing refers to them. Binnacle never restores or
+          controls workloads.
         </p>
+        {#if archivedHasMore}
+          <Button
+            size="sm"
+            disabled={archivedLoading}
+            onclick={() => void loadArchived(true)}
+          >
+            Load more
+          </Button>
+        {/if}
       {/snippet}
     </Card>
   {/if}

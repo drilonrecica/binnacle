@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	authpkg "github.com/drilonrecica/binnacle/internal/auth"
@@ -35,7 +36,18 @@ func (s *Server) EnableResources(engine *metrics.Engine, auth Authorizer, store 
 			snap = decorator.Decorate(r.Context(), snap)
 		}
 		if r.URL.Path == "/api/v1/resources" && r.URL.Query().Get("state") == "archived" {
-			values, err := store.ArchivedResources(r.Context())
+			// Paginated with the events convention (ADR 021 §6): limit 1..500,
+			// default 100, and before=<id> for rows archived earlier than it.
+			query := storage.ArchivedQuery{Limit: 100, BeforeID: r.URL.Query().Get("before")}
+			if raw := r.URL.Query().Get("limit"); raw != "" {
+				value, err := strconv.Atoi(raw)
+				if err != nil || value < 1 || value > storage.MaxArchivedLimit {
+					WriteError(w, 400, Error{Code: "invalid_request", Message: "limit must be between 1 and 500."})
+					return
+				}
+				query.Limit = value
+			}
+			values, err := store.ArchivedResources(r.Context(), query)
 			if err != nil {
 				WriteError(w, 500, Error{Code: "storage_error", Message: "Archived resources are unavailable."})
 				return

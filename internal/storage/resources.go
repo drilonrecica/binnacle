@@ -94,8 +94,34 @@ func (m *Manager) StoreInventory(ctx context.Context, inv Inventory) error {
 	return tx.Commit()
 }
 
-func (m *Manager) ArchivedResources(ctx context.Context) ([]Resource, error) {
-	rows, err := m.db.QueryContext(ctx, "SELECT id,host_id,stable_key,source_kind,name,COALESCE(context,''),COALESCE(project_name,''),COALESCE(environment_name,''),category,status,archived_at FROM resources WHERE status='archived' ORDER BY archived_at DESC,name")
+// ArchivedQuery paginates the archived resource list with the events cursor
+// convention: newest archived first, Limit rows (default 100, at most 500),
+// and BeforeID for rows strictly older than that resource.
+type ArchivedQuery struct {
+	Limit    int
+	BeforeID string
+}
+
+// MaxArchivedLimit is the largest archived page a caller may ask for.
+const MaxArchivedLimit = 500
+
+func (m *Manager) ArchivedResources(ctx context.Context, q ArchivedQuery) ([]Resource, error) {
+	limit := q.Limit
+	if limit < 1 || limit > MaxArchivedLimit {
+		limit = 100
+	}
+	query := "SELECT id,host_id,stable_key,source_kind,name,COALESCE(context,''),COALESCE(project_name,''),COALESCE(environment_name,''),category,status,archived_at FROM resources WHERE status='archived' AND archived_at IS NOT NULL"
+	var args []any
+	if q.BeforeID != "" {
+		var cursor int64
+		if err := m.db.QueryRowContext(ctx, "SELECT archived_at FROM resources WHERE id=? AND archived_at IS NOT NULL", q.BeforeID).Scan(&cursor); err == nil {
+			query += " AND (archived_at<? OR (archived_at=? AND id<?))"
+			args = append(args, cursor, cursor, q.BeforeID)
+		}
+	}
+	query += " ORDER BY archived_at DESC,id DESC LIMIT ?"
+	args = append(args, limit)
+	rows, err := m.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

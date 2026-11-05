@@ -29,7 +29,7 @@ func TestArchivedResourcesRemainDiscoverableAndCanReactivate(t *testing.T) {
 	if err := manager.ArchiveMissingResources(ctx, nil, time.Now().Add(-5*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	archived, err := manager.ArchivedResources(ctx)
+	archived, err := manager.ArchivedResources(ctx, ArchivedQuery{})
 	if err != nil || len(archived) != 1 || archived[0].ProjectName != "Project" || archived[0].Context != "project/production" || archived[0].ArchivedAt == nil {
 		t.Fatalf("archived=%+v err=%v", archived, err)
 	}
@@ -76,7 +76,7 @@ func TestStoreInventoryIsOneWriteTransaction(t *testing.T) {
 	if err := manager.StoreInventory(ctx, inventory); err != nil {
 		t.Fatal(err)
 	}
-	archived, err := manager.ArchivedResources(ctx)
+	archived, err := manager.ArchivedResources(ctx, ArchivedQuery{})
 	if err != nil || len(archived) != 1 || archived[0].ID != "res_worker" {
 		t.Fatalf("archived=%+v err=%v", archived, err)
 	}

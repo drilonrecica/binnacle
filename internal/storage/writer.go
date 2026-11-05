@@ -218,7 +218,8 @@ func eventSeverity(eventType string) string {
 }
 
 func eventSource(eventType string) string {
-	if eventType == "host_reboot" || eventType == "collector_down" || eventType == "collector_degraded" || eventType == "persistence_degraded" || eventType == "persistence_gap" {
+	switch eventType {
+	case "host_reboot", "collector_down", "collector_degraded", "persistence_degraded", "persistence_gap", "persistence_emergency", "persistence_resumed", "retention_shortened":
 		return "binnacle"
 	}
 	return "docker"

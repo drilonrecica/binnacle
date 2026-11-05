@@ -143,17 +143,26 @@ func (s *Server) EnableExports(store *storage.Manager, incidents *notifications.
 		for _, value := range snapshot.Resources {
 			rows = append(rows, exportResource{ID: string(value.ID), Name: value.Name, Status: string(value.Status), Category: value.Category, Context: value.Context, Project: value.Project, Environment: value.Environment, SourceKind: value.SourceKind})
 		}
-		archived, err := store.ArchivedResources(r.Context())
-		if err != nil {
-			WriteError(w, 500, Error{Code: "export_failed", Message: "Resources could not be exported."})
-			return
-		}
-		for _, value := range archived {
-			rows = append(rows, exportResource{ID: value.ID, Name: value.Name, Status: value.Status, Category: value.Category, Context: value.Context, Project: value.ProjectName, Environment: value.EnvironmentName, SourceKind: value.SourceKind, ArchivedAt: value.ArchivedAt})
-		}
-		if len(rows) > maxExportRows {
-			WriteError(w, 413, Error{Code: "export_too_large", Message: "The export exceeds 10,000 rows."})
-			return
+		// The archived list is paginated; walk it until the last page or the
+		// export cap, whichever comes first.
+		query := storage.ArchivedQuery{Limit: storage.MaxArchivedLimit}
+		for {
+			archived, err := store.ArchivedResources(r.Context(), query)
+			if err != nil {
+				WriteError(w, 500, Error{Code: "export_failed", Message: "Resources could not be exported."})
+				return
+			}
+			for _, value := range archived {
+				rows = append(rows, exportResource{ID: value.ID, Name: value.Name, Status: value.Status, Category: value.Category, Context: value.Context, Project: value.ProjectName, Environment: value.EnvironmentName, SourceKind: value.SourceKind, ArchivedAt: value.ArchivedAt})
+			}
+			if len(rows) > maxExportRows {
+				WriteError(w, 413, Error{Code: "export_too_large", Message: "The export exceeds 10,000 rows."})
+				return
+			}
+			if len(archived) < query.Limit {
+				break
+			}
+			query.BeforeID = archived[len(archived)-1].ID
 		}
 		writeJSONExport(w, "binnacle-resources.json", time.Time{}, time.Time{}, rows)
 	}))
