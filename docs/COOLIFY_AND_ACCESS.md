@@ -60,8 +60,9 @@ The proxy must have a stable address. It must remove client-supplied
 `X-Forwarded-For`, `X-Forwarded-Proto`, and the configured identity header,
 then set fresh values from the authenticated request. Appending to an incoming
 identity header is unsafe; Binnacle rejects duplicate and comma-joined identity
-values. The normal forwarded-header proxy list does not grant identity. Headers
-from untrusted peers are ignored. A same-origin bootstrap maps the exact subject
+values. The normal forwarded-header proxy list (`BINNACLE_TRUSTED_PROXY_CIDRS`,
+which may name whole networks) does not grant identity; only the exact peers in
+`BINNACLE_AUTH_PROXY_CIDRS` do. Headers from untrusted peers are ignored. A same-origin bootstrap maps the exact subject
 to the single local administrator and issues normal Binnacle session and CSRF
 cookies. In `proxy` mode local login is disabled after setup. Never expose
 Binnacle directly while relying on proxy authentication.
@@ -81,4 +82,6 @@ For Traefik/Coolify, place a Headers middleware that clears the identity header
 before ForwardAuth, then list that header under ForwardAuth
 `authResponseHeaders` so it is copied from the authentication response. Put the
 middlewares in that order and configure the resulting stable Traefik container
-address as an exact Binnacle proxy CIDR.
+address as an exact Binnacle proxy CIDR. Set `BINNACLE_PUBLIC_URL` as well so
+the same-origin bootstrap and the Secure cookies do not depend on
+`X-Forwarded-Proto` (see [install.md](operations/install.md#reverse-proxies-and-https)).

@@ -76,6 +76,16 @@ services:
       BINNACLE_DOCKER_SOCKET: /var/run/binnacle-docker/docker.sock
       BINNACLE_COOLIFY_URL: ${BINNACLE_COOLIFY_URL:-}
       BINNACLE_COOLIFY_API_TOKEN: ${BINNACLE_COOLIFY_API_TOKEN:-}
+      # The origin browsers use. Coolify fills SERVICE_URL_* with the service
+      # domain including its scheme; CSRF, Secure cookies and HSTS follow it.
+      BINNACLE_PUBLIC_URL: ${SERVICE_URL_BINNACLE_8080}
+      # Coolify's proxy reaches this container from a Docker network whose
+      # subnet is assigned at creation, and the proxy's own address changes on
+      # every recreate. The service publishes no host port, so every peer is a
+      # container on a private network; trusting the private ranges lets the
+      # forwarded client address drive rate limiting. Narrow it to the subnet
+      # of `docker network inspect coolify` if other workloads share it.
+      BINNACLE_TRUSTED_PROXY_CIDRS: ${BINNACLE_TRUSTED_PROXY_CIDRS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
 
     volumes:
       - binnacle-data:/var/lib/binnacle

@@ -158,3 +158,44 @@ func TestOversizedBodyRejected(t *testing.T) {
 		t.Fatalf("expected 400 for oversized body, got %d", rec.Code)
 	}
 }
+
+func TestHSTSFollowsTheProxyAwareSecureCheck(t *testing.T) {
+	trusted, err := authpkg.ParseTrustedProxies([]string{"10.0.0.0/24"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared, err := trusted.WithPublicURL("https://binnacle.example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name    string
+		proxies authpkg.TrustedProxies
+		peer    string
+		proto   string
+		want    bool
+	}{
+		{"plain http direct", authpkg.TrustedProxies{}, "203.0.113.5:1234", "", false},
+		{"trusted proxy says https", trusted, "10.0.0.2:1234", "https", true},
+		{"untrusted peer says https", trusted, "203.0.113.5:1234", "https", false},
+		{"declared https public url", declared, "203.0.113.5:1234", "", true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			s := New()
+			s.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
+			s.SetTrustedProxies(test.proxies)
+			s.EnableLive(nil, DemoAuthorizer(true), authpkg.NewProtection(16, test.proxies))
+			req := httptest.NewRequest(http.MethodGet, "http://binnacle.test/api/v1/session", nil)
+			req.RemoteAddr = test.peer
+			if test.proto != "" {
+				req.Header.Set("X-Forwarded-Proto", test.proto)
+			}
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, req)
+			if got := rec.Header().Get("Strict-Transport-Security") != ""; got != test.want {
+				t.Fatalf("HSTS sent=%v want %v", got, test.want)
+			}
+		})
+	}
+}

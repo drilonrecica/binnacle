@@ -137,6 +137,40 @@ The file must contain a raw or encoded 32-byte key and should be readable only
 by the Binnacle container. `BINNACLE_MASTER_KEY` remains supported for upgrades,
 but do not configure it together with `BINNACLE_MASTER_KEY_FILE`.
 
+## Reverse proxies and HTTPS
+
+Binnacle listens on plain HTTP; a reverse proxy terminates TLS. Binnacle must
+still know that the browser used HTTPS, because the same-origin check expects
+`https://` origins, session cookies need the `Secure` attribute, and HSTS is
+sent only on secure responses. Two settings provide that knowledge:
+
+- `BINNACLE_PUBLIC_URL` — the origin browsers use, such as
+  `https://binnacle.example.com`. When set it is authoritative: the `Origin` of
+  every mutation must match it, cookies are `Secure` when it is `https`, and
+  HSTS follows. Only the scheme, host and port are used. Prefer this setting;
+  it does not depend on the proxy's address.
+- `BINNACLE_TRUSTED_PROXY_CIDRS` — hosts or networks whose `X-Forwarded-For`
+  and `X-Forwarded-Proto` headers are believed, for example `172.18.0.0/16`
+  for the Docker network the proxy shares with Binnacle. Without a public URL,
+  the rightmost `X-Forwarded-Proto` value from a trusted peer decides the
+  scheme. With or without one, the first untrusted address in
+  `X-Forwarded-For` (read right to left across every header line) identifies
+  the client for rate limiting and session fingerprints. A `/0` prefix is
+  refused.
+
+Without either setting, a deployment behind an HTTPS proxy accepts logins but
+rejects every mutation with `403 csrf_invalid`, and Binnacle logs a warning at
+startup. The Coolify files set both: `BINNACLE_PUBLIC_URL` from Coolify's
+`SERVICE_URL_BINNACLE_8080` magic variable and the RFC 1918 ranges as trusted
+proxies, because the container publishes no host port and only other
+containers can reach it. Narrow the ranges to the proxy's network if untrusted
+workloads share it. The plain Docker Compose file leaves both empty, since its
+loopback port makes the Docker gateway the peer for every local client. The
+identity allowlist `BINNACLE_AUTH_PROXY_CIDRS` is separate and stays exact.
+
+`scripts/e2e-tls-proxy.sh` exercises both settings through a TLS-terminating
+Caddy container; CI runs it against the freshly built image.
+
 ## Environment variables
 
 Key variables you may need to set at deployment time:
@@ -158,7 +192,8 @@ Key variables you may need to set at deployment time:
 - `BINNACLE_PROMETHEUS_ENABLED` — enables token-authenticated `/metrics` only when portability is also enabled; defaults to `false`.
 - `BINNACLE_AUTH_MODE` — `local`, `proxy`, or `local_and_proxy`; defaults to `local`. Proxy modes require advanced authentication to be enabled.
 - `BINNACLE_AUTH_PROXY_CIDRS`, `BINNACLE_AUTH_IDENTITY_HEADER`, and `BINNACLE_AUTH_ALLOWED_SUBJECT` — required together for proxy modes; CIDRs must be exact `/32` or `/128` immediate peers.
-- `BINNACLE_TRUSTED_PROXY_CIDRS` — exact `/32` or `/128` immediate peers allowed to supply forwarding headers.
+- `BINNACLE_PUBLIC_URL` — the origin browsers use (`https://binnacle.example.com`); drives the same-origin check, `Secure` cookies and HSTS behind a TLS-terminating proxy. See [Reverse proxies and HTTPS](#reverse-proxies-and-https).
+- `BINNACLE_TRUSTED_PROXY_CIDRS` — hosts or networks (`/32`, `/128`, or a Docker network such as `172.18.0.0/16`) allowed to supply `X-Forwarded-For` and `X-Forwarded-Proto`; `/0` is refused.
 - `BINNACLE_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS` — private webhook/SMTP opt-in; defaults to `false` and requires restart.
 - `BINNACLE_NOTIFICATIONS_MAX_CONCURRENCY` — delivery workers; defaults to `4`.
 - `BINNACLE_NOTIFICATIONS_QUEUE_CAPACITY` — dispatch queue; defaults to `1000`.

@@ -214,7 +214,20 @@ func main() {
 	application.Add(notificationWorker)
 
 	apiServer := api.New()
-	proxies, _ := auth.ParseTrustedProxies(config.HTTP.TrustedProxyCIDRs)
+	proxies, err := auth.ParseTrustedProxies(config.HTTP.TrustedProxyCIDRs)
+	if err == nil {
+		proxies, err = proxies.WithPublicURL(config.HTTP.PublicURL)
+	}
+	if err != nil {
+		log.Error("reverse proxy configuration is invalid", "error", err)
+		os.Exit(1)
+	}
+	if origin := proxies.PublicOrigin(); origin != "" {
+		log.Info("public origin declared; CSRF, Secure cookies and HSTS follow it", "public_url", origin)
+	} else if len(config.HTTP.TrustedProxyCIDRs) == 0 {
+		log.Warn("no BINNACLE_PUBLIC_URL or BINNACLE_TRUSTED_PROXY_CIDRS; behind an HTTPS reverse proxy every mutation will fail the same-origin check")
+	}
+	apiServer.SetTrustedProxies(proxies)
 	proxyAuth, err := auth.NewProxyAuthenticator(auth.ProxyAuthConfig{Mode: auth.AuthMode(config.Auth.Mode), IdentityHeader: config.Auth.IdentityHeader, AllowedSubject: config.Auth.AllowedSubject, ProxyCIDRs: config.Auth.ProxyCIDRs}, proxies)
 	if err != nil {
 		log.Error("proxy authentication configuration is invalid", "error", err)

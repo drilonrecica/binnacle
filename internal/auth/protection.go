@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
@@ -17,10 +18,27 @@ import (
 	"time"
 )
 
-// TrustedProxies only affects forwarding-header provenance, never authentication.
-type TrustedProxies struct{ prefixes []netip.Prefix }
+// TrustedProxies only affects forwarding-header provenance and the declared
+// public origin, never authentication.
+type TrustedProxies struct {
+	prefixes []netip.Prefix
+	public   *url.URL
+}
 
+// ParseTrustedProxies accepts host or network prefixes for peers allowed to
+// supply X-Forwarded-* headers. Docker assigns a reverse proxy a new address on
+// every recreate, so the network it shares with Binnacle is the stable identity.
+// A zero-length prefix would trust every peer and is refused.
 func ParseTrustedProxies(values []string) (TrustedProxies, error) {
+	return parsePrefixes(values, false)
+}
+
+// ParseExactProxies accepts only single hosts (/32 or /128). Identity peers
+// (ADR 018) stay exact: the header they send becomes the administrator.
+func ParseExactProxies(values []string) (TrustedProxies, error) {
+	return parsePrefixes(values, true)
+}
+func parsePrefixes(values []string, exact bool) (TrustedProxies, error) {
 	p := TrustedProxies{}
 	for _, value := range values {
 		value = strings.TrimSpace(value)
@@ -31,12 +49,60 @@ func ParseTrustedProxies(values []string) (TrustedProxies, error) {
 		if err != nil {
 			return TrustedProxies{}, err
 		}
-		if prefix.Bits() != prefix.Addr().BitLen() {
-			return TrustedProxies{}, errors.New("trusted proxy CIDRs must identify one exact host (/32 for IPv4 or /128 for IPv6)")
+		if exact && prefix.Bits() != prefix.Addr().BitLen() {
+			return TrustedProxies{}, errors.New("proxy CIDRs must identify one exact host (/32 for IPv4 or /128 for IPv6)")
 		}
-		p.prefixes = append(p.prefixes, prefix)
+		if prefix.Bits() == 0 {
+			return TrustedProxies{}, errors.New("trusted proxy CIDRs cannot cover every address (/0)")
+		}
+		p.prefixes = append(p.prefixes, prefix.Masked())
 	}
 	return p, nil
+}
+
+// WithPublicURL declares the origin browsers use to reach Binnacle. Only the
+// scheme, host and port are kept; a path is permitted and ignored because the
+// value is compared against Origin headers, which never carry one. An empty
+// value leaves the request-derived behaviour in place.
+func (p TrustedProxies) WithPublicURL(raw string) (TrustedProxies, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		p.public = nil
+		return p, nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return TrustedProxies{}, fmt.Errorf("public URL: %w", err)
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if (scheme != "http" && scheme != "https") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
+		return TrustedProxies{}, errors.New("public URL must be an absolute http(s) origin such as https://binnacle.example.com")
+	}
+	p.public = &url.URL{Scheme: scheme, Host: normalizeHost(scheme, u.Host)}
+	return p, nil
+}
+
+// PublicOrigin returns the declared origin or "" when none is configured.
+func (p TrustedProxies) PublicOrigin() string {
+	if p.public == nil {
+		return ""
+	}
+	return p.public.String()
+}
+
+// normalizeHost lowercases a host and drops the scheme's default port so that
+// https://example.test:443 and https://example.test compare equal.
+func normalizeHost(scheme, host string) string {
+	host = strings.ToLower(host)
+	if h, port, err := net.SplitHostPort(host); err == nil {
+		if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
+			host = h
+			if strings.Contains(host, ":") {
+				host = "[" + host + "]"
+			}
+		}
+	}
+	return host
 }
 func (p TrustedProxies) trusted(r *http.Request) bool {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -61,14 +127,36 @@ func (p TrustedProxies) trustedAddr(addr netip.Addr) bool {
 	}
 	return false
 }
+
+// forwardedValues joins every header line (a client may send its own line and
+// a proxy may append rather than replace) into one left-to-right list.
+func forwardedValues(r *http.Request, name string) []string {
+	var out []string
+	for _, line := range r.Header.Values(name) {
+		for _, v := range strings.Split(line, ",") {
+			if v = strings.TrimSpace(v); v != "" {
+				out = append(out, v)
+			}
+		}
+	}
+	return out
+}
+
+// Secure reports whether the browser reached Binnacle over HTTPS. A declared
+// public URL is authoritative; otherwise direct TLS or the rightmost
+// X-Forwarded-Proto value set by a trusted peer decides.
 func (p TrustedProxies) Secure(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
 	}
+	if p.public != nil {
+		return p.public.Scheme == "https"
+	}
 	if !p.trusted(r) {
 		return false
 	}
-	return strings.EqualFold(strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]), "https")
+	values := forwardedValues(r, "X-Forwarded-Proto")
+	return len(values) > 0 && strings.EqualFold(values[len(values)-1], "https")
 }
 func (p TrustedProxies) ClientPrefix(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -76,10 +164,10 @@ func (p TrustedProxies) ClientPrefix(r *http.Request) string {
 		host = r.RemoteAddr
 	}
 	if p.trusted(r) {
-		values := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+		values := forwardedValues(r, "X-Forwarded-For")
 		if len(values) > 0 && len(values) <= 16 {
 			for i := len(values) - 1; i >= 0; i-- {
-				addr, parseErr := netip.ParseAddr(strings.TrimSpace(values[i]))
+				addr, parseErr := netip.ParseAddr(values[i])
 				if parseErr != nil {
 					continue
 				}
@@ -252,18 +340,27 @@ func ValidCSRF(r *http.Request, expectedHash string) bool {
 	return subtle.ConstantTimeCompare([]byte(CSRFHash(header)), []byte(expectedHash)) == 1
 }
 
+// SameOrigin compares the request's Origin (or Referer) with the origin the
+// browser must be using. With a declared public URL that origin is the
+// configuration itself; without one it is reconstructed from the Host header and
+// the proxy-aware Secure check.
 func SameOrigin(r *http.Request, proxies TrustedProxies) bool {
 	raw := r.Header.Get("Origin")
 	if raw == "" {
 		raw = r.Referer()
 	}
 	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
+	if err != nil || u.Host == "" || u.Scheme == "" {
 		return false
 	}
-	scheme := "http"
-	if proxies.Secure(r) {
-		scheme = "https"
+	scheme := strings.ToLower(u.Scheme)
+	got := scheme + "://" + normalizeHost(scheme, u.Host)
+	if proxies.public != nil {
+		return got == proxies.public.String()
 	}
-	return strings.EqualFold(u.Scheme, scheme) && strings.EqualFold(u.Host, r.Host)
+	expected := "http"
+	if proxies.Secure(r) {
+		expected = "https"
+	}
+	return got == expected+"://"+normalizeHost(expected, r.Host)
 }

@@ -69,14 +69,14 @@ func TestMasterKeyFileFailsClosed(t *testing.T) {
 	}
 }
 
-func TestProxyCIDRsRequireExactHosts(t *testing.T) {
+func TestIdentityProxyCIDRsRequireExactHosts(t *testing.T) {
 	tests := []struct {
 		name, httpCIDR, authCIDR string
 		wantErr                  bool
 	}{
 		{"IPv4 hosts", "192.0.2.10/32", "198.51.100.4/32", false},
 		{"IPv6 hosts", "2001:db8::10/128", "2001:db8::20/128", false},
-		{"broad HTTP network", "10.0.0.0/8", "198.51.100.4/32", true},
+		{"HTTP network prefix", "10.0.0.0/8", "198.51.100.4/32", false},
 		{"broad auth network", "192.0.2.10/32", "10.0.0.0/8", true},
 	}
 	for _, test := range tests {

@@ -1,0 +1,12 @@
+# TLS-terminating reverse proxy for the e2e test. Caddy issues a certificate
+# from its own local CA and forwards X-Forwarded-For and X-Forwarded-Proto,
+# like the Coolify proxy does in production.
+{
+	admin off
+	auto_https disable_redirects
+}
+
+localhost:8443 {
+	tls internal
+	reverse_proxy binnacle:8080
+}

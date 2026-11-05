@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/auth"
 )
 
 const MaxRequestBodyBytes int64 = 1 << 20
@@ -25,9 +27,10 @@ type errorEnvelope struct {
 	Error Error `json:"error"`
 }
 type Server struct {
-	mux    *http.ServeMux
-	next   atomic.Uint64
-	logger *slog.Logger
+	mux     *http.ServeMux
+	next    atomic.Uint64
+	logger  *slog.Logger
+	proxies auth.TrustedProxies
 }
 
 func New() *Server {
@@ -35,7 +38,11 @@ func New() *Server {
 	s.mux.HandleFunc("/api/v1/", s.notFound)
 	return s
 }
-func (s *Server) SetLogger(l *slog.Logger)                    { s.logger = l }
+func (s *Server) SetLogger(l *slog.Logger) { s.logger = l }
+
+// SetTrustedProxies supplies the proxy-aware Secure check that decides whether
+// HSTS is sent; r.TLS alone never fires behind a TLS-terminating proxy (SEC-18).
+func (s *Server) SetTrustedProxies(p auth.TrustedProxies)     { s.proxies = p }
 func (s *Server) Handle(pattern string, handler http.Handler) { s.mux.Handle(pattern, s.wrap(handler)) }
 func (s *Server) Handler() http.Handler                       { return s.wrap(s.mux) }
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +52,7 @@ func (s *Server) wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := fmt.Sprintf("req_%d", s.next.Add(1))
 		w.Header().Set("X-Request-ID", id)
-		setSecurityHeaders(w, r)
+		setSecurityHeaders(w, r, s.proxies.Secure(r))
 		rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 		defer func() {
 			if recover() != nil {
@@ -63,12 +70,12 @@ func (s *Server) wrap(next http.Handler) http.Handler {
 	})
 }
 
-func setSecurityHeaders(w http.ResponseWriter, r *http.Request) {
+func setSecurityHeaders(w http.ResponseWriter, r *http.Request, secure bool) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';")
-	if r.TLS != nil {
+	if secure {
 		w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 	}
 }

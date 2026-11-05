@@ -35,7 +35,7 @@ func NewProxyAuthenticator(config ProxyAuthConfig, cookieProxies TrustedProxies)
 	if config.Mode != LocalAuth && config.Mode != ProxyAuthOnly && config.Mode != LocalAndProxyAuth {
 		return nil, errors.New("auth mode must be local, proxy, or local_and_proxy")
 	}
-	peers, err := ParseTrustedProxies(config.ProxyCIDRs)
+	peers, err := ParseExactProxies(config.ProxyCIDRs)
 	if err != nil {
 		return nil, err
 	}

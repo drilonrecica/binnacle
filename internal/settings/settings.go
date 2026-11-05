@@ -46,6 +46,7 @@ type Paths struct {
 type HTTP struct {
 	ListenAddress     string   `toml:"listen_address"`
 	TrustedProxyCIDRs []string `toml:"trusted_proxy_cidrs"`
+	PublicURL         string   `toml:"public_url"`
 }
 type Collection struct {
 	HostInterval      time.Duration `toml:"host_interval"`
@@ -156,9 +157,12 @@ func (c Config) Validate() error {
 		return fmt.Errorf("http.listen_address: %w", err)
 	}
 	for _, cidr := range c.HTTP.TrustedProxyCIDRs {
-		if err := validateExactProxy(cidr); err != nil {
+		if err := validateProxyNetwork(cidr); err != nil {
 			return fmt.Errorf("http.trusted_proxy_cidrs: %w", err)
 		}
+	}
+	if err := validatePublicURL(c.HTTP.PublicURL); err != nil {
+		return fmt.Errorf("http.public_url: %w", err)
 	}
 	if c.Auth.Mode != "local" && c.Auth.Mode != "proxy" && c.Auth.Mode != "local_and_proxy" {
 		return fmt.Errorf("auth.mode must be local, proxy, or local_and_proxy")
@@ -226,7 +230,7 @@ func (c Config) Validate() error {
 // UIOverridable reports whether a key can be changed without a deployment change.
 func UIOverridable(key string) bool {
 	switch key {
-	case "paths.data_dir", "paths.database_path", "paths.runtime_dir", "paths.master_key", "paths.master_key_file", "http.listen_address", "docker.socket_path", "paths.host_proc", "paths.host_sys", "paths.host_passwd", "coolify.url", "coolify.api_token_file", "coolify.allow_insecure_http", "auth.mode", "auth.proxy_cidrs", "auth.identity_header", "auth.allowed_subject", "features.advanced_auth", "features.portability", "prometheus.enabled", "notifications.allow_private_targets", "notifications.max_concurrency", "notifications.queue_capacity", "notifications.delivery_timeout", "notifications.reminder_interval":
+	case "paths.data_dir", "paths.database_path", "paths.runtime_dir", "paths.master_key", "paths.master_key_file", "http.listen_address", "http.trusted_proxy_cidrs", "http.public_url", "docker.socket_path", "paths.host_proc", "paths.host_sys", "paths.host_passwd", "coolify.url", "coolify.api_token_file", "coolify.allow_insecure_http", "auth.mode", "auth.proxy_cidrs", "auth.identity_header", "auth.allowed_subject", "features.advanced_auth", "features.portability", "prometheus.enabled", "notifications.allow_private_targets", "notifications.max_concurrency", "notifications.queue_capacity", "notifications.delivery_timeout", "notifications.reminder_interval":
 		return false
 	}
 	return true
@@ -239,6 +243,35 @@ func validateExactProxy(value string) error {
 	}
 	if prefix.Bits() != prefix.Addr().BitLen() {
 		return fmt.Errorf("must identify one exact host (/32 for IPv4 or /128 for IPv6)")
+	}
+	return nil
+}
+
+// validateProxyNetwork accepts host or network prefixes for forwarding-header
+// trust; a /0 prefix would trust every peer and is refused.
+func validateProxyNetwork(value string) error {
+	prefix, err := netip.ParsePrefix(value)
+	if err != nil {
+		return err
+	}
+	if prefix.Bits() == 0 {
+		return fmt.Errorf("cannot cover every address (/0)")
+	}
+	return nil
+}
+
+// validatePublicURL accepts an absolute http(s) origin. A path is tolerated
+// because only the origin is compared; userinfo, queries and fragments are not.
+func validatePublicURL(value string) error {
+	if value == "" {
+		return nil
+	}
+	u, err := url.Parse(value)
+	if err != nil {
+		return err
+	}
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
+		return fmt.Errorf("must be an absolute http(s) origin such as https://binnacle.example.com")
 	}
 	return nil
 }
