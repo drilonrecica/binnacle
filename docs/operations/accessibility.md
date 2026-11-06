@@ -38,6 +38,13 @@ Verify each item in a supported browser with keyboard-only interaction and, wher
 - [ ] "Nothing needs attention" appears only while the stream is live and the incident list has loaded; otherwise the attention strip shows "Status unknown since hh:mm" with the last update.
 - [ ] No boot id, container id or resource id appears as text on the page.
 
+### Server
+
+- [ ] The boot id appears once, in the title row, as a copy button whose accessible name starts with its visible text ("boot 6f1c…, copy the boot id").
+- [ ] Instruments cover CPU, memory, swap and every filesystem; a disk's accessible name carries its time to full, and swap without a swap device says "not configured" instead of 0%.
+- [ ] Every collector card states its state as a word and a reason; a collector that is not healthy is also named with its state in the title row.
+- [ ] Redacted parts of process command lines are set apart as `[REDACTED]` text, not by colour alone.
+
 ### Color and visual information
 
 - [ ] Status badges (healthy, degraded, down, unknown, archived) are readable with the text label; the colored dot is `aria-hidden`.

@@ -1,3 +1,5 @@
+import { annotatedEventTypes } from './event-types.generated';
+
 export interface OperationalEvent {
   id?: string | number;
   ts: string;
@@ -12,19 +14,16 @@ export interface ChartAnnotation {
   href: string;
 }
 
-const applicable = new Set([
-  'deployment',
-  'replacement',
-  'container_oom',
-  'oom',
-  'container_start',
-  'container_stop',
-  'container_die',
-  'boot',
-  'collector_state',
-  'collector_failure',
-  'persistence_gap',
-]);
+// Generated from the backend's catalogue (internal/metrics/eventtypes.go), so
+// markers listen for the types the server really writes (UI-11).
+const applicable: ReadonlySet<string> = new Set(annotatedEventTypes);
+
+/** The `type` filter for an events query that returns only marker events. */
+export const annotationTypeFilter = annotatedEventTypes.join(',');
+
+export function isAnnotatedEvent(type: string): boolean {
+  return applicable.has(type);
+}
 
 export function boundAnnotations(
   events: OperationalEvent[],

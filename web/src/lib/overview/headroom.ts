@@ -227,7 +227,8 @@ function usedOf(
   };
 }
 
-function diskLabel(mount: FilesystemObservation): string {
+/** The instrument name of a disk, from the role the host collector set. */
+export function diskLabel(mount: FilesystemObservation): string {
   if (mount.role === 'root' || mount.mountPoint === '/') return 'Root disk';
   if (mount.role === 'docker') return 'Docker data';
   if (mount.role === 'data') return 'Binnacle data';

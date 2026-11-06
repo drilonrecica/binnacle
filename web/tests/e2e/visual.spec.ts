@@ -45,14 +45,14 @@ test('login renders the branded sign-in card', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
 });
 
-test('host renders stat tiles and historical charts', async ({ page }) => {
+test('server renders instruments and historical charts', async ({ page }) => {
   await mockApp(page);
   await page.goto('/server');
   await expect(
     page.getByRole('heading', { name: 'Server', level: 1 }),
   ).toBeVisible();
   await expect(
-    page.getByRole('meter', { name: 'CPU utilization' }),
+    page.getByRole('meter', { name: 'CPU', exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'Load average' }),

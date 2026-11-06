@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { boundAnnotations } from './annotations';
+import {
+  annotationTypeFilter,
+  boundAnnotations,
+  isAnnotatedEvent,
+} from './annotations';
+import { eventTypes } from './event-types.generated';
 
 describe('chart annotations', () => {
   it('keeps boundary events and aggregates overlapping markers', () => {
@@ -28,5 +33,41 @@ describe('chart annotations', () => {
     expect(markers).toHaveLength(2);
     expect(markers[0].count).toBe(2);
     expect(markers[1].href).toBe('/resources/res_1');
+  });
+});
+
+describe('annotation event types', () => {
+  it('listen for the types the backend writes', () => {
+    for (const type of [
+      'host_reboot',
+      'container_oom',
+      'container_restart',
+      'deployment',
+      'collector_degraded',
+      'persistence_gap',
+      'persistence_emergency',
+    ])
+      expect(isAnnotatedEvent(type)).toBe(true);
+  });
+
+  it('ignore types the backend never writes and bookkeeping events', () => {
+    for (const type of [
+      'boot',
+      'oom',
+      'replacement',
+      'collector_state',
+      'collector_failure',
+      'alert_triggered',
+      'container_health_status_change',
+    ])
+      expect(isAnnotatedEvent(type)).toBe(false);
+  });
+
+  it('only annotate types from the backend catalogue', () => {
+    const known = new Set<string>(eventTypes);
+    for (const type of annotationTypeFilter.split(','))
+      expect(known.has(type)).toBe(true);
+    // The events API accepts at most 32 types per query.
+    expect(annotationTypeFilter.split(',').length).toBeLessThanOrEqual(32);
   });
 });

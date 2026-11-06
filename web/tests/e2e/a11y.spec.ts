@@ -56,6 +56,8 @@ test('host page has no detectable a11y violations', async ({ page }) => {
   await scan(page);
   await page.getByRole('tab', { name: 'Processes' }).click();
   await scan(page);
+  await page.getByRole('tab', { name: /Collectors/ }).click();
+  await scan(page);
 });
 
 test('resources page has no detectable a11y violations', async ({

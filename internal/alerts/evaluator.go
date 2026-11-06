@@ -293,9 +293,9 @@ func (e *Evaluator) evaluateEvents(ctx context.Context, rules []Rule, now time.T
 }
 
 func (e *Evaluator) evaluateEventRule(ctx context.Context, rule Rule, now time.Time) error {
-	eventType := "container_restart"
+	eventType := metrics.EventContainerRestart
 	if rule.Family == FamilyOOMLoop {
-		eventType = "container_oom"
+		eventType = metrics.EventContainerOOM
 	}
 	rows, err := e.Repo.db.QueryContext(ctx, `SELECT resource_id,COUNT(*) FROM events WHERE type=? AND resource_id IS NOT NULL AND ts>=? GROUP BY resource_id`, eventType, now.Add(-rule.Window).UnixMilli())
 	if err != nil {
@@ -467,10 +467,10 @@ func (e *Evaluator) evaluate(ctx context.Context, rule Rule, targetType, target 
 			err = e.Repo.sink.AlertFiredTx(ctx, tx, Alert{ID: alertID, DedupKey: key, RuleID: rule.ID, Family: rule.Family, Severity: rule.Severity, TargetType: targetType, TargetID: target, Status: "firing", StartedAt: now, LastObservedAt: now, ObservedValue: &value, Message: message(rule, target)}, now)
 		}
 		if err == nil {
-			err = insertEvent(ctx, tx, alertID, rule, target, "alert_triggered", now)
+			err = insertEvent(ctx, tx, alertID, rule, target, metrics.EventAlertTriggered, now)
 		}
 	} else if tr.Repeated {
-		err = insertEvent(ctx, tx, id(), rule, target, "alert_repeated", now)
+		err = insertEvent(ctx, tx, id(), rule, target, metrics.EventAlertRepeated, now)
 	} else if tr.Resolved {
 		var alertID string
 		err = tx.QueryRowContext(ctx, `SELECT id FROM alerts WHERE dedup_key=? AND status='firing' ORDER BY started_at DESC LIMIT 1`, key).Scan(&alertID)
@@ -482,7 +482,7 @@ func (e *Evaluator) evaluate(ctx context.Context, rule Rule, targetType, target 
 				err = e.Repo.sink.AlertResolvedTx(ctx, tx, alertID, now)
 			}
 			if err == nil {
-				err = insertEvent(ctx, tx, alertID, rule, target, "alert_resolved", now)
+				err = insertEvent(ctx, tx, alertID, rule, target, metrics.EventAlertResolved, now)
 			}
 		}
 	} else if state.Phase == Firing || state.Phase == Recovering {

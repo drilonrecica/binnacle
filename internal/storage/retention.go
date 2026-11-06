@@ -196,7 +196,7 @@ func (m *Manager) shortenAtEmergency(ctx context.Context, now time.Time, r Reten
 	// One event per change of the shortened set, not one per minute of a
 	// sustained emergency.
 	if current := strings.Join(shortened, ","); current != previous {
-		m.writeStorageEvent(ctx, now, "retention_shortened", "warning", "Database budget at emergency; retention shortened for the "+strings.Join(shortened, " and ")+" tier(s) to half the configured length")
+		m.writeStorageEvent(ctx, now, metrics.EventRetentionShortened, "warning", "Database budget at emergency; retention shortened for the "+strings.Join(shortened, " and ")+" tier(s) to half the configured length")
 	}
 	return state
 }
@@ -225,10 +225,10 @@ func (m *Manager) updatePause(ctx context.Context, now time.Time, state BudgetSt
 		return
 	}
 	if paused {
-		m.writeStorageEvent(ctx, now, "persistence_emergency", "critical", "Raw history persistence paused; database budget still at emergency after shortening retention")
+		m.writeStorageEvent(ctx, now, metrics.EventPersistenceEmergency, "critical", "Raw history persistence paused; database budget still at emergency after shortening retention")
 		return
 	}
-	m.writeStorageEvent(ctx, now, "persistence_resumed", "info", "Raw history persistence resumed; database usage below the critical threshold")
+	m.writeStorageEvent(ctx, now, metrics.EventPersistenceResumed, "info", "Raw history persistence resumed; database usage below the critical threshold")
 }
 
 // writeStorageEvent records one of the storage worker's own events. Its id

@@ -124,7 +124,7 @@ func (m *Manager) recordBoot(ctx context.Context, tx *sql.Tx, s metrics.Snapshot
 	if err != nil {
 		return false, err
 	}
-	return opened, m.insertEvent(ctx, tx, metrics.Event{ID: metrics.NewEventID(), At: at, Type: "host_reboot", Severity: "critical", Message: "Host rebooted; history has a gap while it was down", Details: string(details)})
+	return opened, m.insertEvent(ctx, tx, metrics.Event{ID: metrics.NewEventID(), At: at, Type: metrics.EventHostReboot, Severity: "critical", Message: "Host rebooted; history has a gap while it was down", Details: string(details)})
 }
 
 // freshResource reports whether a resource of the batch is a measurement not

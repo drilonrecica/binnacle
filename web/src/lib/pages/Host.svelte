@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
+  import Copy from '@lucide/svelte/icons/copy';
   import HardDrive from '@lucide/svelte/icons/hard-drive';
   import ListTree from '@lucide/svelte/icons/list-tree';
   import RefreshCw from '@lucide/svelte/icons/refresh-cw';
@@ -10,11 +12,24 @@
     sampleProcesses,
     type HostProcess,
   } from '../api/processes';
+  import { listRules, type Rule } from '../api/alerts';
   import { errorMessage, isApiError } from '../api/client';
-  import { bucketize } from '../series';
-  import { formatBytes, formatNumber, formatRate } from '../i18n';
+  import { formatBytes, formatNumber } from '../i18n';
   import { formatUptime } from '../watch';
   import { resourcePath } from '../router';
+  import { router } from '../router.svelte';
+  import { connectionView } from '../shell/connection';
+  import { gaugeThresholds, diskLabel } from '../overview/headroom';
+  import Instruments from '../overview/Instruments.svelte';
+  import {
+    chartFocus,
+    collectorViews,
+    commandParts,
+    filesystemTrend,
+    missing,
+    serverFilesystems,
+    serverInstruments,
+  } from '../server/server';
   import type { ChartGroup } from '../charts/MetricCharts.svelte';
   import MetricCharts from '../charts/MetricCharts.svelte';
   import Badge from '../ui/Badge.svelte';
@@ -25,20 +40,25 @@
     type SortState,
   } from '../ui/DataTable.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
+  import ErrorState from '../ui/ErrorState.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
   import Scale from '../ui/Scale.svelte';
   import RelativeTime from '../ui/RelativeTime.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
-  import Stat from '../ui/Stat.svelte';
-  import StatusPill from '../ui/StatusPill.svelte';
+  import StaleBanner from '../ui/StaleBanner.svelte';
+  import Status from '../ui/Status.svelte';
   import Tabs, { tabPanelId, tabId } from '../ui/Tabs.svelte';
-  import { formatClock } from '../ui/relative-time';
+  import { formatAbsolute, formatClock } from '../ui/relative-time';
   import { utilizationTone } from '../ui/status';
+  import { toasts } from '../ui/toast.svelte';
   import { tooltip } from '../ui/tooltip';
 
   let { live }: { live: LiveStore } = $props();
 
+  const hourMs = 3_600_000;
+
   let tab = $state('metrics');
+  let rules = $state<Rule[]>([]);
   let processes = $state<HostProcess[]>([]);
   let processSort = $state<SortState | undefined>({
     key: 'cpu',
@@ -48,28 +68,38 @@
   let sampling = $state(false);
   let processError = $state('');
   let processLimit = $state(25);
-  let fsSort = $state<SortState | undefined>({
-    key: 'used',
-    direction: 'desc',
-  });
+  let fsSort = $state<SortState | undefined>(undefined);
+  // Decides when quiet data turns stale; nothing it drives is announced.
+  let now = $state(Date.now());
 
   const snapshot = $derived(live.snapshot);
   const host = $derived(snapshot?.host);
-  const now = $derived(snapshot ? new Date(snapshot.ts).getTime() : Date.now());
-  const spark = (key: 'cpu' | 'memory' | 'rx' | 'load1') =>
-    bucketize(
-      liveSeries.hostWindow(key, 3_600_000, now),
-      now - 3_600_000,
-      now,
-      60,
-    );
-  const memoryPct = $derived(
-    host
-      ? (host.memoryPct ?? percent(host.memoryUsedBytes, host.memoryTotalBytes))
-      : null,
+  const connection = $derived(
+    connectionView(live.state, live.lastReceivedAt, now),
   );
-  const filesystems = $derived(snapshot?.filesystems ?? []);
-  const collectors = $derived(Object.entries(snapshot?.collectors ?? {}));
+  const streamLive = $derived(connection.tone === 'ok');
+  const failedToStart = $derived(
+    !snapshot &&
+      (live.state === 'disconnected' || live.state === 'unauthorized'),
+  );
+  const thresholds = $derived(gaugeThresholds(rules));
+  const instruments = $derived(
+    snapshot
+      ? serverInstruments(
+          snapshot,
+          thresholds,
+          liveSeries.hostWindow('cpu', hourMs, Date.parse(snapshot.ts)),
+        )
+      : [],
+  );
+  const filesystems = $derived(snapshot ? serverFilesystems(snapshot) : []);
+  const collectors = $derived(collectorViews(snapshot?.collectors));
+  const troubled = $derived(
+    collectors.filter((collector) => collector.state !== 'healthy'),
+  );
+  // Links from Headroom: `?metric=cpu` focuses a chart, `?mount=` a disk.
+  const focusChart = $derived(chartFocus(router.param('metric')));
+  const focusMount = $derived(router.param('mount'));
   const containerNames = $derived.by(() => {
     const map = new SvelteMap<string, { resourceId: string; name: string }>();
     for (const resource of snapshot?.resources ?? []) {
@@ -151,14 +181,22 @@
       sortValue: (row) => row.mountPoint,
       cell: fsMount,
     },
-    { key: 'type', label: 'Type', cell: fsType },
+    { key: 'type', label: 'Type', hideBelow: 'lg', cell: fsType },
     {
       key: 'used',
       label: 'Used',
       sortable: true,
-      sortValue: (row) => row.usedPct,
+      sortValue: (row) => usedPct(row),
       cell: fsUsed,
-      width: '34%',
+      width: '30%',
+    },
+    {
+      key: 'full',
+      label: 'Time to full',
+      sortable: true,
+      sortValue: (row) =>
+        row.trend?.state === 'filling' ? (row.trend.daysToFull ?? null) : null,
+      cell: fsFull,
     },
     {
       key: 'free',
@@ -199,6 +237,7 @@
     {
       key: 'command',
       label: 'Command',
+      card: 'title',
       sortable: true,
       sortValue: (row) => row.command,
       cell: processCommand,
@@ -252,6 +291,19 @@
     },
   ];
 
+  function usedPct(row: FilesystemObservation) {
+    return row.usedPct ?? percent(row.usedBytes, row.totalBytes);
+  }
+
+  async function copyBootId(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      toasts.success('Boot id copied');
+    } catch {
+      toasts.error('Could not copy the boot id');
+    }
+  }
+
   async function sample() {
     if (sampling) return;
     sampling = true;
@@ -270,36 +322,65 @@
     }
   }
 
+  async function loadRules() {
+    try {
+      rules = await listRules();
+    } catch {
+      // Gauges fall back to the design thresholds.
+      rules = [];
+    }
+  }
+
   $effect(() => {
     if (tab === 'processes' && !sampledAt && !sampling && !processError)
       void sample();
   });
+
+  onMount(() => {
+    void loadRules();
+    const clock = window.setInterval(() => (now = Date.now()), 2_000);
+    return () => window.clearInterval(clock);
+  });
 </script>
 
 {#snippet fsMount(row: FilesystemObservation)}
-  <span class="mono strong">{row.mountPoint}</span>
+  <span class="mount" class:focused={row.mountKey === focusMount}>
+    <span class="mono strong">{row.mountPoint}</span>
+    <span class="role">{diskLabel(row)}</span>
+  </span>
 {/snippet}
 {#snippet fsType(row: FilesystemObservation)}
-  <Badge tone="neutral" mono>{row.fsType || '—'}</Badge>
+  <Badge tone="neutral" mono>{row.fsType || missing}</Badge>
 {/snippet}
 {#snippet fsUsed(row: FilesystemObservation)}
+  {@const limits = thresholds.filesystem(row.mountKey)}
+  {@const pct = usedPct(row)}
   <div class="fs-used">
-    <Scale value={row.usedPct} label={`${row.mountPoint} usage`} />
-    <span class={`num pct ${utilizationTone(row.usedPct)}`}
-      >{row.usedPct == null ? '—' : `${formatNumber(row.usedPct)}%`}</span
+    <Scale
+      value={pct}
+      label={`${row.mountPoint} usage`}
+      threshold={limits.critical}
+    />
+    <span
+      class={`num pct ${utilizationTone(pct, limits.warn, limits.critical)}`}
+      >{pct == null ? missing : `${formatNumber(pct)}%`}</span
     >
   </div>
 {/snippet}
+{#snippet fsFull(row: FilesystemObservation)}
+  {@const trend = filesystemTrend(row, thresholds)}
+  <span class={`trend ${trend.tone}`}>{trend.text}</span>
+{/snippet}
 {#snippet fsFree(row: FilesystemObservation)}
-  {row.availableBytes == null ? '—' : formatBytes(row.availableBytes)}
+  {row.availableBytes == null ? missing : formatBytes(row.availableBytes)}
 {/snippet}
 {#snippet fsTotal(row: FilesystemObservation)}
-  {row.totalBytes == null ? '—' : formatBytes(row.totalBytes)}
+  {row.totalBytes == null ? missing : formatBytes(row.totalBytes)}
 {/snippet}
 {#snippet fsInodes(row: FilesystemObservation)}
   <span class={utilizationTone(row.inodesUsedPct)}
     >{row.inodesUsedPct == null
-      ? '—'
+      ? missing
       : `${formatNumber(row.inodesUsedPct)}%`}</span
   >
 {/snippet}
@@ -316,16 +397,20 @@
   <span class="num">{row.pid}</span>
 {/snippet}
 {#snippet processCommand(row: HostProcess)}
-  <span class="mono command" use:tooltip={row.command}>{row.command}</span>
+  <span class="mono command" use:tooltip={row.command}
+    >{#each commandParts(row.command) as part, index (index)}{#if part.redacted}<span
+          class="redacted">{part.text}</span
+        >{:else}{part.text}{/if}{/each}</span
+  >
 {/snippet}
 {#snippet processCpu(row: HostProcess)}
-  {row.cpuPct == null ? '—' : `${formatNumber(row.cpuPct)}%`}
+  {row.cpuPct == null ? missing : `${formatNumber(row.cpuPct)}%`}
 {/snippet}
 {#snippet processRss(row: HostProcess)}
-  {row.rssBytes == null ? '—' : formatBytes(row.rssBytes)}
+  {row.rssBytes == null ? missing : formatBytes(row.rssBytes)}
 {/snippet}
 {#snippet processUser(row: HostProcess)}
-  <span class="mono">{row.user || row.uid || '—'}</span>
+  <span class="mono">{row.user || row.uid || missing}</span>
 {/snippet}
 {#snippet processState(row: HostProcess)}
   {processStateLabel(row.state)}
@@ -357,78 +442,36 @@
   </EmptyState>
 {/snippet}
 
-<PageHeader
-  title="Server"
-  description="The Linux server itself: CPU, memory, disks, network, and the collectors that observe it."
->
+<PageHeader title="Server">
   {#snippet meta()}
     {#if snapshot}
       <span class="meta-item"
-        >Uptime <span class="num">{formatUptime(host?.uptimeSeconds)}</span
-        ></span
+        >up <span class="num">{formatUptime(host?.uptimeSeconds)}</span></span
       >
-      <span class="meta-item"
-        >Boot <span class="num">{snapshot.bootIdentity || '—'}</span></span
-      >
-      {#each collectors as [name, collector] (name)}
-        <StatusPill
+      {#if snapshot.bootIdentity}
+        <button
+          type="button"
+          class="id"
+          onclick={() => copyBootId(snapshot.bootIdentity)}
+          aria-label={`boot ${snapshot.bootIdentity}, copy the boot id`}
+          use:tooltip={'Copy boot id'}
+        >
+          <span class="id-label">boot</span>
+          <code>{snapshot.bootIdentity}</code><Copy aria-hidden="true" />
+        </button>
+      {/if}
+      {#each troubled as collector (collector.name)}
+        <Status
           status={collector.state}
-          label={`${name} collector`}
+          label={`${collector.title} ${collector.word.toLowerCase()}`}
           size="sm"
         />
       {/each}
     {/if}
   {/snippet}
-  {#if snapshot && host}
-    <div class="stats">
-      <Stat
-        label="CPU"
-        value={host.cpuPct == null ? '—' : formatNumber(host.cpuPct)}
-        unit={host.cpuPct == null ? '' : '%'}
-        percent={host.cpuPct ?? null}
-        sparkline={spark('cpu')}
-        sparklineMax={100}
-        sparklineLabel="CPU over the last hour"
-        secondary={host.load1 == null
-          ? ''
-          : `load ${formatNumber(host.load1)} · ${formatNumber(host.load5)} · ${formatNumber(host.load15)}`}
-      />
-      <Stat
-        label="Memory"
-        value={host.memoryUsedBytes == null
-          ? '—'
-          : formatBytes(host.memoryUsedBytes)}
-        percent={memoryPct}
-        sparkline={spark('memory')}
-        sparklineMax={100}
-        sparklineLabel="Memory over the last hour"
-        secondary={host.memoryTotalBytes == null
-          ? ''
-          : `of ${formatBytes(host.memoryTotalBytes)}${host.swapUsedBytes != null ? ` · swap ${formatBytes(host.swapUsedBytes)}` : ''}`}
-      />
-      <Stat
-        label="Network"
-        value={host.networkRxBps == null ? '—' : formatRate(host.networkRxBps)}
-        secondary={host.networkTxBps == null
-          ? ''
-          : `↓ receive · ↑ ${formatRate(host.networkTxBps)}`}
-        sparkline={spark('rx')}
-        sparklineLabel="Receive rate over the last hour"
-        tone="accent"
-      />
-      <Stat
-        label="Disk I/O"
-        value={host.diskReadBps == null ? '—' : formatRate(host.diskReadBps)}
-        secondary={host.diskWriteBps == null
-          ? ''
-          : `read · write ${formatRate(host.diskWriteBps)}${host.diskReadIops != null ? ` · ${formatNumber((host.diskReadIops ?? 0) + (host.diskWriteIops ?? 0))} IOPS` : ''}`}
-        tone="accent"
-      />
-    </div>
-  {/if}
   <Tabs
     prefix="host"
-    label="Host sections"
+    label="Server sections"
     param="tab"
     bind:active={tab}
     tabs={[
@@ -448,16 +491,45 @@
   />
 </PageHeader>
 
-{#if !snapshot}
+{#if failedToStart}
+  <ErrorState
+    title="Live data could not be loaded"
+    description={live.error ||
+      'The live stream did not start. A proxy in front of Binnacle may be buffering it.'}
+    onretry={() => live.retry()}
+    retryLabel="Retry now"
+  />
+{:else if !snapshot}
   <div
     class="loading"
     role="status"
     aria-label="Waiting for the first live sample"
   >
-    <Skeleton height={110} />
+    <Skeleton height={150} />
     <Skeleton height={320} />
   </div>
 {:else}
+  {#if !streamLive}
+    <div class="stale">
+      <StaleBanner
+        message="Showing the last known values"
+        since={live.lastReceivedAt}
+        tone={live.state === 'disconnected' ? 'critical' : 'warn'}
+      >
+        {#if live.state === 'disconnected'}
+          <Button size="sm" onclick={() => live.retry()}>Retry now</Button>
+        {/if}
+      </StaleBanner>
+    </div>
+  {/if}
+
+  <Instruments
+    set={{ instruments, moreDisks: 0 }}
+    stale={!streamLive}
+    heading="Server instruments"
+    headingId="server-instruments-title"
+  />
+
   <div
     id={tabPanelId('host', 'metrics')}
     role="tabpanel"
@@ -465,7 +537,7 @@
     hidden={tab !== 'metrics'}
   >
     {#if tab === 'metrics'}
-      <MetricCharts scope="host" groups={chartGroups} />
+      <MetricCharts scope="host" groups={chartGroups} focus={focusChart} />
     {/if}
   </div>
 
@@ -487,8 +559,9 @@
         />
         {#snippet footer()}
           <p class="note">
-            Filesystem alerts warn at 80% and turn critical at 95% by default.
-            Adjust thresholds under Alerts → Rules.
+            Thresholds and the "full within" warning come from the filesystem
+            alert rules in Settings › Alerting. Time to full needs three hours
+            of history.
           </p>
         {/snippet}
       </Card>
@@ -540,8 +613,12 @@
         />
         {#snippet footer()}
           <p class="note">
-            Two /proc samples a moment apart, on demand only. Binnacle never
-            signals, renices, or inspects processes beyond this list.
+            Two /proc samples a moment apart, on demand only, never stored.
+            Command lines are redacted on the server: passwords, tokens and
+            other secret arguments show as <span class="redacted"
+              >[REDACTED]</span
+            >. Binnacle never signals, renices, or inspects processes beyond
+            this list.
           </p>
         {/snippet}
       </Card>
@@ -555,41 +632,52 @@
     hidden={tab !== 'collectors'}
   >
     {#if tab === 'collectors'}
-      <div class="collectors">
-        {#each collectors as [name, collector] (name)}
-          <Card title={`${name} collector`}>
-            {#snippet actions()}<StatusPill
-                status={collector.state}
-              />{/snippet}
-            <dl class="collector-meta">
-              <div>
-                <dt>Fresh at</dt>
-                <dd>
-                  {collector.freshAt
-                    ? new Date(collector.freshAt).toLocaleString()
-                    : '—'}
-                </dd>
-              </div>
-              <div>
-                <dt>Reason</dt>
-                <dd>{collector.reason ?? 'Operating normally'}</dd>
-              </div>
-              <div>
-                <dt>Observes</dt>
-                <dd>
-                  {name === 'host'
-                    ? 'CPU, memory, load, filesystems, network, and disk I/O from /proc and /sys.'
-                    : name === 'docker'
-                      ? 'Containers, their stats, and lifecycle events from the Docker API.'
-                      : name === 'coolify'
-                        ? 'Project and environment metadata from the Coolify API.'
-                        : '—'}
-                </dd>
-              </div>
-            </dl>
-          </Card>
-        {/each}
-      </div>
+      {#if collectors.length}
+        <div class="collectors">
+          {#each collectors as collector (collector.name)}
+            <Card title={collector.title}>
+              {#snippet actions()}<Status
+                  status={collector.state}
+                  label={collector.word}
+                />{/snippet}
+              <dl class="collector-meta">
+                <div>
+                  <dt>State</dt>
+                  <dd>{collector.word}</dd>
+                </div>
+                <div>
+                  <dt>Reason</dt>
+                  <dd>{collector.reason}</dd>
+                </div>
+                <div>
+                  <dt>Last fresh data</dt>
+                  <dd>
+                    {#if collector.freshAt}
+                      <span class="num"
+                        >{formatAbsolute(collector.freshAt)}</span
+                      >
+                      · <RelativeTime value={collector.freshAt} />
+                    {:else}
+                      {missing}
+                    {/if}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Observes</dt>
+                  <dd>{collector.observes}</dd>
+                </div>
+              </dl>
+            </Card>
+          {/each}
+        </div>
+      {:else}
+        <Card>
+          <EmptyState
+            title="No collector status yet"
+            description="Collector states appear with the first live sample that reports them."
+          />
+        </Card>
+      {/if}
     {/if}
   </div>
 {/if}
@@ -602,19 +690,38 @@
   .meta-item .num {
     color: var(--muted);
   }
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .id {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    padding: 2px var(--space-2);
     border: 1px solid var(--line);
-    border-radius: var(--radius-card);
+    border-radius: var(--radius-control);
     background: var(--panel);
+    color: var(--muted);
+    font-size: var(--text-mono);
+    cursor: pointer;
+  }
+  .id:hover {
+    color: var(--fg);
+  }
+  .id code {
     overflow: hidden;
+    font-family: var(--font-mono);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .stats > :global(.stat) {
-    border-right: 1px solid var(--line);
+  .id :global(svg) {
+    flex: none;
+    width: 12px;
+    height: 12px;
   }
-  .stats > :global(.stat:last-child) {
-    border-right: 0;
+  .id-label {
+    flex: none;
+  }
+  .stale {
+    margin-bottom: var(--space-4);
   }
   .loading {
     display: grid;
@@ -629,22 +736,46 @@
   .muted {
     color: var(--muted);
   }
+  .mount {
+    display: inline-grid;
+    gap: 2px;
+    padding-left: var(--space-2);
+    border-left: 2px solid transparent;
+  }
+  .mount.focused {
+    border-left-color: var(--accent);
+  }
+  .role {
+    color: var(--muted);
+    font-size: var(--text-meta);
+  }
   .fs-used {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    min-width: 160px;
+    min-width: 140px;
   }
   .pct {
     min-width: 5ch;
     text-align: right;
   }
-  .pct.warn,
-  :global(.warn).pct {
+  .pct.warn {
     color: var(--warn-fg);
   }
   .pct.critical {
     color: var(--critical-fg);
+  }
+  .trend {
+    font-size: var(--text-meta);
+  }
+  .trend.accent {
+    color: var(--accent-text);
+  }
+  .trend.critical {
+    color: var(--critical-fg);
+  }
+  .trend.muted {
+    color: var(--muted);
   }
   .command {
     display: inline-block;
@@ -652,6 +783,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     vertical-align: middle;
+    white-space: nowrap;
+  }
+  .redacted {
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-style: italic;
   }
   .process-actions {
     display: flex;
@@ -685,7 +822,7 @@
   }
   .collectors {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: var(--space-4);
   }
   .collector-meta {
@@ -704,16 +841,6 @@
   }
   .collector-meta dd {
     margin: 0;
-  }
-  @media (max-width: 1000px) {
-    .stats {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .stats > :global(.stat:nth-child(2)) {
-      border-right: 0;
-    }
-    .stats > :global(.stat:nth-child(-n + 2)) {
-      border-bottom: 1px solid var(--line);
-    }
+    overflow-wrap: anywhere;
   }
 </style>

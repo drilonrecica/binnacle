@@ -3,17 +3,27 @@
   import Gauge from '../ui/Gauge.svelte';
   import { instrumentName, type InstrumentSet } from './headroom';
 
-  let { set, stale = false }: { set: InstrumentSet; stale?: boolean } =
-    $props();
+  let {
+    set,
+    stale = false,
+    heading = 'Host headroom',
+    headingId = 'headroom-title',
+  }: {
+    set: InstrumentSet;
+    stale?: boolean;
+    /** Screen-reader heading of the instrument row. */
+    heading?: string;
+    headingId?: string;
+  } = $props();
 </script>
 
 <section
   class="instruments"
   class:stale
-  aria-labelledby="headroom-title"
+  aria-labelledby={headingId}
   data-testid="instruments"
 >
-  <h2 id="headroom-title" class="sr-only">Host headroom</h2>
+  <h2 id={headingId} class="sr-only">{heading}</h2>
   <ul>
     {#each set.instruments as instrument (instrument.key)}
       <li>

@@ -156,7 +156,7 @@ func (e *Enricher) syncDeployments(ctx context.Context) {
 			}
 			eventID := "coolify_deployment_" + safeID(value.UUID) + "_" + safeID(value.Status)
 			if err == nil {
-				_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO events(id,ts,resource_id,type,severity,summary,details_json,correlation_key,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, eventID, now.UnixMilli(), nullString(resourceID), "deployment", "info", "Coolify deployment "+value.Status, string(details), value.UUID, "coolify", now.UnixMilli())
+				_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO events(id,ts,resource_id,type,severity,summary,details_json,correlation_key,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, eventID, now.UnixMilli(), nullString(resourceID), metrics.EventDeployment, "info", "Coolify deployment "+value.Status, string(details), value.UUID, "coolify", now.UnixMilli())
 			}
 			if err == nil {
 				_, err = tx.ExecContext(ctx, "UPDATE coolify_deployments SET event_emitted_at=? WHERE deployment_uuid=?", now.UnixMilli(), value.UUID)

@@ -113,7 +113,7 @@ func (g *batchGap) event() (metrics.Event, error) {
 	return metrics.Event{
 		ID:       metrics.NewEventID(),
 		At:       g.From.UTC(),
-		Type:     "persistence_gap",
+		Type:     metrics.EventPersistenceGap,
 		Severity: "warning",
 		Message:  fmt.Sprintf("History was not stored for %d persistence window(s)", g.Batches),
 		Details:  string(details),

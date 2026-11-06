@@ -18,7 +18,11 @@
   import { fetchMetrics } from '../api/metrics';
   import { listEvents } from '../api/events';
   import { errorMessage } from '../api/client';
-  import { boundAnnotations, type ChartAnnotation } from '../annotations';
+  import {
+    annotationTypeFilter,
+    boundAnnotations,
+    type ChartAnnotation,
+  } from '../annotations';
   import { chartPoints, type HistoryResponse } from '../history';
   import { formatBytes, formatNumber, formatRate } from '../i18n';
   import { prefs } from '../preferences.svelte';
@@ -36,11 +40,14 @@
     id,
     groups,
     columns = 2,
+    focus,
   }: {
     scope: 'host' | 'resource';
     id?: string;
     groups: ChartGroup[];
     columns?: 1 | 2;
+    /** Key of the group to scroll to and focus once its chart has loaded. */
+    focus?: string;
   } = $props();
 
   let range = $state<TimeRange | undefined>(undefined);
@@ -99,6 +106,10 @@
           from: current.from,
           to: current.to,
           resourceId: scope === 'resource' ? id : undefined,
+          // Only the marker types, so a busy feed of other events cannot
+          // push them past the limit.
+          type: annotationTypeFilter,
+          limit: 500,
         },
         signal,
       );
@@ -167,6 +178,22 @@
   const resolution = $derived(Object.values(data)[0]?.resolution ?? '');
   const gapCount = $derived(Object.values(data)[0]?.gaps.length ?? 0);
 
+  // Scrolls to the requested chart once its data has loaded, and again
+  // whenever a different chart is requested.
+  let focusedKey = '';
+  $effect(() => {
+    if (!focus || focus === focusedKey || loading) return;
+    const target = document.getElementById(chartId(focus));
+    if (!target) return;
+    focusedKey = focus;
+    target.scrollIntoView?.({ block: 'start' });
+    target.focus({ preventScroll: true });
+  });
+
+  function chartId(key: string) {
+    return `chart-${scope}-${key}`;
+  }
+
   onMount(() => {
     const timer = window.setInterval(() => picker?.refresh(), 60_000);
     return () => {
@@ -207,50 +234,57 @@
 <div class={`grid cols-${columns}`}>
   {#each groups as group (group.key)}
     {@const stats = summary(group)}
-    <Card title={group.title} description={group.description} padded={false}>
-      <div class="body">
-        <dl class="latest">
-          {#each group.metrics as item, index (item.metric)}
-            {@const value = latest(group, item.metric)}
-            <div>
-              <dt>
-                <span
-                  class="swatch"
-                  style:background={`var(--chart-${item.color ?? index + 1})`}
-                  aria-hidden="true"
-                ></span>{item.label}
-              </dt>
-              <dd class="num">
-                {value == null ? '—' : formatters[group.format](value)}
-              </dd>
-            </div>
-          {/each}
-        </dl>
-        {#if loading && !data[group.key]}
-          <Skeleton height={220} />
-        {:else if errors[group.key]}
-          <p class="error" role="alert">{errors[group.key]}</p>
-        {:else}
-          <Chart
-            label={group.title}
-            series={seriesFor(group)}
-            gaps={data[group.key]?.gaps ?? []}
-            {markers}
-            formatValue={formatters[group.format]}
-            max={group.max}
-            variant={group.variant ??
-              (group.metrics.length === 1 ? 'area' : 'line')}
-          />
-          {#if stats}
-            <p class="stats num">
-              <span>min {formatters[group.format](stats.min)}</span>
-              <span>avg {formatters[group.format](stats.avg)}</span>
-              <span>max {formatters[group.format](stats.max)}</span>
-            </p>
+    <div
+      id={chartId(group.key)}
+      class="chart-slot"
+      class:focus={focus === group.key}
+      tabindex="-1"
+    >
+      <Card title={group.title} description={group.description} padded={false}>
+        <div class="body">
+          <dl class="latest">
+            {#each group.metrics as item, index (item.metric)}
+              {@const value = latest(group, item.metric)}
+              <div>
+                <dt>
+                  <span
+                    class="swatch"
+                    style:background={`var(--chart-${item.color ?? index + 1})`}
+                    aria-hidden="true"
+                  ></span>{item.label}
+                </dt>
+                <dd class="num">
+                  {value == null ? '—' : formatters[group.format](value)}
+                </dd>
+              </div>
+            {/each}
+          </dl>
+          {#if loading && !data[group.key]}
+            <Skeleton height={220} />
+          {:else if errors[group.key]}
+            <p class="error" role="alert">{errors[group.key]}</p>
+          {:else}
+            <Chart
+              label={group.title}
+              series={seriesFor(group)}
+              gaps={data[group.key]?.gaps ?? []}
+              {markers}
+              formatValue={formatters[group.format]}
+              max={group.max}
+              variant={group.variant ??
+                (group.metrics.length === 1 ? 'area' : 'line')}
+            />
+            {#if stats}
+              <p class="stats num">
+                <span>min {formatters[group.format](stats.min)}</span>
+                <span>avg {formatters[group.format](stats.avg)}</span>
+                <span>max {formatters[group.format](stats.max)}</span>
+              </p>
+            {/if}
           {/if}
-        {/if}
-      </div>
-    </Card>
+        </div>
+      </Card>
+    </div>
   {/each}
 </div>
 
@@ -272,6 +306,19 @@
   }
   .gaps {
     color: var(--warn-fg);
+  }
+  .chart-slot {
+    min-width: 0;
+    border-radius: var(--radius-card);
+    scroll-margin-top: var(--space-6);
+  }
+  .chart-slot:focus {
+    outline: none;
+  }
+  .chart-slot:focus-visible,
+  .chart-slot.focus:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
   .grid {
     display: grid;

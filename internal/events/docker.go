@@ -10,15 +10,15 @@ import (
 
 func NormalizeDocker(e dockerapi.Event, oomKilled bool) (metrics.Event, bool) {
 	action := strings.ToLower(e.Action)
-	kind := map[string]string{"start": "container_start", "stop": "container_stop", "die": "container_die", "destroy": "container_destroy", "create": "container_create", "rename": "container_rename", "oom": "container_oom", "restart": "container_restart"}[action]
+	kind := map[string]string{"start": metrics.EventContainerStart, "stop": metrics.EventContainerStop, "die": metrics.EventContainerDie, "destroy": metrics.EventContainerDestroy, "create": metrics.EventContainerCreate, "rename": metrics.EventContainerRename, "oom": metrics.EventContainerOOM, "restart": metrics.EventContainerRestart}[action]
 	if strings.HasPrefix(action, "health_status") {
-		kind = "container_health_status_change"
+		kind = metrics.EventContainerHealthChange
 	}
 	if kind == "" {
 		return metrics.Event{}, false
 	}
 	if oomKilled || action == "oom" {
-		kind = "container_oom"
+		kind = metrics.EventContainerOOM
 	}
 	at, err := time.Parse(time.RFC3339, e.Time)
 	if err != nil {
