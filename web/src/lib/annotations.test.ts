@@ -31,8 +31,8 @@ describe('chart annotations', () => {
       2,
     );
     expect(markers).toHaveLength(2);
-    expect(markers[0].count).toBe(2);
-    expect(markers[1].href).toBe('/resources/res_1');
+    expect(markers[0]!.count).toBe(2);
+    expect(markers[1]!.href).toBe('/resources/res_1');
   });
 });
 

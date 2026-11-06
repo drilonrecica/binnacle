@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { missing } from '../i18n';
   import Boxes from '@lucide/svelte/icons/boxes';
   import Pin from '@lucide/svelte/icons/pin';
   import type { LiveResource } from '../api/resources';
@@ -184,7 +185,7 @@
     />
     <span class="num"
       >{stale || row.cpuHostPct == null
-        ? '—'
+        ? missing
         : `${formatNumber(row.cpuHostPct)}%`}</span
     >
   </div>
@@ -201,7 +202,7 @@
     />
     <span class="num"
       >{stale || row.memoryBytes == null
-        ? '—'
+        ? missing
         : formatBytes(row.memoryBytes)}</span
     >
   </div>
@@ -209,8 +210,8 @@
 
 {#snippet networkCell(row: LiveResource)}
   <span class="net num">
-    <span>↓ {row.rxBps == null ? '—' : formatRate(row.rxBps)}</span>
-    <span>↑ {row.txBps == null ? '—' : formatRate(row.txBps)}</span>
+    <span>↓ {row.rxBps == null ? missing : formatRate(row.rxBps)}</span>
+    <span>↑ {row.txBps == null ? missing : formatRate(row.txBps)}</span>
   </span>
 {/snippet}
 
@@ -256,12 +257,12 @@
       <Badge tone="neutral">{categoryLabel(row.category)}</Badge>
       <span class="num"
         >{stale || row.cpuHostPct == null
-          ? '—'
+          ? missing
           : `${formatNumber(row.cpuHostPct)}% CPU`}</span
       >
       <span class="num"
         >{stale || row.memoryBytes == null
-          ? '—'
+          ? missing
           : formatBytes(row.memoryBytes)}</span
       >
       <span class="num">{row.components?.length ?? 0} containers</span>

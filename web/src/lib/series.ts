@@ -12,7 +12,7 @@ export function bucketize(
   to: number,
   slots: number,
 ): Array<number | null> {
-  const out: Array<number | null> = Array(slots).fill(null);
+  const out = Array.from<number | null>({ length: slots }).fill(null);
   if (to <= from || slots < 1) return out;
   const sums = Array(slots).fill(0);
   const counts = Array(slots).fill(0);
@@ -43,24 +43,9 @@ export function mergeSparkline(
   const stepMs = stepSeconds * 1000;
   const newer = live.filter((sample) => sample.at > toMs);
   if (!newer.length || stepMs <= 0) return base;
-  const last = newer[newer.length - 1].at;
+  const last = newer[newer.length - 1]?.at ?? toMs;
   const extraSlots = Math.max(1, Math.ceil((last - toMs) / stepMs));
   const extra = bucketize(newer, toMs, toMs + extraSlots * stepMs, extraSlots);
   const merged = [...base, ...extra];
   return merged.slice(-base.length);
-}
-
-/** Difference between the newest and the oldest defined value. */
-export function delta(values: Array<number | null>): number | null {
-  const defined = values.filter((value): value is number => value != null);
-  if (defined.length < 2) return null;
-  return defined[defined.length - 1] - defined[0];
-}
-
-export function lastDefined(values: Array<number | null>): number | null {
-  for (let index = values.length - 1; index >= 0; index--) {
-    const value = values[index];
-    if (value != null) return value;
-  }
-  return null;
 }

@@ -59,7 +59,8 @@ export function seriesColor(
   slot?: number,
 ): string {
   const position = slot != null ? slot - 1 : index;
-  return colors.series[
-    ((position % SERIES_COUNT) + SERIES_COUNT) % SERIES_COUNT
-  ];
+  return (
+    colors.series[((position % SERIES_COUNT) + SERIES_COUNT) % SERIES_COUNT] ??
+    ''
+  );
 }

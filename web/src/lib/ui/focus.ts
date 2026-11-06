@@ -25,6 +25,7 @@ export function trapFocus(root: HTMLElement): () => void {
     }
     const first = items[0];
     const last = items[items.length - 1];
+    if (!first || !last) return;
     const active = document.activeElement as HTMLElement | null;
     if (event.shiftKey && (active === first || !root.contains(active))) {
       event.preventDefault();

@@ -69,7 +69,7 @@ function declared(): Set<string> {
   ];
   for (const { text } of files)
     for (const pattern of patterns)
-      for (const match of text.matchAll(pattern)) names.add(match[1]);
+      for (const match of text.matchAll(pattern)) names.add(match[1]!);
   return names;
 }
 
@@ -88,7 +88,7 @@ describe('design tokens', () => {
     for (const { path, text } of files)
       for (const match of text.matchAll(/var\(\s*(--[\w-]+)(\$\{)?/g))
         // `var(--chart-${n})` is built at runtime; its targets are declared.
-        if (!match[2] && !names.has(match[1]))
+        if (!match[2] && !names.has(match[1]!))
           missing.push(`${path}: ${match[1]}`);
     expect(missing).toEqual([]);
   });

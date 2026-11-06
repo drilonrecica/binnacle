@@ -22,7 +22,7 @@
    * their own words.
    */
   export function nextRunLabel(at: number | null, now = Date.now()): string {
-    if (at == null) return '—';
+    if (at == null) return missing;
     const ahead = at - now;
     if (ahead <= 0) return 'due now';
     if (ahead < 60_000) return 'in <1m';
@@ -47,6 +47,7 @@
 </script>
 
 <script lang="ts">
+  import { missing } from '../i18n';
   import HeartPulse from '@lucide/svelte/icons/heart-pulse';
   import Settings2 from '@lucide/svelte/icons/settings-2';
   import { failureLabel } from '../api/checks';
@@ -160,11 +161,13 @@
   >
 {/snippet}
 {#snippet httpCell(row: Check)}
-  <span class="num">{row.state?.httpStatus || '—'}</span>
+  <span class="num">{row.state?.httpStatus || missing}</span>
 {/snippet}
 {#snippet latencyCell(row: Check)}
   <span class="num"
-    >{row.state?.latencyMs == null ? '—' : `${row.state.latencyMs} ms`}</span
+    >{row.state?.latencyMs == null
+      ? missing
+      : `${row.state.latencyMs} ms`}</span
   >
 {/snippet}
 {#snippet lastCell(row: Check)}
@@ -195,7 +198,8 @@
       >
       {#if row.state}
         <span
-          >HTTP {row.state.httpStatus || '—'} · {row.state.latencyMs ?? '—'} ms</span
+          >HTTP {row.state.httpStatus || missing} · {row.state.latencyMs ??
+            missing} ms</span
         >
         <span>last <RelativeTime value={row.state.checkedAt} /></span>
       {/if}

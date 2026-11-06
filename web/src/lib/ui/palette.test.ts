@@ -62,11 +62,11 @@ describe('rankItems', () => {
   });
 
   it('matches keywords', () => {
-    expect(rankItems(items, 'server')[0].id).toBe('host');
+    expect(rankItems(items, 'server')[0]!.id).toBe('host');
   });
 
   it('ranks label matches above hint matches', () => {
-    expect(rankItems(items, 'api')[0].id).toBe('res1');
+    expect(rankItems(items, 'api')[0]!.id).toBe('res1');
     expect(rankItems(items, 'production').map((item) => item.id)).toEqual([
       'res1',
       'res2',

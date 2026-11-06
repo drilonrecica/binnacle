@@ -65,7 +65,9 @@ export function followLogs(
   let ended = false;
   source.addEventListener('log', (event) => {
     try {
-      handlers.onentry(JSON.parse((event as MessageEvent).data) as LogEntry);
+      handlers.onentry(
+        JSON.parse((event as MessageEvent<string>).data) as LogEntry,
+      );
     } catch {
       /* Skip malformed frames. */
     }

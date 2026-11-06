@@ -1,3 +1,4 @@
+import { missing } from '../i18n';
 import { api } from './client';
 
 export interface HostProcess {
@@ -41,6 +42,6 @@ export function processStateLabel(state: string | undefined): string {
     case 'I':
       return 'Idle';
     default:
-      return state || '—';
+      return state || missing;
   }
 }

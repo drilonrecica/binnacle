@@ -149,7 +149,7 @@
       options={retentionPresets
         .filter((item) => item.value !== 'advanced')
         .map((item) => ({
-          value: item.value as 'minimal' | 'balanced' | 'long-term',
+          value: item.value,
           title: item.title,
           description: item.description,
         }))}

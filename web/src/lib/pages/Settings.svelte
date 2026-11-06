@@ -105,7 +105,7 @@
   ];
 
   const current = $derived(
-    items.find((item) => item.id === active) ?? items[0],
+    items.find((item) => item.id === active) ?? items[0]!,
   );
 
   async function apply(changes: Record<string, string>) {

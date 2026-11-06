@@ -26,7 +26,11 @@ describe('Tabs', () => {
       label: 'Sections',
       onchange,
     });
-    const [overview, logs, containers] = screen.getAllByRole('tab');
+    const [overview, logs, containers] = screen.getAllByRole('tab') as [
+      HTMLElement,
+      HTMLElement,
+      HTMLElement,
+    ];
     expect(overview.tabIndex).toBe(0);
     expect(logs.tabIndex).toBe(-1);
     overview.focus();

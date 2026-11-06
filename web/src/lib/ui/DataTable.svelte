@@ -29,6 +29,7 @@
 </script>
 
 <script lang="ts" generics="T">
+  import { missing } from '../i18n';
   import type { Snippet } from 'svelte';
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
@@ -115,6 +116,13 @@
       : (row as Record<string, unknown>)[column.key];
   }
 
+  function sortText(value: unknown): string {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean')
+      return String(value);
+    return JSON.stringify(value) ?? '';
+  }
+
   const sorted = $derived.by(() => {
     if (!sort) return rows;
     const column = columns.find((item) => item.key === sort?.key);
@@ -129,7 +137,7 @@
       if (typeof a === 'number' && typeof b === 'number')
         return (a - b) * direction;
       return (
-        String(a).localeCompare(String(b), undefined, {
+        sortText(a).localeCompare(sortText(b), undefined, {
           numeric: true,
           sensitivity: 'base',
         }) * direction
@@ -218,7 +226,7 @@
   }
 
   function rawValue(row: T, column: Column<T>): unknown {
-    return (row as Record<string, unknown>)[column.key] ?? '—';
+    return (row as Record<string, unknown>)[column.key] ?? missing;
   }
 
   const interactive = $derived(Boolean(rowHref || onrowclick));

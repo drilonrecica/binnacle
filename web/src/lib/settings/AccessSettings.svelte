@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { missing } from '../i18n';
   import { onMount } from 'svelte';
   import type { SettingsSnapshot } from '../api/settings';
   import { authMethods, type AuthMethods } from '../auth';
@@ -123,7 +124,7 @@
             ? methods.local
               ? 'Enabled'
               : 'Disabled by the proxy mode'
-            : '—'}
+            : missing}
         </dd>
       </div>
       <div>

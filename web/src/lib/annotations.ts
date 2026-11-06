@@ -51,7 +51,7 @@ export function boundAnnotations(
     buckets.set(bucket, [...(buckets.get(bucket) ?? []), event]);
   }
   return [...buckets.values()].map((eventsInBucket) => {
-    const first = eventsInBucket[0];
+    const first = eventsInBucket[0]!;
     return {
       at: first.milliseconds / 1000,
       label:

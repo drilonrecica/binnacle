@@ -17,30 +17,10 @@ export function parseGoDuration(input: string): number | null {
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(value))) {
     if (match.index !== consumed) return null;
-    total += Number(match[1]) * durationUnits[match[2]];
+    total += Number(match[1]) * (durationUnits[match[2] ?? ''] ?? 0);
     consumed = match.index + match[0].length;
   }
   return consumed === value.length && consumed > 0 ? total : null;
-}
-
-/** Formats milliseconds as the shortest exact Go duration (`48h`, `2m30s`). */
-export function formatGoDuration(ms: number): string {
-  if (ms <= 0) return '0s';
-  const parts: string[] = [];
-  let rest = ms;
-  for (const [unit, size] of [
-    ['h', 3_600_000],
-    ['m', 60_000],
-    ['s', 1000],
-    ['ms', 1],
-  ] as const) {
-    const count = Math.floor(rest / size);
-    if (count > 0) {
-      parts.push(`${count}${unit}`);
-      rest -= count * size;
-    }
-  }
-  return parts.join('');
 }
 
 /** Human phrasing such as "2 days", "30 minutes", "5 seconds". */
@@ -76,7 +56,7 @@ export function bytesToInput(bytes: number): { value: number; unit: ByteUnit } {
     value /= 1024;
     unit += 1;
   }
-  return { value, unit: byteUnits[unit] };
+  return { value, unit: byteUnits[unit] ?? 'B' };
 }
 
 export function inputToBytes(value: number, unit: ByteUnit): number | null {

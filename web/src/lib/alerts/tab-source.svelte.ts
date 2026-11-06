@@ -61,5 +61,5 @@ export async function refreshSources(
   );
   if (signal?.aborted) return;
   const now = Date.now();
-  results.forEach((result, index) => sources[index].settle(result, now));
+  results.forEach((result, index) => sources[index]?.settle(result, now));
 }

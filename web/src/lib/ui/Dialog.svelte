@@ -37,12 +37,12 @@
       opener = document.activeElement as HTMLElement | null;
       element.showModal();
       releaseTrap = trapFocus(element);
+      const dialog = element;
       void tick().then(() => {
-        const preferred =
-          element?.querySelector<HTMLElement>('[data-autofocus]');
+        const preferred = dialog.querySelector<HTMLElement>('[data-autofocus]');
         (
           preferred ??
-          focusableElements(element!).find((el) => !el.closest('.dialog-close'))
+          focusableElements(dialog).find((el) => !el.closest('.dialog-close'))
         )?.focus();
       });
     } else if (!open && element.open) {

@@ -8,43 +8,6 @@ import (
 	"github.com/drilonrecica/binnacle/internal/dockerapi"
 )
 
-func TestCorrelate(t *testing.T) {
-	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	window := time.Minute
-	cases := []struct {
-		name string
-		old  Instance
-		next Instance
-		want DeploymentConfidence
-		ok   bool
-		over time.Duration
-	}{
-		{"different image within window is confirmed", Instance{ID: "a", ResourceID: "r", Image: "app:1", Stopped: base}, Instance{ID: "b", ResourceID: "r", Image: "app:2", Started: base.Add(10 * time.Second)}, Confirmed, true, 0},
-		{"same image within window is replacement", Instance{ID: "a", ResourceID: "r", Image: "app:1", Stopped: base}, Instance{ID: "b", ResourceID: "r", Image: "app:1", Started: base.Add(10 * time.Second)}, Replacement, true, 0},
-		{"overlap is likely with overlap duration", Instance{ID: "a", ResourceID: "r", Stopped: base}, Instance{ID: "b", ResourceID: "r", Started: base.Add(-5 * time.Second)}, Likely, true, 5 * time.Second},
-		{"gap beyond window is not a deployment", Instance{ID: "a", ResourceID: "r", Stopped: base}, Instance{ID: "b", ResourceID: "r", Started: base.Add(2 * time.Minute)}, "", false, 0},
-		{"gap exactly at window correlates", Instance{ID: "a", ResourceID: "r", Stopped: base}, Instance{ID: "b", ResourceID: "r", Started: base.Add(window)}, Replacement, true, 0},
-		{"different resources never correlate", Instance{ID: "a", ResourceID: "r1", Stopped: base}, Instance{ID: "b", ResourceID: "r2", Started: base}, "", false, 0},
-		{"empty resource never correlates", Instance{ID: "a", Stopped: base}, Instance{ID: "b", Started: base}, "", false, 0},
-		{"unstarted next never correlates", Instance{ID: "a", ResourceID: "r", Stopped: base}, Instance{ID: "b", ResourceID: "r"}, "", false, 0},
-		{"running old instance treats gap as zero", Instance{ID: "a", ResourceID: "r", Image: "x"}, Instance{ID: "b", ResourceID: "r", Image: "y", Started: base}, Confirmed, true, 0},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, ok := Correlate(tc.old, tc.next, window)
-			if ok != tc.ok {
-				t.Fatalf("ok = %v, want %v", ok, tc.ok)
-			}
-			if !ok {
-				return
-			}
-			if got.Confidence != tc.want || got.Overlap != tc.over || got.OldID != tc.old.ID || got.NewID != tc.next.ID {
-				t.Fatalf("got %+v", got)
-			}
-		})
-	}
-}
-
 func TestNormalizeDocker(t *testing.T) {
 	const id = "0123456789abcdef"
 	at := "2026-01-01T12:00:00Z"

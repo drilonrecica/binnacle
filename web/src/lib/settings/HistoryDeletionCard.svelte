@@ -129,16 +129,17 @@
   function poll() {
     window.clearTimeout(timer);
     if (!job) return;
-    timer = window.setTimeout(async () => {
-      if (!job) return;
-      try {
-        job = await deletionJob(job.id);
-      } catch {
-        /* Keep the last known state. */
-      }
-      if (job && ['queued', 'running', 'cancelling'].includes(job.state))
-        poll();
-    }, 1000);
+    timer = window.setTimeout(() => void refresh(), 1000);
+  }
+
+  async function refresh() {
+    if (!job) return;
+    try {
+      job = await deletionJob(job.id);
+    } catch {
+      /* Keep the last known state. */
+    }
+    if (job && ['queued', 'running', 'cancelling'].includes(job.state)) poll();
   }
 
   async function control(action: 'cancel' | 'retry') {

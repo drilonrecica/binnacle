@@ -16,13 +16,6 @@ export interface ArchivedResource {
   archivedAt?: string;
 }
 
-export function listResources(signal?: AbortSignal) {
-  return api.get<LiveResource[]>('/api/v1/resources', {
-    signal,
-    fallback: 'Resources are unavailable.',
-  });
-}
-
 /** Page size of the archived list; the server accepts 1 to 500. */
 export const ARCHIVED_PAGE_SIZE = 100;
 

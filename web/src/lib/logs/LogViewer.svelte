@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { missing } from '../i18n';
   import { tick } from 'svelte';
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import Copy from '@lucide/svelte/icons/copy';
@@ -157,7 +158,7 @@
             class:stderr={entry.stream === 'stderr'}
           >
             <span class="time num" title={entry.timestamp}
-              >{entry.timestamp ? formatClock(entry.timestamp) : '—'}</span
+              >{entry.timestamp ? formatClock(entry.timestamp) : missing}</span
             >
             <span
               class="component"

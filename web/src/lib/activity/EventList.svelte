@@ -7,7 +7,7 @@
   import EmptyState from '../ui/EmptyState.svelte';
   import RelativeTime from '../ui/RelativeTime.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
-  import { formatClock } from '../ui/relative-time';
+  import { formatAbsolute, formatClock } from '../ui/relative-time';
   import { severityTone } from '../ui/status';
   import { SvelteSet } from 'svelte/reactivity';
   import { tooltip } from '../ui/tooltip';
@@ -106,9 +106,7 @@
           {#each day.entries as entry (entry.key)}
             {@const event = entry.latest}
             <li class="event" class:live={highlightIds.has(event.id)}>
-              <span
-                class="time num"
-                use:tooltip={new Date(event.ts).toLocaleString()}
+              <span class="time num" use:tooltip={formatAbsolute(event.ts)}
                 >{formatClock(event.ts)}</span
               >
               <span

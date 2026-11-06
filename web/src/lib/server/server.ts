@@ -1,3 +1,5 @@
+import { missing } from '../i18n';
+export { missing };
 import { formatBytes, formatNumber } from '../i18n';
 import type {
   CollectorState,
@@ -16,9 +18,6 @@ import {
   type TrendView,
 } from '../overview/headroom';
 import { normalizeStatus, statusLabel } from '../ui/status';
-
-/** The missing-value glyph, the same everywhere (UI-18). */
-export const missing = '—';
 
 /** Chart groups on Server › Metrics that an instrument can focus. */
 export const focusableCharts = new Set([

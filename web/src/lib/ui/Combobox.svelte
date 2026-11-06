@@ -123,7 +123,8 @@
       activeIndex = Math.max(0, activeIndex - 1);
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      if (results[activeIndex]) choose(results[activeIndex]);
+      const picked = results[activeIndex];
+      if (picked) choose(picked);
     } else if (event.key === 'Escape') {
       event.preventDefault();
       hide();

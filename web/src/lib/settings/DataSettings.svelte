@@ -3,7 +3,7 @@
   import { retentionPresets, type SettingsSnapshot } from '../api/settings';
   import { monitorHealth, previewDeletion } from '../api/access';
   import { errorMessage } from '../api/client';
-  import { formatDate } from '../i18n';
+  import { formatAbsolute } from '../ui/relative-time';
   import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import { formatBytes } from '../i18n';
   import Field from '../ui/Field.svelte';
@@ -301,7 +301,7 @@
     <p class="cut">
       Up to <strong class="num">{pendingCut.rows.toLocaleString()}</strong>
       rows are older than
-      <span class="num">{formatDate(pendingCut.cutoff)}</span>
+      <span class="num">{formatAbsolute(pendingCut.cutoff)}</span>
       today. Tiers that keep longer hold on to theirs.
     </p>
   {/if}

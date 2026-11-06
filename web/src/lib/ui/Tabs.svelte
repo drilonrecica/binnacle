@@ -57,6 +57,7 @@
     else return;
     event.preventDefault();
     const target = tabs[next];
+    if (!target) return;
     select(target.id);
     (event.currentTarget as HTMLElement).parentElement
       ?.querySelector<HTMLElement>(`#${CSS.escape(tabId(prefix, target.id))}`)

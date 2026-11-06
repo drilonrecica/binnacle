@@ -14,6 +14,7 @@
 </script>
 
 <script lang="ts">
+  import { missing } from '../i18n';
   import { onMount } from 'svelte';
   import { fetchMetrics } from '../api/metrics';
   import { listEvents } from '../api/events';
@@ -254,7 +255,7 @@
                   ></span>{item.label}
                 </dt>
                 <dd class="num">
-                  {value == null ? '—' : formatters[group.format](value)}
+                  {value == null ? missing : formatters[group.format](value)}
                 </dd>
               </div>
             {/each}

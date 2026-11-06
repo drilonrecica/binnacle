@@ -56,8 +56,8 @@ describe('server instruments', () => {
     ]);
     // Headroom stops at eight; Server shows all nine disks.
     expect(instruments).toHaveLength(12);
-    expect(instruments[2].value).toBe(50);
-    expect(instruments[3].trend).toEqual({
+    expect(instruments[2]!.value).toBe(50);
+    expect(instruments[3]!.trend).toEqual({
       text: 'full in ~3 d',
       tone: 'critical',
     });
@@ -66,7 +66,7 @@ describe('server instruments', () => {
   it('says when swap is not configured instead of showing zero', () => {
     const value = snapshot();
     value.host.swapTotalBytes = 0;
-    const swap = serverInstruments(value, gaugeThresholds([]), [])[2];
+    const swap = serverInstruments(value, gaugeThresholds([]), [])[2]!;
     expect(swap.value).toBeNull();
     expect(swap.caption).toBe('no swap configured');
   });
@@ -75,7 +75,7 @@ describe('server instruments', () => {
     const value = snapshot({ filesystems: [] });
     value.host.diskUsedBytes = 30;
     value.host.diskTotalBytes = 120;
-    const [root] = serverFilesystems(value);
+    const root = serverFilesystems(value)[0]!;
     expect(root).toMatchObject({ mountPoint: '/', usedPct: 25 });
     expect(root.availableBytes).toBe(90);
   });

@@ -14,8 +14,6 @@
   import { sessionEndedEvent } from './lib/api/client';
   import { pageTitle } from './lib/shell/navigation';
   import { shell } from './lib/shell/shell-state.svelte';
-  import AppShell from './lib/shell/AppShell.svelte';
-  import RouteView from './lib/shell/RouteView.svelte';
   import {
     authMethods,
     bootstrapExternalSession,
@@ -209,9 +207,21 @@
     <Onboarding oncomplete={onboardingComplete} />
   </main>
 {:else if session}
-  <AppShell {session} {live} onlogout={signedOut}>
-    <RouteView {live} viewer={session.user.username} onsignedout={signedOut} />
-  </AppShell>
+  <!-- The shell and every page load after sign-in, not on the login screen. -->
+  {#await Promise.all( [import('./lib/shell/AppShell.svelte'), import('./lib/shell/RouteView.svelte')] )}
+    <main class="access-state" aria-busy="true">
+      <span class="access-mark"><BrandMark size={48} /></span>
+      <p role="status">Loading…</p>
+    </main>
+  {:then [{ default: AppShell }, { default: RouteView }]}
+    <AppShell {session} {live} onlogout={signedOut}>
+      <RouteView
+        {live}
+        viewer={session.user.username}
+        onsignedout={signedOut}
+      />
+    </AppShell>
+  {/await}
 {/if}
 
 <style>

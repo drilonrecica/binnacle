@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  formatUptime,
-  meterValue,
-  prioritizedResources,
-  staleResource,
-} from './watch';
+import { formatUptime, prioritizedResources, staleResource } from './watch';
 
 describe('production watch prioritization', () => {
   it('places unhealthy resources first and identifies stale values', () => {
@@ -12,7 +7,7 @@ describe('production watch prioritization', () => {
       { id: 'a', name: 'Healthy', status: 'healthy' },
       { id: 'b', name: 'Broken', status: 'down' },
     ]);
-    expect(values[0].name).toBe('Broken');
+    expect(values[0]!.name).toBe('Broken');
     expect(
       staleResource(
         {
@@ -26,10 +21,7 @@ describe('production watch prioritization', () => {
     ).toBe(true);
   });
 
-  it('bounds meters and formats missing or measured uptime', () => {
-    expect(meterValue(-2)).toBe(0);
-    expect(meterValue(140)).toBe(100);
-    expect(meterValue(null)).toBeNull();
+  it('formats missing or measured uptime', () => {
     expect(formatUptime(null)).toBe('—');
     expect(formatUptime(93_600)).toBe('1d 2h');
   });

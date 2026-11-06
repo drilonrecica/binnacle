@@ -54,7 +54,10 @@ describe('DataTable', () => {
     render(DataTable<Row>, props({ layout: 'cards' }));
     expect(screen.queryByRole('table')).toBeNull();
     const list = screen.getByRole('list', { name: 'Resources' });
-    const cards = within(list).getAllByRole('listitem');
+    const cards = within(list).getAllByRole('listitem') as [
+      HTMLElement,
+      ...HTMLElement[],
+    ];
     expect(cards).toHaveLength(3);
     // The first column heads the card; the rest are labelled fields.
     expect(cards[0].querySelector('.card-title')?.textContent?.trim()).toBe(

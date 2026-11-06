@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { missing } from '../i18n';
   import { onMount } from 'svelte';
   import Download from '@lucide/svelte/icons/download';
   import FileSearch from '@lucide/svelte/icons/file-search';
@@ -51,7 +52,7 @@
   );
 
   function display(metric: MonitorMetric) {
-    if (metric.value == null) return '—';
+    if (metric.value == null) return missing;
     if (metric.unit === 'bytes') return formatBytes(Number(metric.value));
     if (metric.unit === 'percent')
       return `${formatNumber(Number(metric.value))}%`;
@@ -69,7 +70,7 @@
   }
 
   function milliseconds(value: number | null) {
-    return value == null ? '—' : `${formatNumber(value)} ms`;
+    return value == null ? missing : `${formatNumber(value)} ms`;
   }
 
   async function loadHealth() {
@@ -294,7 +295,7 @@
       {#each deployment as key (key)}
         <div>
           <dt>{deploymentLabels[key] ?? key}</dt>
-          <dd><code>{snapshot?.values[key]?.value || '—'}</code></dd>
+          <dd><code>{snapshot?.values[key]?.value || missing}</code></dd>
         </div>
       {/each}
       <div>

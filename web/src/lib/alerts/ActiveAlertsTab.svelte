@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { missing } from '../i18n';
   import BellOff from '@lucide/svelte/icons/bell-off';
   import EllipsisVertical from '@lucide/svelte/icons/ellipsis-vertical';
   import ShieldCheck from '@lucide/svelte/icons/shield-check';
@@ -126,7 +127,7 @@
 {#snippet observedCell(row: Alert)}
   <span class="num"
     >{row.observedValue == null
-      ? '—'
+      ? missing
       : Math.round(row.observedValue * 10) / 10}</span
   >
 {/snippet}

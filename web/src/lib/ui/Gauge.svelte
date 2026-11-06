@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { missing } from '../i18n';
   import type { Snippet } from 'svelte';
   import StatusMarker from './StatusMarker.svelte';
   import { arcPath, arcPoint, clampReading, fraction } from './instrument';
@@ -56,7 +57,7 @@
     !over && reading != null && warnLimit != null && reading >= warnLimit,
   );
   const shown = $derived(
-    reading == null ? '—' : (valueText ?? String(Math.round(reading))),
+    reading == null ? missing : (valueText ?? String(Math.round(reading))),
   );
   const fillPath = $derived(
     reading == null || reading <= 0

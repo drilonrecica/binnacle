@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync } from 'svelte';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, waitFor } from '@testing-library/svelte';
 import type { LiveStore } from '../live.svelte';
 import { router } from '../router.svelte';
 import RouteView from './RouteView.svelte';
@@ -45,11 +45,22 @@ describe('RouteView', () => {
     );
   });
 
-  it('rebuilds an incident page when only the id changes (UI-4)', () => {
+  it('rebuilds an incident page when only the id changes (UI-4)', async () => {
     go('/incidents/inc_1');
     render(RouteView, { live, onsignedout: () => {} });
+    // Incident pages load on demand (UI-16).
+    await screen.findByTestId('stub');
     go('/incidents/inc_2');
+    await waitFor(() => expect(mounts).toEqual(['inc_1', 'inc_2']));
     expect(mounts).toEqual(['inc_1', 'inc_2']);
+  });
+
+  it('shows a loading state, then the lazily loaded page (UI-16)', async () => {
+    go('/settings/general');
+    render(RouteView, { live, onsignedout: () => {} });
+    expect(screen.getByText('Loading page…')).toBeTruthy();
+    expect(await screen.findByTestId('stub')).toBeTruthy();
+    expect(screen.queryByText('Loading page…')).toBeNull();
   });
 
   it('says so when an address matches no page', () => {

@@ -1,3 +1,4 @@
+import { missing } from './i18n';
 import type { LiveSnapshot } from './live.svelte';
 
 const rank: Record<string, number> = {
@@ -42,13 +43,9 @@ export function staleResource(
   );
 }
 
-export function meterValue(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value)) return null;
-  return Math.min(100, Math.max(0, value));
-}
-
 export function formatUptime(seconds: number | null | undefined): string {
-  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return '—';
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0)
+    return missing;
   const whole = Math.floor(seconds);
   const days = Math.floor(whole / 86_400);
   const hours = Math.floor((whole % 86_400) / 3_600);

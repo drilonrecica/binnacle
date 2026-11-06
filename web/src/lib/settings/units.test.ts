@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   bytesToInput,
-  formatGoDuration,
   humanDuration,
   inputToBytes,
   parseGoDuration,
@@ -21,13 +20,6 @@ describe('durations', () => {
     expect(parseGoDuration('5 s')).toBeNull();
     expect(parseGoDuration('2d')).toBeNull();
     expect(parseGoDuration('1h x')).toBeNull();
-  });
-
-  it('formats exact durations compactly', () => {
-    expect(formatGoDuration(5000)).toBe('5s');
-    expect(formatGoDuration(5_400_000)).toBe('1h30m');
-    expect(formatGoDuration(172_800_000)).toBe('48h');
-    expect(formatGoDuration(0)).toBe('0s');
   });
 
   it('phrases durations for humans', () => {

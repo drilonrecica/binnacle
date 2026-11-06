@@ -26,9 +26,9 @@
 </script>
 
 <script lang="ts">
+  import { missing } from '../i18n';
   import { onMount, tick } from 'svelte';
-  import uPlot from 'uplot';
-  import 'uplot/dist/uPlot.min.css';
+  import type uPlot from 'uplot';
   import {
     invalidateChartColors,
     readChartColors,
@@ -66,6 +66,9 @@
 
   let root = $state<HTMLDivElement | null>(null);
   let wrapper = $state<HTMLDivElement | null>(null);
+  // uPlot and its stylesheet load on first mount (UI-16): pages without a
+  // chart, and the login screen, never download them.
+  let uplot: typeof uPlot | undefined;
   let plot: uPlot | undefined;
   let hover = $state<{
     index: number;
@@ -81,17 +84,29 @@
 
   const aligned = $derived.by<uPlot.AlignedData>(() => {
     if (!series.length) return [[], []];
-    const tables = series.map(
-      (item) =>
-        [
-          item.points.map((point) => point.at),
-          item.points.map((point) => point.value),
-        ] as uPlot.AlignedData,
-    );
-    return tables.length === 1 ? tables[0] : uPlot.join(tables);
+    return alignSeries(series);
   });
 
   const xs = $derived(aligned[0] as number[]);
+
+  /** Series on one shared, sorted time axis; gaps become null. */
+  function alignSeries(items: ChartSeries[]): uPlot.AlignedData {
+    const first = items[0];
+    if (items.length === 1 && first) {
+      return [
+        first.points.map((point) => point.at),
+        first.points.map((point) => point.value),
+      ];
+    }
+    const times = [
+      ...new Set(items.flatMap((item) => item.points.map((p) => p.at))),
+    ].sort((a, b) => a - b);
+    const columns = items.map((item) => {
+      const byTime = new Map(item.points.map((p) => [p.at, p.value]));
+      return times.map((at) => byTime.get(at) ?? null);
+    });
+    return [times, ...columns];
+  }
 
   let measureContext: CanvasRenderingContext2D | null = null;
   /** Widest formatted tick label in CSS pixels, plus room for the gap. */
@@ -260,9 +275,9 @@
   }
 
   function rebuild() {
-    if (!root) return;
+    if (!root || !uplot) return;
     plot?.destroy();
-    plot = new uPlot(options(), aligned, root);
+    plot = new uplot(options(), aligned, root);
     // uPlot paints the cursor with its own CSS variables.
     root.style.setProperty('--uplot-cursor', colors.cursor);
   }
@@ -270,7 +285,16 @@
   onMount(() => {
     if (!root || !wrapper) return;
     width = wrapper.clientWidth;
-    rebuild();
+    let disposed = false;
+    void Promise.all([import('uplot'), import('uplot/dist/uPlot.min.css')])
+      .then(([module]) => {
+        if (disposed) return;
+        uplot = module.default;
+        rebuild();
+      })
+      .catch(() => {
+        /* The inspector and its text summary still describe the data. */
+      });
     const resize = new ResizeObserver(() => {
       if (!wrapper) return;
       width = wrapper.clientWidth;
@@ -287,6 +311,7 @@
       attributeFilter: ['data-theme'],
     });
     return () => {
+      disposed = true;
       resize.disconnect();
       theme.disconnect();
       plot?.destroy();
@@ -311,6 +336,7 @@
   const hoverValues = $derived.by(() => {
     if (!hover) return null;
     const at = xs[hover.index];
+    if (at === undefined) return null;
     return {
       at,
       notes: hover.notes,
@@ -354,7 +380,7 @@
     selected = next;
     void tick().then(() => {
       if (!plot) return;
-      const left = plot.valToPos(xs[next], 'x');
+      const left = plot.valToPos(xs[next] ?? 0, 'x');
       plot.setCursor({ left, top: plot.bbox.height / 2 / devicePixelRatio });
     });
   }
@@ -390,7 +416,7 @@
         <span class="swatch" style:background={seriesColor(index, item)}></span>
         <span class="legend-label">{item.label}</span>
         <span class="legend-value"
-          >{current == null ? '—' : formatValue(current)}</span
+          >{current == null ? missing : formatValue(current)}</span
         >
       </li>
     {/each}
@@ -418,10 +444,12 @@
         : 'gaps'}.{/if}
   </span>
   {#if selected != null && xs[selected] != null}
+    {@const readoutAt = xs[selected] ?? 0}
     <span class="inspector-readout" role="status">
-      {formatAbsolute(xs[selected] * 1000)}:
+      {formatAbsolute(readoutAt * 1000)}:
       {#each series as item, index (item.key)}
-        {@const value = (aligned[index + 1] as Array<number | null>)[selected]}
+        {@const value =
+          (aligned[index + 1] as Array<number | null>)[selected] ?? null}
         {item.label}
         {value == null ? 'no data' : formatValue(value)}{index <
         series.length - 1

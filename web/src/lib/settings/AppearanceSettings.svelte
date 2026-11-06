@@ -56,7 +56,11 @@
     const pins = [...prefs.value.pinnedResources];
     const target = index + delta;
     if (target < 0 || target >= pins.length) return;
-    [pins[index], pins[target]] = [pins[target], pins[index]];
+    const moved = pins[index];
+    const other = pins[target];
+    if (moved === undefined || other === undefined) return;
+    pins[index] = other;
+    pins[target] = moved;
     void save({ pinnedResources: pins }, 'Pins reordered');
   }
 

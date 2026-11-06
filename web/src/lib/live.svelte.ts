@@ -225,8 +225,7 @@ export class LiveStore {
 
   constructor(options: LiveStoreOptions = {}) {
     this.url = options.url ?? '/api/v1/live';
-    this.createSource =
-      options.createSource ?? ((url) => new EventSource(url) as LiveSource);
+    this.createSource = options.createSource ?? ((url) => new EventSource(url));
     this.checkSession = options.sessionActive ?? (() => sessionActive());
     this.now = options.now ?? (() => Date.now());
     this.connectTimeoutMs = options.connectTimeoutMs ?? connectTimeoutMs;

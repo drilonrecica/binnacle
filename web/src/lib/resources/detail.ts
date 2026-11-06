@@ -1,10 +1,9 @@
+import { missing } from '../i18n';
+export { missing };
 import type { Sample } from '../live-series.svelte';
 import { formatRate } from '../i18n';
 import { cpuDirection, type TrendView } from '../overview/headroom';
 import type { TabItem } from '../ui/Tabs.svelte';
-
-/** The missing-value glyph, the same everywhere (UI-18). */
-export const missing = '—';
 
 /**
  * Tabs of the resource detail (DESIGN §Resources). Archived resources have

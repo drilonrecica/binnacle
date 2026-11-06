@@ -90,7 +90,10 @@ describe('session expiry (UI-5)', () => {
     mocks.currentSession.mockResolvedValue(session);
     render(App);
     await waitFor(() => expect(fakeLive.current?.state).toBe('live'));
-    expect(document.querySelector('main#content')).not.toBeNull();
+    // The shell loads on demand after sign-in.
+    await waitFor(() =>
+      expect(document.querySelector('main#content')).not.toBeNull(),
+    );
 
     fakeLive.current!.state = 'unauthorized';
     flushSync();

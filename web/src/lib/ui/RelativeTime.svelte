@@ -20,6 +20,7 @@
 </script>
 
 <script lang="ts">
+  import { missing } from '../i18n';
   import { onMount } from 'svelte';
   import { formatAbsolute, formatRelative } from './relative-time';
   import { tooltip } from './tooltip';
@@ -35,7 +36,9 @@
   onMount(subscribe);
 
   const iso = $derived(value == null ? '' : new Date(value).toISOString());
-  const relative = $derived(value == null ? '—' : formatRelative(value, now));
+  const relative = $derived(
+    value == null ? missing : formatRelative(value, now),
+  );
   const absolute = $derived(value == null ? '' : formatAbsolute(value));
 </script>
 

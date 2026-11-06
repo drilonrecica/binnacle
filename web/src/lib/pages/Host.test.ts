@@ -137,7 +137,7 @@ describe('Server page', () => {
   it('asks the events API for the backend marker types only (UI-11)', async () => {
     open('/server');
     await waitFor(() => expect(listEvents).toHaveBeenCalled());
-    const [query] = vi.mocked(listEvents).mock.calls[0];
+    const [query] = vi.mocked(listEvents).mock.calls[0]!;
     expect(query.type).toBe(annotationTypeFilter);
     expect(query.type?.split(',')).toContain('host_reboot');
     expect(query.type?.split(',')).not.toContain('boot');

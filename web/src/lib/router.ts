@@ -71,10 +71,10 @@ export function matchRoute(pathname: string): RouteMatch | null {
     const params: Record<string, string> = {};
     let ok = true;
     for (let index = 0; index < expected.length; index++) {
-      const token = expected[index];
+      const token = expected[index] ?? '';
       if (token.startsWith(':')) {
         try {
-          params[token.slice(1)] = decodeURIComponent(actual[index]);
+          params[token.slice(1)] = decodeURIComponent(actual[index] ?? '');
         } catch {
           ok = false;
           break;

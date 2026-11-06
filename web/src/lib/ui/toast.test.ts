@@ -23,7 +23,7 @@ describe('toast store (UI-17)', () => {
       duration: 1000,
       action: { label: 'Undo', onclick: () => {} },
     });
-    expect(store.items[0].duration).toBe(0);
+    expect(store.items[0]!.duration).toBe(0);
     vi.advanceTimersByTime(60_000);
     expect(store.items).toHaveLength(1);
   });

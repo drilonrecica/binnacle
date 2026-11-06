@@ -158,7 +158,7 @@
     untrack(() => {
       const fresh = events.filter((event) => event.seq > seenLiveSeq);
       if (!fresh.length) return;
-      seenLiveSeq = fresh[fresh.length - 1].seq;
+      seenLiveSeq = fresh[fresh.length - 1]?.seq ?? seenLiveSeq;
       if (!liveOn) return;
       const held = new Set(rows.map((row) => row.id));
       const incoming = fresh

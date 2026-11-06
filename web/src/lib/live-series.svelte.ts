@@ -286,7 +286,8 @@ export class LiveSeriesStore {
     if (newest == null) return samples;
     const since = newest - this.windowMs;
     let start = 0;
-    while (start < samples.length && samples[start].at < since) start++;
+    while (start < samples.length && (samples[start]?.at ?? since) < since)
+      start++;
     start = Math.max(start, samples.length - this.capacity);
     return start > 0 ? samples.slice(start) : samples;
   }

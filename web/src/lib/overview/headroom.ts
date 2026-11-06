@@ -342,8 +342,8 @@ export const pinnedGroup = 'Pinned';
 
 function rankOf(resource: LiveResource, snapshotAt: string): number {
   if (resource.status !== 'archived' && staleResource(resource, snapshotAt))
-    return healthRank.stale;
-  return healthRank[resource.status] ?? healthRank.unknown;
+    return healthRank.stale ?? 0;
+  return healthRank[resource.status] ?? healthRank.unknown ?? 0;
 }
 
 /**

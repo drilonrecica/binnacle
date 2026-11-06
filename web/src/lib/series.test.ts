@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bucketize, delta, lastDefined, mergeSparkline } from './series';
+import { bucketize, mergeSparkline } from './series';
 
 describe('bucketize', () => {
   it('averages samples per slot and leaves empty slots null', () => {
@@ -45,14 +45,5 @@ describe('mergeSparkline', () => {
   it('returns the base when nothing is newer', () => {
     const base = [1, null, 3];
     expect(mergeSparkline(base, 60, 1000, [{ at: 500, value: 9 }])).toBe(base);
-  });
-});
-
-describe('delta and lastDefined', () => {
-  it('compares oldest and newest defined values', () => {
-    expect(delta([null, 2, 5, null, 9])).toBe(7);
-    expect(delta([null, 4])).toBeNull();
-    expect(lastDefined([1, 2, null])).toBe(2);
-    expect(lastDefined([null])).toBeNull();
   });
 });
