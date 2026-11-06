@@ -111,7 +111,7 @@ test('logs prompt on resources has no detectable a11y violations', async ({
   await scan(page);
 });
 
-test('alerts tabs have no detectable a11y violations', async ({ page }) => {
+test('incidents tabs have no detectable a11y violations', async ({ page }) => {
   await mockApp(page);
   await page.route('**/api/v1/alert-rules', (route) =>
     route.fulfill({
@@ -138,7 +138,7 @@ test('alerts tabs have no detectable a11y violations', async ({ page }) => {
     page.getByRole('heading', { name: 'Incidents', level: 1 }),
   ).toBeVisible();
   await scan(page);
-  for (const tab of ['Firing', 'Rules', 'Checks', 'Silences']) {
+  for (const tab of ['Resolved', 'Firing', 'Checks', 'Silences']) {
     await page.getByRole('tab', { name: new RegExp(tab) }).click();
     await scan(page);
   }
@@ -175,7 +175,10 @@ test('incident detail has no detectable a11y violations', async ({ page }) => {
     }),
   );
   await page.goto('/incidents/inc-1');
-  await expect(page.getByText('API is unhealthy')).toBeVisible();
+  await expect(page.getByText('API is unhealthy').first()).toBeVisible();
+  await scan(page);
+  await page.getByRole('button', { name: 'Mark as seen' }).click();
+  await expect(page.getByText(/this browser only/)).toBeVisible();
   await scan(page);
 });
 
@@ -214,10 +217,12 @@ test('command palette and dialogs have no detectable a11y violations', async ({
   ).toBeVisible();
   await scan(page);
   await page.keyboard.press('Escape');
-  await page.goto('/incidents?tab=checks');
-  await page.getByRole('button', { name: 'New check' }).first().click();
+  // The check dialog moves to Settings › Alerting (P4-11); the Incidents page
+  // keeps the silence dialog.
+  await page.goto('/incidents');
+  await page.getByRole('button', { name: 'Silence…' }).click();
   await expect(
-    page.getByRole('dialog', { name: 'New health check' }),
+    page.getByRole('dialog', { name: 'Silence notifications' }),
   ).toBeVisible();
   await scan(page);
 });

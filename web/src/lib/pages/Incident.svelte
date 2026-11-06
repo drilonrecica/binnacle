@@ -1,39 +1,61 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import BellOff from '@lucide/svelte/icons/bell-off';
+  import Eye from '@lucide/svelte/icons/eye';
   import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
   import type { LiveStore } from '../live.svelte';
   import {
     getIncident,
+    incidentTitle,
     targetLabel,
     type Alert,
     type Delivery,
-    type Incident,
   } from '../api/incidents';
   import { listChannels, retryDelivery, type Channel } from '../api/channels';
   import { deliveryStatusLabel } from '../api/channels';
+  import type { SilenceScope } from '../api/silences';
   import { errorMessage, isApiError } from '../api/client';
   import { resourcePath } from '../router';
   import { ruleInfo } from '../alerts/rule-catalog';
+  import { seen } from '../alerts/seen.svelte';
+  import SilenceDialog from '../alerts/SilenceDialog.svelte';
+  import { TabSource } from '../alerts/tab-source.svelte';
   import Badge from '../ui/Badge.svelte';
   import Button from '../ui/Button.svelte';
   import Card from '../ui/Card.svelte';
   import DataTable, { type Column } from '../ui/DataTable.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
+  import ErrorState from '../ui/ErrorState.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
   import RelativeTime from '../ui/RelativeTime.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
+  import StaleBanner from '../ui/StaleBanner.svelte';
+  import Status from '../ui/Status.svelte';
   import StatusPill from '../ui/StatusPill.svelte';
   import { toasts } from '../ui/toast.svelte';
-  import { formatAbsolute, formatSpan } from '../ui/relative-time';
+  import { formatAbsolute, formatClock, formatSpan } from '../ui/relative-time';
   import { severityLabel, severityTone } from '../ui/status';
 
-  let { live, id }: { live: LiveStore; id: string } = $props();
+  let {
+    live,
+    id,
+    viewer = '',
+  }: {
+    live: LiveStore;
+    id: string;
+    /** The signed-in username, recorded by the local "seen by" marker. */
+    viewer?: string;
+  } = $props();
 
-  let incident = $state<Incident | null>(null);
+  const source = new TabSource((signal) => getIncident(id, signal));
   let channels = $state<Channel[]>([]);
   let notFound = $state(false);
-  let error = $state('');
   let retrying = $state<string | null>(null);
+  let silenceOpen = $state(false);
+  let controller: AbortController | undefined;
+
+  const incident = $derived(source.data);
+  const mark = $derived(incident ? seen.get(incident.id) : undefined);
 
   const names = $derived(
     new Map(
@@ -53,21 +75,27 @@
         : targetLabel(incident.targetType, incident.targetId)
       : '',
   );
+  // Stored titles embed the raw target id; show the resource name (UI-18).
   const title = $derived(
-    incident
-      ? incident.targetType === 'resource' &&
-        incident.title.includes(incident.targetId)
-        ? `Incident on ${targetName}`
-        : incident.title
-      : 'Incident',
+    incident ? incidentTitle(incident, targetName) : 'Incident',
+  );
+  const silenceTarget = $derived<{ scope: SilenceScope; id: string }>(
+    incident?.targetType === 'resource'
+      ? { scope: 'resource', id: incident.targetId }
+      : { scope: 'server', id: '' },
   );
 
   async function load() {
+    const signal = controller?.signal;
     try {
-      incident = await getIncident(id);
+      const value = await getIncident(id, signal);
+      if (signal?.aborted) return;
+      source.settle({ status: 'fulfilled', value });
     } catch (reason) {
-      if (isApiError(reason) && reason.status === 404) notFound = true;
-      else error = errorMessage(reason);
+      if (signal?.aborted) return;
+      if (isApiError(reason) && reason.status === 404 && !source.data)
+        notFound = true;
+      else source.settle({ status: 'rejected', reason });
     }
   }
 
@@ -85,16 +113,23 @@
   }
 
   onMount(() => {
+    controller = new AbortController();
     void load();
     void listChannels()
       .then((value) => (channels = value))
       .catch(() => {
-        /* Channel names are decoration. */
+        /* Channel names are decoration; ids are shown instead. */
       });
+    // A resolved incident no longer changes, so only open ones are polled.
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load();
+      if (document.visibilityState !== 'visible') return;
+      if (source.data?.status === 'resolved') return;
+      void load();
     }, 15_000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      controller?.abort();
+    };
   });
 
   const alertColumns: Column<Alert>[] = [
@@ -208,6 +243,42 @@
   {/if}
 {/snippet}
 
+{#snippet alertCard(row: Alert)}
+  <div class="card">
+    <div class="card-top">
+      <span>{row.message}</span>
+      {@render alertStatus(row)}
+    </div>
+    <div class="card-meta">
+      <Badge tone={severityTone(row.severity)}
+        >{severityLabel(row.severity)}</Badge
+      >
+      <span>{ruleInfo(row.family, row.family).title}</span>
+      <span>started <RelativeTime value={row.startedAt} /></span>
+      {#if row.resolvedAt}<span
+          >resolved <RelativeTime value={row.resolvedAt} /></span
+        >{/if}
+    </div>
+  </div>
+{/snippet}
+{#snippet deliveryCard(row: Delivery)}
+  <div class="card">
+    <div class="card-top">
+      {@render deliveryChannel(row)}
+      {@render deliveryStatus(row)}
+    </div>
+    <div class="card-meta">
+      <span class="capitalize">{row.eventType}</span>
+      <span
+        >{row.attemptCount}
+        {row.attemptCount === 1 ? 'attempt' : 'attempts'}</span
+      >
+      {@render deliveryWhen(row)}
+    </div>
+    {@render deliveryActions(row)}
+  </div>
+{/snippet}
+
 {#if incident}
   {@const current = incident}
   <PageHeader
@@ -217,12 +288,12 @@
   >
     {#snippet meta()}
       {#if current.status === 'open'}
-        <StatusPill
-          status={current.severity === 'critical' ? 'down' : 'degraded'}
+        <Status
+          tone={severityTone(current.severity)}
           label={`Open · ${severityLabel(current.severity)}`}
         />
       {:else}
-        <StatusPill status="healthy" label="Resolved" />
+        <Status tone="ok" label="Resolved" />
       {/if}
       {#if current.targetType === 'resource'}
         <a class="target" href={resourcePath(current.targetId)}>{targetName}</a>
@@ -241,19 +312,66 @@
         <span class="muted">open for {formatSpan(current.openedAt)}</span>
       {/if}
     {/snippet}
+    {#snippet actions()}
+      {#if current.status === 'open'}
+        <Button onclick={() => (silenceOpen = true)}>
+          {#snippet icon()}<BellOff />{/snippet}
+          Silence…
+        </Button>
+      {/if}
+    {/snippet}
   </PageHeader>
 
   <div class="stack">
+    {#if source.stale}
+      <StaleBanner
+        message={`This incident could not be refreshed: ${source.error}`}
+        since={source.loadedAt}
+      >
+        <Button size="sm" variant="quiet" onclick={() => void load()}
+          >Try again</Button
+        >
+      </StaleBanner>
+    {/if}
+
+    <section class="seen" aria-labelledby="incident-seen-title">
+      <h2 id="incident-seen-title" class="sr-only">Seen by</h2>
+      <Eye aria-hidden="true" />
+      {#if mark}
+        <p>
+          Seen by <strong>{mark.by}</strong> at
+          <time datetime={mark.at}
+            >{formatClock(mark.at, undefined, false)}</time
+          >
+          <span class="muted"
+            >· {formatAbsolute(mark.at)} · this browser only</span
+          >
+        </p>
+        <Button size="sm" variant="quiet" onclick={() => seen.clear(current.id)}
+          >Clear</Button
+        >
+      {:else}
+        <p class="muted">
+          Not marked as seen in this browser. Marking it tells anyone using this
+          browser that someone is on it; it is not sent to the server.
+        </p>
+        <Button size="sm" onclick={() => seen.mark(current.id, viewer)}
+          >Mark as seen</Button
+        >
+      {/if}
+    </section>
+
     <Card
       title="Alerts in this incident"
       description="The incident stays open while any member alert is firing and resolves itself when the last one clears."
       padded={false}
     >
       <DataTable
-        rows={incident.alerts ?? []}
+        rows={current.alerts ?? []}
         columns={alertColumns}
         rowKey={(row) => row.id}
         caption="Member alerts"
+        mobileCard={alertCard}
       >
         {#snippet empty()}<EmptyState
             title="No alerts recorded"
@@ -267,14 +385,15 @@
       padded={false}
     >
       <DataTable
-        rows={incident.deliveries ?? []}
+        rows={current.deliveries ?? []}
         columns={deliveryColumns}
         rowKey={(row) => row.id}
         caption="Notification deliveries"
+        mobileCard={deliveryCard}
       >
         {#snippet empty()}<EmptyState
             title="No notifications sent"
-            description="Add a channel under Settings → Notifications to be told about incidents."
+            description="Add a channel under Settings › Notifications to be told about incidents."
             compact
             ><Button href="/settings/notifications"
               >Notification settings</Button
@@ -283,6 +402,13 @@
       </DataTable>
     </Card>
   </div>
+
+  <SilenceDialog
+    bind:open={silenceOpen}
+    snapshot={live.snapshot}
+    scope={silenceTarget.scope}
+    scopeId={silenceTarget.id}
+  />
 {:else if notFound}
   <PageHeader
     title="Incident not found"
@@ -294,12 +420,16 @@
   >
     <Button href="/incidents" variant="primary">Back to incidents</Button>
   </EmptyState>
-{:else if error}
+{:else if source.failed}
   <PageHeader
     title="Incident"
     crumbs={[{ label: 'Incidents', href: '/incidents' }]}
   />
-  <p class="error" role="alert">{error}</p>
+  <ErrorState
+    title="This incident could not be loaded"
+    description={source.error}
+    onretry={() => void load()}
+  />
 {:else}
   <div class="loading" role="status" aria-label="Loading incident">
     <Skeleton height={32} width={320} />
@@ -328,8 +458,46 @@
   .capitalize {
     text-transform: capitalize;
   }
-  .error {
-    color: var(--critical-fg);
+  .seen {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--panel);
+    font-size: var(--text-meta);
+  }
+  .seen > :global(svg) {
+    width: 16px;
+    height: 16px;
+    color: var(--muted);
+  }
+  .seen p {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .card {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    justify-items: start;
+  }
+  .card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    width: 100%;
+  }
+  .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-3);
+    color: var(--muted);
+    font-size: var(--text-meta);
   }
   .loading {
     display: grid;

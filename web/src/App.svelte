@@ -205,6 +205,6 @@
   </main>
 {:else if session}
   <AppShell {session} {live} onlogout={signedOut}>
-    <RouteView {live} onsignedout={signedOut} />
+    <RouteView {live} viewer={session.user.username} onsignedout={signedOut} />
   </AppShell>
 {/if}

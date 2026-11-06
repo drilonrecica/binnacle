@@ -6,6 +6,28 @@ members promote its severity. An incident resolves after every member alert
 resolves. A later alert opens a new incident; acknowledgement, assignment, and
 manual resolution are intentionally outside v0.3.
 
+## The Incidents page
+
+The Incidents page has five tabs: **Open** and **Resolved** incidents,
+**Firing** alerts, **Checks** (the live pass/fail result of every HTTP check,
+with HTTP code, latency, last and next run), and **Silences**. Rules and checks
+are configuration and are managed under Settings › Alerting; the Checks tab is
+read-only and links there.
+
+Each tab loads on its own. If one request fails, that tab says so with a retry
+and the other tabs keep working; a tab never shows an empty list or an
+all-clear because its data could not be fetched. If a refresh fails after a
+good load, the last rows stay on screen under a notice with the time they were
+loaded. Open incidents, firing alerts and check results refresh every 15
+seconds while the page is visible; resolved incidents and silences refresh when
+their tab is opened.
+
+An incident's page lists its member alerts and notification deliveries, can
+create a silence for its target, and offers **Mark as seen**. The seen marker
+records who marked it and when, in this browser's local storage only: it is
+not sent to the server, other browsers do not see it, and it does not change
+the incident. It is a note that someone is looking, not an acknowledgement.
+
 On startup, firing alerts without incident membership are reconciled without
 sending historical notifications. Resolved incidents are retained for one
 year; completed delivery records are retained for 90 days.

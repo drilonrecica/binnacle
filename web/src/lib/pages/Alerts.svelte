@@ -2,46 +2,56 @@
   import { onMount, untrack } from 'svelte';
   import BellOff from '@lucide/svelte/icons/bell-off';
   import type { LiveStore } from '../live.svelte';
-  import { listRules, type Rule } from '../api/alerts';
-  import { listChecks, type Check } from '../api/checks';
-  import {
-    listAlerts,
-    listIncidents,
-    type Alert,
-    type Incident,
-  } from '../api/incidents';
+  import { listRules } from '../api/alerts';
+  import { listChecks } from '../api/checks';
+  import { listAlerts, listIncidents } from '../api/incidents';
   import {
     listSilences,
-    type Silence,
+    silenceActive,
     type SilenceScope,
   } from '../api/silences';
-  import { errorMessage } from '../api/client';
   import { router } from '../router.svelte';
   import { shell } from '../shell/shell-state.svelte';
   import ActiveAlertsTab from '../alerts/ActiveAlertsTab.svelte';
-  import ChecksTab from '../alerts/ChecksTab.svelte';
+  import CheckStatusTab from '../alerts/CheckStatusTab.svelte';
   import IncidentsTab from '../alerts/IncidentsTab.svelte';
-  import RulesTab from '../alerts/RulesTab.svelte';
   import SilenceDialog from '../alerts/SilenceDialog.svelte';
   import SilencesTab from '../alerts/SilencesTab.svelte';
+  import SourceState from '../alerts/SourceState.svelte';
+  import { refreshSources, TabSource } from '../alerts/tab-source.svelte';
   import Button from '../ui/Button.svelte';
   import Card from '../ui/Card.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
   import Tabs, { tabPanelId, tabId } from '../ui/Tabs.svelte';
-  import { toasts } from '../ui/toast.svelte';
 
   let { live }: { live: LiveStore } = $props();
 
-  let tab = $state('incidents');
-  let incidents = $state<Incident[]>([]);
-  let alerts = $state<Alert[]>([]);
-  let rules = $state<Rule[]>([]);
-  let checks = $state<Check[]>([]);
-  let silences = $state<Silence[]>([]);
-  let loading = $state(true);
+  /** Rows asked for per incident list. */
+  const pageSize = 100;
+  /** How often the lists that change on their own are refreshed. */
+  const pollMs = 15_000;
+
+  // One source per tab, each loaded and failing on its own (UI-9).
+  const open = new TabSource((signal) =>
+    listIncidents({ status: 'open', limit: pageSize }, signal),
+  );
+  const resolved = new TabSource((signal) =>
+    listIncidents({ status: 'resolved', limit: pageSize }, signal),
+  );
+  const firing = new TabSource((signal) =>
+    listAlerts({ status: 'firing', limit: pageSize }, signal),
+  );
+  const checks = new TabSource((signal) => listChecks(signal));
+  const silences = new TabSource((signal) => listSilences(false, signal));
+  // Rules only name silence scopes and fill the silence dialog; they are
+  // configuration, so they are read once and never polled.
+  const rules = new TabSource((signal) => listRules(signal));
+
+  let tab = $state('open');
   let silenceOpen = $state(false);
   let silenceScope = $state<SilenceScope>('server');
   let silenceScopeId = $state('');
+  let controller: AbortController | undefined;
 
   const names = $derived(
     new Map(
@@ -51,40 +61,34 @@
       ]),
     ),
   );
-  const ruleNames = $derived(
-    new Map(rules.map((rule) => [rule.id, rule.name])),
+  const ruleList = $derived(
+    (rules.data ?? []).map((rule) => ({ id: rule.id, name: rule.name })),
   );
-  const openCount = $derived(
-    incidents.filter((incident) => incident.status === 'open').length,
+  const ruleNames = $derived(
+    new Map(ruleList.map((rule) => [rule.id, rule.name])),
+  );
+  const activeSilences = $derived(
+    silences.data?.filter((silence) => silenceActive(silence)).length,
   );
 
-  async function load(quiet = false) {
-    if (!quiet) loading = true;
-    try {
-      const [nextIncidents, nextAlerts, nextRules, nextChecks, nextSilences] =
-        await Promise.all([
-          listIncidents({ limit: 100 }),
-          listAlerts({ status: 'firing', limit: 100 }),
-          listRules(),
-          listChecks(),
-          listSilences(),
-        ]);
-      incidents = nextIncidents;
-      alerts = nextAlerts;
-      rules = nextRules;
-      checks = nextChecks;
-      silences = nextSilences;
-      shell.reportOpenIncidents(
-        incidents.filter((incident) => incident.status === 'open').length,
-      );
-    } catch (reason) {
-      if (!quiet)
-        toasts.error('Alert data could not be loaded', {
-          description: errorMessage(reason),
-        });
-    } finally {
-      loading = false;
-    }
+  /**
+   * What a refresh fetches: incidents, firing alerts and check results change
+   * on their own; resolved incidents and silences only matter while their
+   * tab is open; rules are configuration and stay as loaded.
+   */
+  function polled(): TabSource<unknown>[] {
+    const sources: TabSource<unknown>[] = [open, firing, checks];
+    if (tab === 'resolved') sources.push(resolved);
+    if (tab === 'silences') sources.push(silences);
+    return sources;
+  }
+
+  async function refresh(sources: TabSource<unknown>[]) {
+    const signal = controller?.signal;
+    await refreshSources(sources, signal);
+    if (signal?.aborted) return;
+    if (sources.includes(open) && open.data && !open.error)
+      shell.reportOpenIncidents(open.data.length);
   }
 
   function openSilence(scope: SilenceScope = 'server', scopeId = '') {
@@ -92,6 +96,15 @@
     silenceScopeId = scopeId;
     silenceOpen = true;
   }
+
+  // Older links named the tabs differently.
+  $effect(() => {
+    const requested = router.param('tab');
+    if (requested === 'incidents')
+      untrack(() => router.setQuery({ tab: null }));
+    else if (requested === 'active')
+      untrack(() => router.setQuery({ tab: 'firing' }));
+  });
 
   // Watched, not read once on mount: the palette's "Create a silence…" links
   // here with new=1 while this page may already be open (UI-20).
@@ -103,18 +116,27 @@
     });
   });
 
+  function selected(id: string) {
+    if (id === 'resolved') void refresh([resolved]);
+    else if (id === 'silences') void refresh([silences]);
+  }
+
   onMount(() => {
-    void load();
+    controller = new AbortController();
+    void refresh([open, resolved, firing, checks, silences, rules]);
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load(true);
-    }, 15_000);
-    return () => window.clearInterval(timer);
+      if (document.visibilityState === 'visible') void refresh(polled());
+    }, pollMs);
+    return () => {
+      window.clearInterval(timer);
+      controller?.abort();
+    };
   });
 </script>
 
 <PageHeader
   title="Incidents"
-  description="Incidents group firing alerts by target. Rules, checks, and silences decide what fires and who hears about it."
+  description="Incidents group firing alerts by target. Rules and checks that decide what fires are configured under Settings › Alerting."
 >
   {#snippet actions()}
     <Button onclick={() => openSilence()}>
@@ -123,101 +145,138 @@
     </Button>
   {/snippet}
   <Tabs
-    prefix="alerts"
-    label="Alert sections"
+    prefix="incidents"
+    label="Incident sections"
     param="tab"
     bind:active={tab}
+    onchange={selected}
     tabs={[
-      { id: 'incidents', label: 'Incidents', count: openCount },
-      { id: 'active', label: 'Firing', count: alerts.length },
-      { id: 'rules', label: 'Rules', count: rules.length || null },
-      { id: 'checks', label: 'Checks', count: checks.length || null },
-      {
-        id: 'silences',
-        label: 'Silences',
-        count:
-          silences.filter((silence) => Date.parse(silence.endsAt) > Date.now())
-            .length || null,
-      },
+      { id: 'open', label: 'Open', count: open.data?.length ?? null },
+      { id: 'resolved', label: 'Resolved' },
+      { id: 'firing', label: 'Firing', count: firing.data?.length ?? null },
+      { id: 'checks', label: 'Checks', count: checks.data?.length || null },
+      { id: 'silences', label: 'Silences', count: activeSilences || null },
     ]}
   />
 </PageHeader>
 
 <div
-  id={tabPanelId('alerts', 'incidents')}
+  id={tabPanelId('incidents', 'open')}
   role="tabpanel"
-  aria-labelledby={tabId('alerts', 'incidents')}
-  hidden={tab !== 'incidents'}
+  aria-labelledby={tabId('incidents', 'open')}
+  hidden={tab !== 'open'}
 >
-  {#if tab === 'incidents'}
-    <Card padded={false}><IncidentsTab {incidents} {loading} {names} /></Card>
+  {#if tab === 'open'}
+    <Card padded={false}>
+      <SourceState
+        source={open}
+        what="Open incidents"
+        onretry={() => void refresh([open])}
+      >
+        <IncidentsTab
+          mode="open"
+          incidents={open.data ?? []}
+          loading={open.loading}
+          limit={pageSize}
+          {names}
+        />
+      </SourceState>
+    </Card>
   {/if}
 </div>
 <div
-  id={tabPanelId('alerts', 'active')}
+  id={tabPanelId('incidents', 'resolved')}
   role="tabpanel"
-  aria-labelledby={tabId('alerts', 'active')}
-  hidden={tab !== 'active'}
+  aria-labelledby={tabId('incidents', 'resolved')}
+  hidden={tab !== 'resolved'}
 >
-  {#if tab === 'active'}
-    <Card padded={false}
-      ><ActiveAlertsTab
-        {alerts}
-        {loading}
-        {names}
-        onsilence={openSilence}
-        onchanged={() => void load(true)}
-      /></Card
-    >
+  {#if tab === 'resolved'}
+    <Card padded={false}>
+      <SourceState
+        source={resolved}
+        what="Resolved incidents"
+        onretry={() => void refresh([resolved])}
+      >
+        <IncidentsTab
+          mode="resolved"
+          incidents={resolved.data ?? []}
+          loading={resolved.loading}
+          limit={pageSize}
+          {names}
+        />
+      </SourceState>
+    </Card>
   {/if}
 </div>
 <div
-  id={tabPanelId('alerts', 'rules')}
+  id={tabPanelId('incidents', 'firing')}
   role="tabpanel"
-  aria-labelledby={tabId('alerts', 'rules')}
-  hidden={tab !== 'rules'}
+  aria-labelledby={tabId('incidents', 'firing')}
+  hidden={tab !== 'firing'}
 >
-  {#if tab === 'rules'}
-    <Card padded={false}
-      ><RulesTab {rules} {loading} onchanged={() => void load(true)} /></Card
-    >
+  {#if tab === 'firing'}
+    <Card padded={false}>
+      <SourceState
+        source={firing}
+        what="Firing alerts"
+        onretry={() => void refresh([firing])}
+      >
+        <ActiveAlertsTab
+          alerts={firing.data ?? []}
+          loading={firing.loading}
+          {names}
+          onsilence={openSilence}
+          onchanged={() => void refresh([firing, silences])}
+        />
+      </SourceState>
+    </Card>
   {/if}
 </div>
 <div
-  id={tabPanelId('alerts', 'checks')}
+  id={tabPanelId('incidents', 'checks')}
   role="tabpanel"
-  aria-labelledby={tabId('alerts', 'checks')}
+  aria-labelledby={tabId('incidents', 'checks')}
   hidden={tab !== 'checks'}
 >
   {#if tab === 'checks'}
-    <Card padded={false}
-      ><ChecksTab
-        {checks}
-        {loading}
-        snapshot={live.snapshot}
-        {names}
-        onchanged={() => void load(true)}
-      /></Card
-    >
+    <Card padded={false}>
+      <SourceState
+        source={checks}
+        what="Health checks"
+        onretry={() => void refresh([checks])}
+      >
+        <CheckStatusTab
+          checks={checks.data ?? []}
+          loading={checks.loading}
+          {names}
+        />
+      </SourceState>
+    </Card>
   {/if}
 </div>
 <div
-  id={tabPanelId('alerts', 'silences')}
+  id={tabPanelId('incidents', 'silences')}
   role="tabpanel"
-  aria-labelledby={tabId('alerts', 'silences')}
+  aria-labelledby={tabId('incidents', 'silences')}
   hidden={tab !== 'silences'}
 >
   {#if tab === 'silences'}
-    <Card padded={false}
-      ><SilencesTab
-        {silences}
-        {loading}
-        {names}
-        rules={ruleNames}
-        oncreate={() => openSilence()}
-        onchanged={() => void load(true)}
-      /></Card
-    >
+    <Card padded={false}>
+      <SourceState
+        source={silences}
+        what="Silences"
+        onretry={() => void refresh([silences])}
+      >
+        <SilencesTab
+          silences={silences.data ?? []}
+          loading={silences.loading}
+          {names}
+          rules={ruleNames}
+          oncreate={() => openSilence()}
+          onchanged={() => void refresh([silences])}
+        />
+      </SourceState>
+    </Card>
   {/if}
 </div>
 
@@ -226,6 +285,6 @@
   snapshot={live.snapshot}
   scope={silenceScope}
   scopeId={silenceScopeId}
-  rules={rules.map((rule) => ({ id: rule.id, name: rule.name }))}
-  oncreated={() => void load(true)}
+  rules={ruleList}
+  oncreated={() => void refresh([silences, firing])}
 />

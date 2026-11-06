@@ -1,38 +1,33 @@
 <script lang="ts">
+  import Eye from '@lucide/svelte/icons/eye';
+  import History from '@lucide/svelte/icons/history';
   import ShieldCheck from '@lucide/svelte/icons/shield-check';
   import type { Incident } from '../api/incidents';
-  import { targetLabel } from '../api/incidents';
+  import { incidentTitle, targetLabel } from '../api/incidents';
   import { incidentPath, resourcePath } from '../router';
-  import Badge from '../ui/Badge.svelte';
   import DataTable, { type Column } from '../ui/DataTable.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import RelativeTime from '../ui/RelativeTime.svelte';
-  import SegmentedControl from '../ui/SegmentedControl.svelte';
-  import StatusPill from '../ui/StatusPill.svelte';
-  import { formatSpan } from '../ui/relative-time';
+  import Status from '../ui/Status.svelte';
+  import { formatClock, formatSpan } from '../ui/relative-time';
   import { severityLabel, severityTone } from '../ui/status';
+  import { seen } from './seen.svelte';
 
   let {
     incidents,
-    loading = false,
+    mode,
     names,
+    loading = false,
+    limit,
   }: {
     incidents: Incident[];
-    loading?: boolean;
+    /** Open incidents need attention; resolved ones are history. */
+    mode: 'open' | 'resolved';
     names: Map<string, string>;
+    loading?: boolean;
+    /** The page size asked for, to say when older rows are not shown. */
+    limit?: number;
   } = $props();
-
-  let filter = $state<'open' | 'resolved' | 'all'>('open');
-
-  const rows = $derived(
-    incidents.filter((incident) =>
-      filter === 'all'
-        ? true
-        : filter === 'open'
-          ? incident.status === 'open'
-          : incident.status !== 'open',
-    ),
-  );
 
   function targetName(incident: Incident) {
     if (incident.targetType === 'resource')
@@ -41,18 +36,19 @@
   }
 
   function title(incident: Incident) {
-    // Backend titles for resource incidents embed the raw id; show the name instead.
-    if (
-      incident.targetType === 'resource' &&
-      incident.title.includes(incident.targetId)
-    ) {
-      return `Incident on ${targetName(incident)}`;
-    }
-    return incident.title;
+    // Stored titles embed the raw target id; show the resource name (UI-18).
+    return incidentTitle(incident, targetName(incident));
   }
 
-  const columns: Column<Incident>[] = [
-    { key: 'status', label: 'Status', width: '130px', cell: statusCell },
+  const columns = $derived<Column<Incident>[]>([
+    {
+      key: 'severity',
+      label: mode === 'open' ? 'Severity' : 'Status',
+      width: '120px',
+      sortable: mode === 'open',
+      sortValue: (row) => (row.severity === 'critical' ? 0 : 1),
+      cell: severityCell,
+    },
     {
       key: 'title',
       label: 'Incident',
@@ -63,9 +59,9 @@
     { key: 'target', label: 'Target', cell: targetCell },
     {
       key: 'alerts',
-      label: 'Alerts',
+      label: mode === 'open' ? 'Firing / alerts' : 'Alerts',
       align: 'right',
-      width: '110px',
+      width: '120px',
       cell: alertsCell,
     },
     {
@@ -79,27 +75,42 @@
     },
     {
       key: 'duration',
-      label: 'Duration',
+      label: mode === 'open' ? 'Open for' : 'Lasted',
       align: 'right',
       width: '110px',
       hideBelow: 'lg',
       cell: durationCell,
     },
-  ];
+  ]);
 </script>
 
-{#snippet statusCell(row: Incident)}
+{#snippet severityCell(row: Incident)}
   {#if row.status === 'open'}
-    <StatusPill
-      status={row.severity === 'critical' ? 'down' : 'degraded'}
+    <Status
+      tone={severityTone(row.severity)}
       label={severityLabel(row.severity)}
     />
   {:else}
-    <StatusPill status="healthy" label="Resolved" />
+    <Status tone="ok" label="Resolved" />
+  {/if}
+{/snippet}
+{#snippet seenNote(row: Incident)}
+  {@const mark = row.status === 'open' ? seen.get(row.id) : undefined}
+  {#if mark}
+    <span class="seen"
+      ><Eye aria-hidden="true" />Seen by {mark.by} at {formatClock(
+        mark.at,
+        undefined,
+        false,
+      )}<span class="sr-only"> in this browser</span></span
+    >
   {/if}
 {/snippet}
 {#snippet titleCell(row: Incident)}
-  <a class="title" href={incidentPath(row.id)}>{title(row)}</a>
+  <div class="title-cell">
+    <a class="title" href={incidentPath(row.id)}>{title(row)}</a>
+    {@render seenNote(row)}
+  </div>
 {/snippet}
 {#snippet targetCell(row: Incident)}
   {#if row.targetType === 'resource'}
@@ -109,9 +120,15 @@
   {/if}
 {/snippet}
 {#snippet alertsCell(row: Incident)}
-  <span class="num"
-    >{row.firingAlertCount}<span class="muted"> / {row.alertCount}</span></span
-  >
+  {#if mode === 'open'}
+    <span class="num"
+      >{row.firingAlertCount}<span class="muted">
+        / {row.alertCount}</span
+      ></span
+    >
+  {:else}
+    <span class="num">{row.alertCount}</span>
+  {/if}
 {/snippet}
 {#snippet openedCell(row: Incident)}
   <RelativeTime value={row.openedAt} />
@@ -125,78 +142,106 @@
   <a class="card" href={incidentPath(row.id)}>
     <div class="card-top">
       <span class="title">{title(row)}</span>
-      {#if row.status === 'open'}
-        <Badge tone={severityTone(row.severity)} dot
-          >{severityLabel(row.severity)}</Badge
-        >
-      {:else}
-        <Badge tone="ok" dot>Resolved</Badge>
-      {/if}
+      {@render severityCell(row)}
     </div>
     <div class="card-meta">
       <span class="mono">{targetName(row)}</span>
-      <span>{row.firingAlertCount} firing</span>
-      <RelativeTime value={row.openedAt} />
+      {#if mode === 'open'}
+        <span>{row.firingAlertCount} of {row.alertCount} firing</span>
+      {:else}
+        <span
+          >{row.alertCount}
+          {row.alertCount === 1 ? 'alert' : 'alerts'}</span
+        >
+      {/if}
+      <span
+        >opened <RelativeTime value={row.openedAt} /> · {formatSpan(
+          row.openedAt,
+          row.resolvedAt ?? Date.now(),
+        )}</span
+      >
     </div>
+    {@render seenNote(row)}
   </a>
 {/snippet}
 {#snippet empty()}
-  <EmptyState
-    title={filter === 'open' ? 'No open incidents' : 'No incidents'}
-    description={filter === 'open'
-      ? 'Firing alerts group into incidents by target. Nothing needs attention right now.'
-      : 'Resolved incidents are kept for a year.'}
-    tone={filter === 'open' ? 'ok' : 'neutral'}
-  >
-    {#snippet icon()}<ShieldCheck />{/snippet}
-  </EmptyState>
+  {#if mode === 'open'}
+    <EmptyState
+      title="No open incidents"
+      description="Firing alerts group into incidents by target. Nothing needs attention right now."
+      tone="ok"
+    >
+      {#snippet icon()}<ShieldCheck />{/snippet}
+    </EmptyState>
+  {:else}
+    <EmptyState
+      title="No resolved incidents"
+      description="Incidents land here when their last alert clears. Resolved incidents are kept for a year."
+    >
+      {#snippet icon()}<History />{/snippet}
+    </EmptyState>
+  {/if}
 {/snippet}
 
 <div class="toolbar">
-  <SegmentedControl
-    label="Incident status"
-    size="sm"
-    bind:value={filter}
-    options={[
-      {
-        value: 'open',
-        label: `Open ${incidents.filter((incident) => incident.status === 'open').length}`,
-      },
-      { value: 'resolved', label: 'Resolved' },
-      { value: 'all', label: 'All' },
-    ]}
-  />
   <p class="hint">
-    Incidents open with the first firing alert and resolve themselves when every
-    alert clears. There is nothing to acknowledge or assign.
+    {#if mode === 'open'}
+      Incidents open with the first firing alert and resolve themselves when
+      every alert clears. Mark one as seen on its page to note, in this browser,
+      that someone is on it.
+    {:else}
+      The most recent resolved incidents, newest first.
+    {/if}
   </p>
 </div>
 <DataTable
-  {rows}
+  rows={incidents}
   {columns}
   rowKey={(row) => row.id}
-  caption="Incidents"
+  caption={mode === 'open' ? 'Open incidents' : 'Resolved incidents'}
   rowHref={(row) => incidentPath(row.id)}
   {loading}
   {empty}
   {mobileCard}
 />
+{#if limit && incidents.length >= limit}
+  <p class="more">
+    Showing the {limit} most recent. Older incidents are kept but not listed here.
+  </p>
+{/if}
 
 <style>
   .toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3) var(--space-4);
     padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--line);
   }
-  .hint {
+  .hint,
+  .more {
     color: var(--muted);
-    font-size: var(--text-mono);
+    font-size: var(--text-meta);
+  }
+  .more {
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--line);
+  }
+  .title-cell {
+    display: grid;
+    gap: 2px;
+    white-space: normal;
   }
   .title {
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
+  }
+  .seen {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--muted);
+    font-size: var(--text-meta);
+  }
+  .seen :global(svg) {
+    width: 13px;
+    height: 13px;
   }
   .mono {
     font-family: var(--font-mono);
@@ -221,8 +266,8 @@
   .card-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-3);
+    gap: var(--space-1) var(--space-3);
     color: var(--muted);
-    font-size: var(--text-mono);
+    font-size: var(--text-meta);
   }
 </style>

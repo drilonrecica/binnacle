@@ -15,8 +15,16 @@
   import PageHeader from '../ui/PageHeader.svelte';
 
   /** The page for the current route inside the authenticated shell. */
-  let { live, onsignedout }: { live: LiveStore; onsignedout: () => void } =
-    $props();
+  let {
+    live,
+    viewer = '',
+    onsignedout,
+  }: {
+    live: LiveStore;
+    /** The signed-in username, for the local "seen by" marker. */
+    viewer?: string;
+    onsignedout: () => void;
+  } = $props();
 </script>
 
 {#if router.name === 'headroom'}
@@ -35,7 +43,7 @@
   <Activity {live} />
 {:else if router.name === 'incident'}
   {#key router.params.id}
-    <Incident {live} id={router.params.id} />
+    <Incident {live} id={router.params.id} {viewer} />
   {/key}
 {:else if router.name === 'incidents'}
   <Alerts {live} />

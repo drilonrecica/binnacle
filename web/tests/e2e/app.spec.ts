@@ -143,7 +143,11 @@ test('resources switch to cards and the detail reads logs in a tab', async ({
   await expect(page).toHaveURL(/\/resources\/res1\?tab=logs$/);
 });
 
-test('creates a health check from the Alerts checks tab', async ({ page }) => {
+// Checks became read-only on Incidents (P4-09); creating them moves to
+// Settings › Alerting in P4-11, which re-points this test there.
+test.fixme('creates a health check from Settings › Alerting', async ({
+  page,
+}) => {
   await mockApp(page);
   let body: Record<string, unknown> | null = null;
   await page.route('**/api/v1/checks', async (route) => {
@@ -294,14 +298,25 @@ test('shows incidents and manages notification channels and deliveries', async (
   );
 
   await page.goto('/incidents');
-  await expect(page.getByRole('tab', { name: /Incidents/ })).toHaveAttribute(
+  await expect(page.getByRole('tab', { name: /Open/ })).toHaveAttribute(
     'aria-selected',
     'true',
   );
-  await page.getByRole('link', { name: 'Incident on api.production' }).click();
+  await page
+    .getByRole('link', { name: 'Resource incident on api.production' })
+    .first()
+    .click();
   await expect(page).toHaveURL(/\/incidents\/inc-1$/);
-  await expect(page.getByText('API is unhealthy')).toBeVisible();
-  await expect(page.getByText('Existing webhook')).toBeVisible();
+  await expect(page.getByText('API is unhealthy').first()).toBeVisible();
+  await expect(page.getByText('Existing webhook').first()).toBeVisible();
+
+  // The seen marker is local to this browser and survives a reload (UI-21).
+  await page.getByRole('button', { name: 'Mark as seen' }).click();
+  await expect(page.getByText(/this browser only/)).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(/this browser only/)).toBeVisible();
+  await page.goto('/incidents');
+  await expect(page.getByText(/Seen by/).first()).toBeVisible();
 
   await page.goto('/settings/notifications');
   await page.getByRole('button', { name: 'Channel actions' }).click();
