@@ -11,7 +11,7 @@ Run the full release gate:
 ./scripts/release-gate.sh
 ```
 
-It produces `release-record/v0.6.0-<short-sha>.md` with a pass/fail
+It produces `release-record/<version>-<short-sha>.md` with a pass/fail
 table and captured benchmark output.
 
 ## Required gates

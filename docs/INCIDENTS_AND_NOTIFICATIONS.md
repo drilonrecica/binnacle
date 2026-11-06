@@ -4,7 +4,7 @@ Incidents automatically group overlapping firing alerts for one affected
 target. The first alert opens an incident, later alerts join it, and critical
 members promote its severity. An incident resolves after every member alert
 resolves. A later alert opens a new incident; acknowledgement, assignment, and
-manual resolution are intentionally outside v0.3.
+manual resolution are intentionally outside the product scope.
 
 ## The Incidents page
 

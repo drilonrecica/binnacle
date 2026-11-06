@@ -103,7 +103,7 @@ Frontend end-to-end suites require Playwright and are documented by
 - [Installation](docs/operations/install.md), [upgrades](docs/operations/upgrade.md), and [recovery](docs/operations/recovery.md)
 - [Security policy](SECURITY.md)
 - [Contributing guide](CONTRIBUTING.md) and [governance](GOVERNANCE.md)
-- [Architecture decision records](adr/)
+- [Architecture decision records](adr/README.md)
 
 ## License
 

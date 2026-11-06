@@ -81,7 +81,7 @@ queues, concurrency, API responses, and background work are bounded. Under
 pressure, Binnacle reports degradation and may discard stale work rather than
 grow without limit or block collection.
 
-See the [architecture decision records](../adr/) for the implementation choices
+See the [architecture decision records](../adr/README.md) for the implementation choices
 behind Go, Svelte, SQLite, SSE, identity, retention, bounded degradation, checks,
 and alerts.
 
