@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { LiveStore, sessionActive } from './lib/live.svelte';
   import { liveSeries } from './lib/live-series.svelte';
-  import { fetchMetrics } from './lib/api/metrics';
+  import { fetchMetrics, fetchSparklines } from './lib/api/metrics';
   import { prefs } from './lib/preferences.svelte';
   import { interceptLinks, router } from './lib/router.svelte';
   import {
@@ -44,6 +44,16 @@
         (metrics, from, to) => fetchMetrics('host', metrics, from, to),
         live.snapshot.host.memoryTotalBytes ?? null,
       );
+      void liveSeries.ensureResourcesSeeded((windowMs) =>
+        fetchSparklines(
+          ['cpu', 'memory'],
+          windowMs <= 3_600_000
+            ? '1h'
+            : windowMs <= 3 * 3_600_000
+              ? '3h'
+              : '6h',
+        ),
+      );
     }
   });
 
@@ -55,6 +65,7 @@
 
   function endSession() {
     live.close();
+    liveSeries.reset();
     shell.stopIncidentPolling();
     session = null;
   }

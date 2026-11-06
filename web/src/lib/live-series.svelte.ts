@@ -1,4 +1,7 @@
+import { SvelteDate } from 'svelte/reactivity';
 import type { LiveSnapshot } from './live.svelte';
+import type { SparklineResponse } from './api/metrics';
+import { bucketize } from './series';
 
 export type HostSeriesKey = 'cpu' | 'memory' | 'rx' | 'tx' | 'load1' | 'disk';
 export type ResourceSeriesKey = 'cpu' | 'memory';
@@ -8,62 +11,138 @@ export interface Sample {
   value: number | null;
 }
 
-const defaultCapacity = 900; // 30 minutes at the default 2 s cadence
+/** The longest window a sparkline draws by default (UI-6). */
+export const defaultWindowMs = 3_600_000;
+/** Windows longer than this are history charts, not live buffers. */
+const maxWindowMs = 6 * 3_600_000;
+/**
+ * The fastest cadence a sample can arrive at. It bounds how many samples one
+ * window can hold even if snapshots arrive faster than the 2 s default.
+ */
+const minCadenceMs = 1_000;
+/** A pause between two snapshots longer than this is a gap to re-seed. */
+export const reseedGapMs = 60_000;
 
-function ring(capacity: number) {
-  const values: Sample[] = [];
-  return {
-    values,
-    push(sample: Sample) {
-      values.push(sample);
-      if (values.length > capacity) values.splice(0, values.length - capacity);
-    },
-  };
+type HostHistoryFetcher = (
+  metrics: Array<'cpu' | 'memory' | 'network_rx' | 'network_tx'>,
+  from: Date,
+  to: Date,
+) => Promise<{
+  series: Array<{
+    metric: string;
+    points: Array<{ at: string; avg: number | null }>;
+  }>;
+}>;
+
+/**
+ * Turns the server's fixed-slot sparkline into samples at each slot's middle,
+ * so they merge with live samples on one time axis.
+ */
+export function sparklineSamples(
+  values: Array<number | null>,
+  fromMs: number,
+  toMs: number,
+  stepSeconds: number,
+): Sample[] {
+  const stepMs = stepSeconds * 1000;
+  if (stepMs <= 0) return [];
+  return values.map((value, index) => ({
+    at: Math.min(fromMs + index * stepMs + stepMs / 2, toMs),
+    value: value != null && Number.isFinite(value) ? value : null,
+  }));
 }
 
 /**
- * Keeps short rolling series from the live SSE snapshots so sparklines can
- * animate between history fetches. History seeds the buffer once on load.
+ * Rolling series from the live SSE snapshots. The buffers hold one full
+ * window of time (UI-6), not a fixed sample count, so a one-hour sparkline
+ * really draws an hour. History from the server seeds them on load and again
+ * after a gap; live samples newer than the seed are kept on top of it.
  */
-class LiveSeriesStore {
-  host = $state<Record<HostSeriesKey, Sample[]>>({
-    cpu: [],
-    memory: [],
-    rx: [],
-    tx: [],
-    load1: [],
-    disk: [],
-  });
+export class LiveSeriesStore {
+  host = $state<Record<HostSeriesKey, Sample[]>>(emptyHost());
   resources = $state<Record<string, Record<ResourceSeriesKey, Sample[]>>>({});
 
-  private capacity = defaultCapacity;
-  private lastSeq = -1;
+  private windowMs = defaultWindowMs;
+  private lastAt = -Infinity;
+  private hostSeeded = false;
+  private resourcesSeeded = false;
+
+  /** How much time each buffer keeps. */
+  get retentionMs() {
+    return this.windowMs;
+  }
+
+  /** The most samples one buffer may hold for the current window. */
+  get capacity() {
+    return Math.ceil(this.windowMs / minCadenceMs) + 1;
+  }
+
+  /**
+   * Widens the buffers to hold `windowMs`. Buffers only grow (up to six
+   * hours), so a view asking for a shorter window never cuts another's.
+   */
+  ensureWindow(windowMs: number) {
+    const next = Math.min(Math.max(windowMs, 0), maxWindowMs);
+    if (next > this.windowMs) {
+      this.windowMs = next;
+      this.hostSeeded = false;
+      this.resourcesSeeded = false;
+    }
+  }
+
+  /** Drops everything, e.g. when the session ends. */
+  reset() {
+    this.host = emptyHost();
+    this.resources = {};
+    this.windowMs = defaultWindowMs;
+    this.lastAt = -Infinity;
+    this.hostSeeded = false;
+    this.resourcesSeeded = false;
+  }
 
   /** Replaces a host series with seeded history, keeping newer live samples. */
   seedHost(key: HostSeriesKey, samples: Sample[]) {
-    const newest = samples.at(-1)?.at ?? -Infinity;
-    const live = this.host[key].filter((sample) => sample.at > newest);
-    this.host = {
-      ...this.host,
-      [key]: [...samples, ...live].slice(-this.capacity),
-    };
+    this.host = { ...this.host, [key]: this.merge(this.host[key], samples) };
   }
 
   seedResource(id: string, key: ResourceSeriesKey, samples: Sample[]) {
     const existing = this.resources[id] ?? { cpu: [], memory: [] };
-    const newest = samples.at(-1)?.at ?? -Infinity;
-    const live = existing[key].filter((sample) => sample.at > newest);
     this.resources = {
       ...this.resources,
-      [id]: { ...existing, [key]: [...samples, ...live].slice(-this.capacity) },
+      [id]: { ...existing, [key]: this.merge(existing[key], samples) },
     };
   }
 
+  /** Seeds every resource from one sparkline response (the list endpoint). */
+  seedResources(response: SparklineResponse) {
+    const from = Date.parse(response.from);
+    const to = Date.parse(response.to);
+    const next = { ...this.resources };
+    for (const [id, metrics] of Object.entries(response.resources)) {
+      const existing = next[id] ?? { cpu: [], memory: [] };
+      const seeded = { ...existing };
+      for (const key of ['cpu', 'memory'] as const) {
+        const values = metrics[key];
+        if (!values) continue;
+        seeded[key] = this.merge(
+          existing[key],
+          sparklineSamples(values, from, to, response.stepSeconds),
+        );
+      }
+      next[id] = seeded;
+    }
+    this.resources = next;
+  }
+
   push(snapshot: LiveSnapshot) {
-    if (snapshot.seq === this.lastSeq) return;
-    this.lastSeq = snapshot.seq;
-    const at = new Date(snapshot.ts).getTime();
-    const hostNext = { ...this.host };
+    const at = Date.parse(snapshot.ts);
+    if (!Number.isFinite(at) || at <= this.lastAt) return;
+    if (at - this.lastAt > reseedGapMs && this.lastAt !== -Infinity) {
+      // The stream was away long enough to leave a hole; fetch it again.
+      this.hostSeeded = false;
+      this.resourcesSeeded = false;
+    }
+    this.lastAt = at;
     const hostValues: Record<HostSeriesKey, number | null | undefined> = {
       cpu: snapshot.host.cpuPct,
       memory:
@@ -74,52 +153,45 @@ class LiveSeriesStore {
       load1: snapshot.host.load1,
       disk: percent(snapshot.host.diskUsedBytes, snapshot.host.diskTotalBytes),
     };
+    const hostNext = { ...this.host };
     for (const key of Object.keys(hostValues) as HostSeriesKey[]) {
-      const buffer = ring(this.capacity);
-      buffer.values.push(...hostNext[key]);
-      buffer.push({ at, value: finite(hostValues[key]) });
-      hostNext[key] = buffer.values;
+      hostNext[key] = this.append(hostNext[key], {
+        at,
+        value: finite(hostValues[key]),
+      });
     }
     this.host = hostNext;
 
     const next: typeof this.resources = {};
     for (const resource of snapshot.resources) {
       const existing = this.resources[resource.id] ?? { cpu: [], memory: [] };
-      const cpu = ring(this.capacity);
-      cpu.values.push(...existing.cpu);
-      cpu.push({ at, value: finite(resource.cpuHostPct) });
-      const memory = ring(this.capacity);
-      memory.values.push(...existing.memory);
-      memory.push({ at, value: finite(resource.memoryBytes) });
-      next[resource.id] = { cpu: cpu.values, memory: memory.values };
+      next[resource.id] = {
+        cpu: this.append(existing.cpu, {
+          at,
+          value: finite(resource.cpuHostPct),
+        }),
+        memory: this.append(existing.memory, {
+          at,
+          value: finite(resource.memoryBytes),
+        }),
+      };
     }
     this.resources = next;
   }
 
-  private seeded = false;
-
   /**
-   * Seeds the host series with the last hour of history once per session so
-   * sparklines are meaningful immediately after opening the app.
+   * Seeds the host series with one window of history so sparklines are
+   * meaningful immediately; again after a gap or a wider window.
    */
   async ensureHostSeeded(
-    fetchHistory: (
-      metrics: Array<'cpu' | 'memory' | 'network_rx' | 'network_tx'>,
-      from: Date,
-      to: Date,
-    ) => Promise<{
-      series: Array<{
-        metric: string;
-        points: Array<{ at: string; avg: number | null }>;
-      }>;
-    }>,
+    fetchHistory: HostHistoryFetcher,
     memoryTotal: number | null,
   ) {
-    if (this.seeded) return;
-    this.seeded = true;
+    if (this.hostSeeded) return;
+    this.hostSeeded = true;
     try {
-      const to = new Date();
-      const from = new Date(to.getTime() - 3_600_000);
+      const to = new SvelteDate();
+      const from = new SvelteDate(to.getTime() - this.windowMs);
       const history = await fetchHistory(
         ['cpu', 'memory', 'network_rx', 'network_tx'],
         from,
@@ -127,7 +199,7 @@ class LiveSeriesStore {
       );
       for (const series of history.series) {
         const samples = series.points.map((point) => ({
-          at: new Date(point.at).getTime(),
+          at: Date.parse(point.at),
           value: point.avg,
         }));
         if (series.metric === 'cpu') this.seedHost('cpu', samples);
@@ -146,7 +218,20 @@ class LiveSeriesStore {
         if (series.metric === 'network_tx') this.seedHost('tx', samples);
       }
     } catch {
-      this.seeded = false;
+      this.hostSeeded = false;
+    }
+  }
+
+  /** Seeds every resource's CPU and memory from the sparkline endpoint. */
+  async ensureResourcesSeeded(
+    fetchSparklines: (windowMs: number) => Promise<SparklineResponse>,
+  ) {
+    if (this.resourcesSeeded) return;
+    this.resourcesSeeded = true;
+    try {
+      this.seedResources(await fetchSparklines(this.windowMs));
+    } catch {
+      this.resourcesSeeded = false;
     }
   }
 
@@ -167,6 +252,48 @@ class LiveSeriesStore {
       (sample) => sample.at >= since,
     );
   }
+
+  /** A resource sparkline of `slots` averages over the whole window. */
+  resourceSparkline(
+    id: string,
+    key: ResourceSeriesKey,
+    windowMs: number,
+    now = Date.now(),
+    slots = 60,
+  ): Array<number | null> {
+    return bucketize(
+      this.resourceWindow(id, key, windowMs, now),
+      now - windowMs,
+      now,
+      slots,
+    );
+  }
+
+  /** Seeded history, then the live samples newer than its last sample. */
+  private merge(current: Sample[], seed: Sample[]): Sample[] {
+    const newest = seed.at(-1)?.at ?? -Infinity;
+    const live = current.filter((sample) => sample.at > newest);
+    return this.trim([...seed, ...live]);
+  }
+
+  private append(current: Sample[], sample: Sample): Sample[] {
+    return this.trim([...current, sample]);
+  }
+
+  /** Keeps one window of time behind the newest sample, and no more. */
+  private trim(samples: Sample[]): Sample[] {
+    const newest = samples.at(-1)?.at;
+    if (newest == null) return samples;
+    const since = newest - this.windowMs;
+    let start = 0;
+    while (start < samples.length && samples[start].at < since) start++;
+    start = Math.max(start, samples.length - this.capacity);
+    return start > 0 ? samples.slice(start) : samples;
+  }
+}
+
+function emptyHost(): Record<HostSeriesKey, Sample[]> {
+  return { cpu: [], memory: [], rx: [], tx: [], load1: [], disk: [] };
 }
 
 function finite(value: number | null | undefined): number | null {

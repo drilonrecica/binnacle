@@ -83,10 +83,8 @@
   );
 
   function spark(metric: 'cpu' | 'memory') {
-    return liveSeries
-      .resourceWindow(id, metric, 3_600_000)
-      .slice(-60)
-      .map((sample) => sample.value);
+    // A true hour: server-seeded buckets merged with live samples (UI-6).
+    return liveSeries.resourceSparkline(id, metric, 3_600_000);
   }
 
   const chartGroups: ChartGroup[] = [

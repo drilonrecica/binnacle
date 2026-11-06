@@ -1,8 +1,7 @@
-import type { ConnectionState } from '../live.svelte';
+import { staleAfterMs, type ConnectionState } from '../live.svelte';
 import { formatClock, formatSpan } from '../ui/relative-time';
 
-/** Snapshots arrive every 2 s; five missed ones make the data stale. */
-export const staleAfterMs = 10_000;
+export { staleAfterMs };
 
 export type ConnectionTone = 'ok' | 'warn' | 'critical' | 'neutral';
 
@@ -23,7 +22,9 @@ export interface ConnectionView {
 
 /**
  * One description of the live connection for the shell's status region:
- * live, stale (connected but quiet), connecting, disconnected, or signed out.
+ * live, stale (open but quiet), connecting, disconnected, or signed out. The
+ * store decides the state; a live state whose last snapshot is overdue still
+ * reads stale here, because a background tab can delay the store's timer.
  */
 export function connectionView(
   state: ConnectionState,
@@ -39,15 +40,17 @@ export function connectionView(
     ? `Last update ${formatClock(last)}`
     : 'No update received yet';
 
-  if (state === 'connected' && !quiet)
+  if (state === 'live' && !quiet)
     return { tone: 'ok', label: 'Live', since: '', age: '', detail: lastLine };
-  if (state === 'connected')
+  if (state === 'live' || state === 'stale')
     return {
       tone: 'warn',
       label: 'Stale',
       since,
       age,
-      detail: `Connected, but no update for ${age}. ${lastLine}.`,
+      detail: known
+        ? `Connected, but no update for ${age}. ${lastLine}.`
+        : 'Connected, but no update received yet.',
     };
   if (state === 'connecting')
     return {

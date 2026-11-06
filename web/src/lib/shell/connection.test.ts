@@ -6,12 +6,20 @@ const iso = new Date(at).toISOString();
 
 describe('connectionView', () => {
   it('reads live while snapshots keep arriving', () => {
-    const view = connectionView('connected', iso, at + 2_000);
+    const view = connectionView('live', iso, at + 2_000);
     expect(view).toMatchObject({ tone: 'ok', label: 'Live', since: '' });
   });
 
-  it('turns stale when a connected stream goes quiet, with a since and an age', () => {
-    const view = connectionView('connected', iso, at + staleAfterMs + 50_000);
+  it('reads stale with a since and an age when the store says so', () => {
+    const view = connectionView('stale', iso, at + staleAfterMs + 50_000);
+    expect(view.tone).toBe('warn');
+    expect(view.label).toBe('Stale');
+    expect(view.since).toMatch(/^since /);
+    expect(view.age).toBe('1m');
+  });
+
+  it('reads stale when a live snapshot is overdue before the store notices', () => {
+    const view = connectionView('live', iso, at + staleAfterMs + 50_000);
     expect(view.tone).toBe('warn');
     expect(view.label).toBe('Stale');
     expect(view.since).toMatch(/^since /);

@@ -208,6 +208,8 @@ export async function mockApp(page: Page, options: MockOptions = {}) {
     liveSnapshot = snapshot,
   } = options;
 
+  await page.addInitScript(holdLiveStreamOpen);
+
   await page.route('**/api/v1/auth/session', (route) =>
     authenticated
       ? route.fulfill({ json: session })
@@ -247,7 +249,8 @@ export async function mockApp(page: Page, options: MockOptions = {}) {
       },
     }),
   );
-  await page.route('**/api/v1/live', (route) =>
+  // `*` also matches the `?lastEventId=` a reopened stream resumes with.
+  await page.route('**/api/v1/live*', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'text/event-stream',
@@ -414,4 +417,68 @@ export async function mockApp(page: Page, options: MockOptions = {}) {
       json: { entries: [], truncated: false, redaction: 'best-effort' },
     }),
   );
+}
+
+/**
+ * Replaces EventSource with one that keeps the mocked live stream open (UI-2).
+ * Playwright can only fulfil a route with a finished body, which a real
+ * EventSource reads as a dropped stream and retries, so every test would run
+ * with the connection flapping. This one fetches the routed body once,
+ * dispatches its frames with their ids and then stays open; a non-stream
+ * answer (401, 503) closes it as a browser would. A spec that installs its
+ * own EventSource first keeps it.
+ */
+function holdLiveStreamOpen() {
+  class HeldEventSource extends EventTarget {
+    static readonly CONNECTING = 0;
+    static readonly OPEN = 1;
+    static readonly CLOSED = 2;
+    readyState = 0;
+    onerror: ((event: Event) => void) | null = null;
+    constructor(readonly url: string) {
+      super();
+      void fetch(url, { credentials: 'same-origin' }).then(
+        async (response) => {
+          if (this.readyState === 2) return;
+          const type = response.headers.get('content-type') ?? '';
+          if (!response.ok || !type.startsWith('text/event-stream')) {
+            this.fail();
+            return;
+          }
+          this.readyState = 1;
+          this.dispatchEvent(new Event('open'));
+          for (const block of (await response.text()).split('\n\n')) {
+            let kind = 'message';
+            let id = '';
+            const data: string[] = [];
+            for (const line of block.split('\n')) {
+              if (line.startsWith('event: ')) kind = line.slice(7);
+              else if (line.startsWith('id: ')) id = line.slice(4);
+              else if (line.startsWith('data: ')) data.push(line.slice(6));
+            }
+            if (data.length && this.readyState === 1)
+              this.dispatchEvent(
+                new MessageEvent(kind, {
+                  data: data.join('\n'),
+                  lastEventId: id,
+                }),
+              );
+          }
+        },
+        () => this.fail(),
+      );
+    }
+    close() {
+      this.readyState = 2;
+    }
+    private fail() {
+      this.readyState = 2;
+      const event = new Event('error');
+      this.dispatchEvent(event);
+      this.onerror?.(event);
+    }
+  }
+  // A spec that installed its own stand-in first keeps it.
+  if (!String(window.EventSource).includes('[native code]')) return;
+  Object.defineProperty(window, 'EventSource', { value: HeldEventSource });
 }

@@ -11,7 +11,7 @@ function liveWith(state: LiveStore['state'], lastReceivedAt: string | null) {
 describe('ConnectionStatus (UI-3)', () => {
   it('announces only the state word, never a clock', () => {
     const quietSince = new Date(Date.now() - 60_000).toISOString();
-    render(ConnectionStatus, { live: liveWith('connected', quietSince) });
+    render(ConnectionStatus, { live: liveWith('stale', quietSince) });
     const regions = screen.getAllByRole('status');
     expect(regions).toHaveLength(1);
     expect(regions[0]?.textContent).toBe('Stale');
@@ -23,7 +23,7 @@ describe('ConnectionStatus (UI-3)', () => {
 
   it('shows no time while live', () => {
     render(ConnectionStatus, {
-      live: liveWith('connected', new Date().toISOString()),
+      live: liveWith('live', new Date().toISOString()),
     });
     expect(screen.getByTestId('connection-status').textContent?.trim()).toBe(
       'Live',

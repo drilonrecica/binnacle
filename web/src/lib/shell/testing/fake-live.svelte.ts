@@ -11,8 +11,12 @@ export class FakeLive {
   state = $state<ConnectionState>('disconnected');
   error = $state('');
   lastReceivedAt = $state<string | null>(null);
+  lastEventId = '';
+  ageMs() {
+    return null;
+  }
   connect() {
-    this.state = 'connected';
+    this.state = 'live';
   }
   close() {
     this.state = 'disconnected';

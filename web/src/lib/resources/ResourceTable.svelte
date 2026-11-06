@@ -68,7 +68,7 @@
         live,
       );
     }
-    return live.slice(-60).map((sample) => sample.value);
+    return liveSeries.resourceSparkline(resource.id, metric, 3_600_000);
   }
 
   const groupOrder = $derived.by(() => {

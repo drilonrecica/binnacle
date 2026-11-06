@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	authpkg "github.com/drilonrecica/binnacle/internal/auth"
@@ -100,7 +101,7 @@ func stream(w http.ResponseWriter, r *http.Request, hub *liveHub, recheck func()
 	var cursor metrics.Sequence
 	// Registering before reading the ring means an event published meanwhile
 	// is either replayed here or queued for the client, never missed.
-	if n, err := strconv.ParseUint(r.Header.Get("Last-Event-ID"), 10, 64); err == nil {
+	if n, ok := resumeCursor(r); ok {
 		// The cursor starts from what is replayed, not from the header: after
 		// a restart the sequence begins again below it.
 		for _, event := range hub.engine.EventsAfter(metrics.Sequence(n)) {
@@ -154,6 +155,22 @@ func stream(w http.ResponseWriter, r *http.Request, hub *liveHub, recheck func()
 			f.Flush()
 		}
 	}
+}
+
+// resumeCursor is the id a client resumes after. The Last-Event-ID header is
+// what a browser sends on its own retries; a client that opens a new stream
+// cannot set headers, so it passes lastEventId in the query instead. The header
+// wins because a native retry reuses the original URL with an older query.
+func resumeCursor(r *http.Request) (metrics.Sequence, bool) {
+	raw := strings.TrimSpace(r.Header.Get("Last-Event-ID"))
+	if raw == "" {
+		raw = strings.TrimSpace(r.URL.Query().Get("lastEventId"))
+	}
+	n, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return metrics.Sequence(n), true
 }
 
 // writeFrame writes one SSE frame; an error means the client is gone and the

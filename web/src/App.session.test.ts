@@ -86,7 +86,7 @@ describe('session expiry (UI-5)', () => {
     visit('/resources/res_1?range=6h');
     mocks.currentSession.mockResolvedValue(session);
     render(App);
-    await waitFor(() => expect(fakeLive.current?.state).toBe('connected'));
+    await waitFor(() => expect(fakeLive.current?.state).toBe('live'));
     expect(document.querySelector('main#content')).not.toBeNull();
 
     fakeLive.current!.state = 'unauthorized';
@@ -104,7 +104,7 @@ describe('session expiry (UI-5)', () => {
     visit('/server');
     mocks.currentSession.mockResolvedValue(session);
     render(App);
-    await waitFor(() => expect(fakeLive.current?.state).toBe('connected'));
+    await waitFor(() => expect(fakeLive.current?.state).toBe('live'));
 
     mocks.sessionActive.mockResolvedValueOnce(true);
     dispatchEvent(new Event(sessionEndedEvent));

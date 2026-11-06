@@ -242,7 +242,10 @@ encoded once and the same bytes go to every client. Snapshot frames go out at
 most once per `live.sse_interval` (`BINNACLE_SSE_INTERVAL`, default 2 s);
 faster ticks are coalesced to the latest, while events are sent at once and
 never dropped. A client too slow to keep up is disconnected and resumes from
-`Last-Event-ID`. At most `live.max_clients` (`BINNACLE_SSE_MAX_CLIENTS`,
+`Last-Event-ID`. The UI shows the stream as live, stale (no snapshot for 10 s,
+with its age), connecting or disconnected; a stream that sends nothing within
+10 s of opening, as behind a proxy that buffers responses, is reported as
+disconnected and retried with backoff. At most `live.max_clients` (`BINNACLE_SSE_MAX_CLIENTS`,
 default 8, between 1 and 64) streams are open at once; the next one gets
 `503` with `Retry-After` and error code `live_capacity`. See ADR 025.
 

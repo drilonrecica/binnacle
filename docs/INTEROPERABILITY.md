@@ -36,7 +36,9 @@ stored by earlier versions keep their numeric-looking ids). Live event
 payloads also carry `seq`, the per-process stream sequence. The SSE `id:`
 field of an event frame is that sequence, and of a snapshot frame the highest
 sequence sent so far, so ids never go backwards and `Last-Event-ID` resumes
-events missed since it; it restarts with the process. When every live slot is
+events missed since it; it restarts with the process. A client that opens a
+new stream instead of letting the browser retry, and so cannot set the header,
+passes the same id as `?lastEventId=`; the header wins when both are sent. When every live slot is
 taken (`live.max_clients`, default 8) the stream answers `503` with
 `Retry-After` and error code `live_capacity`. `/api/v1/events` pages with
 `before=<id>`, ordered newest first by time and then by storage order.
