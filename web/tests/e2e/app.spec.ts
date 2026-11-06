@@ -52,6 +52,8 @@ test('legacy and unknown routes redirect to their replacements', async ({
   await expect(page).toHaveURL(/\/changes$/);
   await page.goto('/watch?inspect=res1');
   await expect(page).toHaveURL(/\/resources\/res1$/);
+  await page.goto('/logs?resource=res1');
+  await expect(page).toHaveURL(/\/resources\/res1\?tab=logs$/);
   await page.goto('/not-a-real-view');
   await expect(page).toHaveURL(/\/headroom$/);
 });
@@ -98,6 +100,47 @@ test('resources list filters, sorts, and opens detail with containers', async ({
   });
   await expect(containers).toContainText('worker-1');
   await expect(containers).toContainText(/starting/i);
+});
+
+test('resources switch to cards and the detail reads logs in a tab', async ({
+  page,
+}) => {
+  await mockApp(page);
+  await page.goto('/resources');
+  await page.getByRole('button', { name: 'Cards' }).click();
+  await expect(page.getByRole('list', { name: 'Resources' })).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem('binnacle.resources.view')),
+    )
+    .toBe('cards');
+
+  await page.route('**/api/v1/logs?*', (route) =>
+    route.fulfill({
+      json: {
+        entries: [
+          {
+            timestamp: new Date().toISOString(),
+            component: 'c1',
+            stream: 'stderr',
+            severity: 'error',
+            message: 'connection refused',
+          },
+        ],
+        truncated: false,
+        redaction: 'best-effort',
+      },
+    }),
+  );
+  await page.goto('/resources/res1');
+  await page.getByRole('tab', { name: 'Logs' }).click();
+  await expect(page).toHaveURL(/\/resources\/res1\?tab=logs$/);
+  await expect(page.getByRole('region', { name: 'Log lines' })).toContainText(
+    'connection refused',
+  );
+  // /logs now opens the Logs tab of the resource viewed last.
+  await page.goto('/logs');
+  await expect(page).toHaveURL(/\/resources\/res1\?tab=logs$/);
 });
 
 test('creates a health check from the Alerts checks tab', async ({ page }) => {
@@ -560,7 +603,11 @@ test('the command palette opens logs for a resource', async ({ page }) => {
     palette.getByRole('option', { name: /Logs for api\.production/ }),
   ).toBeVisible();
   await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/\/logs\?resource=res1$/);
+  await expect(page).toHaveURL(/\/resources\/res1\?tab=logs$/);
+  await expect(page.getByRole('tab', { name: 'Logs' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   // Focus follows the route change into the page (UI-10).
   await expect
     .poll(() =>

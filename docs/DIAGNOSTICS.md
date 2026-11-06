@@ -1,10 +1,18 @@
 # Logs and process diagnostics
 
-Binnacle v0.4 adds session-only, read-only diagnostics. The Logs page (opened
-from a resource, an event, or "Logs for …" in the command palette) reads
-Docker logs for one container or logical resource. It supports 5 minute,
-30 minute, and 1 hour ranges, literal search, and live follow. Messages are
-redacted before search or delivery and are never stored by Binnacle.
+Binnacle v0.4 adds session-only, read-only diagnostics. Logs live in the
+**Logs** tab of each resource (Resources › a resource › Logs), opened from the
+resource, from an event's "logs" link, or from "Logs for …" in the command
+palette. The tab reads Docker logs for the resource or one of its containers.
+It supports 5 minute, 30 minute, and 1 hour ranges, literal search, and live
+follow. Messages are redacted before search or delivery and are never stored
+by Binnacle. The old `/logs` address opens the Logs tab of the resource viewed
+last in that browser, or the Resources list with a prompt to choose one.
+
+The browser keeps at most the newest 5,000 lines of a view in a fixed-size
+ring and renders the newest 400 at a time ("Show earlier lines" reveals more),
+so a busy container streaming quickly does not slow the page. Leaving the tab
+cancels an unfinished read and stops following.
 
 Responses default to 500 lines and cannot exceed the configured 5,000-line or
 1 MiB ceilings. A resource can contain at most 32 log components. Follow

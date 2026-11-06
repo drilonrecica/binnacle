@@ -108,3 +108,18 @@ export function targetLabel(targetType: string, targetId: string): string {
       return targetId;
   }
 }
+
+/**
+ * The incident title with its raw target id replaced by a display name
+ * (UI-18). Stored titles read "resource incident on res_01HZ…"; this gives
+ * "Resource incident on api.production".
+ */
+export function incidentTitle(
+  incident: Pick<Incident, 'title' | 'targetId'>,
+  targetName: string,
+): string {
+  const { title, targetId } = incident;
+  if (!targetId || !targetName || !title.includes(targetId)) return title;
+  const named = title.replaceAll(targetId, targetName);
+  return named.charAt(0).toUpperCase() + named.slice(1);
+}

@@ -6,7 +6,6 @@
   import Host from '../pages/Host.svelte';
   import Resources from '../pages/Resources.svelte';
   import Activity from '../pages/Activity.svelte';
-  import Logs from '../pages/Logs.svelte';
   import Alerts from '../pages/Alerts.svelte';
   import Incident from '../pages/Incident.svelte';
   import ResourceDetail from '../pages/ResourceDetail.svelte';
@@ -34,8 +33,6 @@
   <Host {live} />
 {:else if router.name === 'changes'}
   <Activity {live} />
-{:else if router.name === 'logs'}
-  <Logs {live} />
 {:else if router.name === 'incident'}
   {#key router.params.id}
     <Incident {live} id={router.params.id} />

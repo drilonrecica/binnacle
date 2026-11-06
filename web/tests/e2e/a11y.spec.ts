@@ -83,7 +83,10 @@ test('resource detail has no detectable a11y violations', async ({ page }) => {
   await scan(page);
   await page.getByRole('tab', { name: /Containers/ }).click();
   await scan(page);
-  await page.getByRole('tab', { name: 'Alerts' }).click();
+  await page.getByRole('tab', { name: 'Incidents' }).click();
+  await scan(page);
+  await page.getByRole('tab', { name: 'Logs' }).click();
+  await expect(page.getByRole('group', { name: 'Log source' })).toBeVisible();
   await scan(page);
 });
 
@@ -96,12 +99,13 @@ test('activity page has no detectable a11y violations', async ({ page }) => {
   await scan(page);
 });
 
-test('logs page has no detectable a11y violations', async ({ page }) => {
+test('logs prompt on resources has no detectable a11y violations', async ({
+  page,
+}) => {
   await mockApp(page);
-  await page.goto('/logs?resource=res1');
-  await expect(
-    page.getByRole('heading', { name: 'Logs', level: 1 }),
-  ).toBeVisible();
+  await page.goto('/logs');
+  await expect(page).toHaveURL(/\/resources\?prompt=logs$/);
+  await expect(page.getByText(/Logs now live on each resource/)).toBeVisible();
   await scan(page);
 });
 

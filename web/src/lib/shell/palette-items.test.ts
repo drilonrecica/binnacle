@@ -22,8 +22,8 @@ describe('destinationItems', () => {
   it('offers "Logs for …" for every resource, found by typing logs', () => {
     const { pages, resources: items, logs } = destinationItems(resources);
     expect(logs.map((item) => [item.label, item.href])).toEqual([
-      ['Logs for api', '/logs?resource=res_api'],
-      ['Logs for postgres', '/logs?resource=res_db'],
+      ['Logs for api', '/resources/res_api?tab=logs'],
+      ['Logs for postgres', '/resources/res_db?tab=logs'],
     ]);
     const ranked = rankItems([...pages, ...items, ...logs], 'logs for post');
     expect(ranked[0]?.id).toBe('logs:res_db');

@@ -70,7 +70,7 @@ test('overview rows link to the resource detail page', async ({ page }) => {
   await expect(
     page.getByRole('heading', { name: 'api.production', level: 1 }),
   ).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Open logs' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Logs' })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/headroom$/);
 });

@@ -32,6 +32,7 @@
     groupKey,
     groupSequence,
     pinned = [],
+    layout = 'auto',
   }: {
     resources: LiveResource[];
     snapshotTs: string;
@@ -47,6 +48,8 @@
     groupSequence?: string[];
     /** Ids of pinned resources; their rows carry a pin. */
     pinned?: string[];
+    /** `cards` shows the card form at every width. */
+    layout?: 'auto' | 'table' | 'cards';
   } = $props();
 
   const pinnedIds = $derived(new Set(pinned));
@@ -279,6 +282,7 @@
   {empty}
   {mobileCard}
   {density}
+  {layout}
 />
 
 <style>

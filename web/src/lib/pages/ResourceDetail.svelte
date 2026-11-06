@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import BellOff from '@lucide/svelte/icons/bell-off';
   import Copy from '@lucide/svelte/icons/copy';
-  import ScrollText from '@lucide/svelte/icons/scroll-text';
+  import Pin from '@lucide/svelte/icons/pin';
+  import PinOff from '@lucide/svelte/icons/pin-off';
   import type { LiveStore } from '../live.svelte';
   import { liveSeries } from '../live-series.svelte';
   import {
@@ -15,8 +16,19 @@
   } from '../api/resources';
   import { listEvents, type HistoricalEvent } from '../api/events';
   import { errorMessage, isApiError } from '../api/client';
-  import { logsPath } from '../router';
-  import { formatBytes, formatNumber, formatRate } from '../i18n';
+  import { router } from '../router.svelte';
+  import { formatBytes, formatNumber } from '../i18n';
+  import { prefs } from '../preferences.svelte';
+  import { cpuDirection } from '../overview/headroom';
+  import {
+    currentTabName,
+    missing,
+    ratePair,
+    relativeDirection,
+    resourceTabs,
+  } from '../resources/detail';
+  import { rememberLogsResource } from '../logs/last-resource';
+  import LogsTab from '../logs/LogsTab.svelte';
   import { resourceStatusLabel } from '../resource-sort';
   import { staleResource } from '../watch';
   import type { ChartGroup } from '../charts/MetricCharts.svelte';
@@ -37,6 +49,10 @@
   import StatusPill from '../ui/StatusPill.svelte';
   import Tabs, { tabPanelId, tabId } from '../ui/Tabs.svelte';
   import { toasts } from '../ui/toast.svelte';
+  import { formatAbsolute } from '../ui/relative-time';
+
+  /** Pins are capped by the preferences contract. */
+  const maxPins = 12;
 
   let { live, id }: { live: LiveStore; id: string } = $props();
 
@@ -85,6 +101,50 @@
   function spark(metric: 'cpu' | 'memory') {
     // A true hour: server-seeded buckets merged with live samples (UI-6).
     return liveSeries.resourceSparkline(id, metric, 3_600_000);
+  }
+
+  const cpuTrend = $derived(
+    cpuDirection(liveSeries.resourceWindow(id, 'cpu', 3_600_000)).text,
+  );
+  const memoryTrend = $derived(
+    relativeDirection(liveSeries.resourceWindow(id, 'memory', 3_600_000)).text,
+  );
+  const network = $derived(
+    ratePair(stale ? null : current?.rxBps, stale ? null : current?.txBps, [
+      'in',
+      'out',
+    ]),
+  );
+  const block = $derived(
+    ratePair(
+      stale ? null : current?.blockReadBps,
+      stale ? null : current?.blockWriteBps,
+      ['read', 'written'],
+    ),
+  );
+
+  const pinnedIds = $derived(prefs.value.pinnedResources);
+  const pinned = $derived(pinnedIds.includes(id));
+  const pinsFull = $derived(!pinned && pinnedIds.length >= maxPins);
+  let pinning = $state(false);
+
+  async function togglePin() {
+    if (pinning || pinsFull) return;
+    pinning = true;
+    try {
+      await prefs.save({
+        pinnedResources: pinned
+          ? pinnedIds.filter((item) => item !== id)
+          : [...pinnedIds, id],
+      });
+      toasts.success(pinned ? 'Pinned to the top of lists' : 'Unpinned');
+    } catch (reason) {
+      toasts.error('The pin could not be saved', {
+        description: errorMessage(reason),
+      });
+    } finally {
+      pinning = false;
+    }
   }
 
   const chartGroups: ChartGroup[] = [
@@ -198,11 +258,22 @@
   }
 
   $effect(() => {
-    if (tab === 'activity' && !events.length && !eventsLoading && !eventsError)
+    if (tab === 'changes' && !events.length && !eventsLoading && !eventsError)
       void loadEvents();
   });
 
+  // `/logs` opens the Logs tab of the resource viewed last.
+  let remembered = false;
+  $effect(() => {
+    if (remembered || !current) return;
+    remembered = true;
+    rememberLogsResource(id);
+  });
+
   onMount(() => {
+    // Links made before the redesign name the old tabs.
+    const renamed = currentTabName(router.param('tab'));
+    if (renamed) router.setQuery({ tab: renamed });
     if (current) return;
     void getResource(id)
       .then((value) => (fetched = value))
@@ -212,19 +283,7 @@
       });
   });
 
-  const tabs = $derived(
-    isArchived
-      ? [
-          { id: 'metrics', label: 'Metrics' },
-          { id: 'activity', label: 'Activity' },
-        ]
-      : [
-          { id: 'metrics', label: 'Metrics' },
-          { id: 'containers', label: 'Containers', count: components.length },
-          { id: 'alerts', label: 'Alerts' },
-          { id: 'activity', label: 'Activity' },
-        ],
-  );
+  const tabs = $derived(resourceTabs(isArchived, components.length));
 </script>
 
 {#snippet componentStatus(row: LiveComponent)}
@@ -233,30 +292,27 @@
   />
 {/snippet}
 {#snippet componentName(row: LiveComponent)}
-  <div class="component-name">
-    <span class="mono">{row.name}</span>
-    <code class="component-id" title={row.id}>{row.id.slice(0, 12)}</code>
-  </div>
+  <span class="mono">{row.name}</span>
 {/snippet}
 {#snippet componentRuntime(row: LiveComponent)}
   <span class="runtime">
-    {row.runtimeState || '—'}{#if row.healthStatus}<span class="health">
+    {row.runtimeState || missing}{#if row.healthStatus}<span class="health">
         · {row.healthStatus}</span
       >{/if}
   </span>
 {/snippet}
 {#snippet componentCpu(row: LiveComponent)}
-  {row.cpuHostPct == null ? '—' : `${formatNumber(row.cpuHostPct)}%`}
+  {row.cpuHostPct == null ? missing : `${formatNumber(row.cpuHostPct)}%`}
 {/snippet}
 {#snippet componentMemory(row: LiveComponent)}
-  {row.memoryBytes == null ? '—' : formatBytes(row.memoryBytes)}
+  {row.memoryBytes == null ? missing : formatBytes(row.memoryBytes)}
 {/snippet}
 {#snippet componentPids(row: LiveComponent)}
-  {row.pids ?? '—'}
+  {row.pids ?? missing}
 {/snippet}
 {#snippet componentActions(row: LiveComponent)}
   <IconButton
-    label="Copy container id"
+    label={`Copy the id of ${row.name}`}
     size="sm"
     onclick={() => copy(row.id, 'Container id')}><Copy /></IconButton
   >
@@ -279,7 +335,7 @@
         >{/if}
       {#if isArchived && 'archivedAt' in resource && resource.archivedAt}
         <span class="archived-at"
-          >archived {new Date(resource.archivedAt).toLocaleString()}</span
+          >archived {formatAbsolute(resource.archivedAt)}</span
         >
       {/if}
       <button
@@ -293,9 +349,17 @@
     {/snippet}
     {#snippet actions()}
       {#if !isArchived}
-        <Button href={logsPath(id)}>
-          {#snippet icon()}<ScrollText />{/snippet}
-          Open logs
+        <Button
+          onclick={togglePin}
+          loading={pinning}
+          disabled={pinsFull}
+          title={pinsFull
+            ? `Up to ${maxPins} resources can be pinned`
+            : undefined}
+          aria-pressed={pinned}
+        >
+          {#snippet icon()}{#if pinned}<PinOff />{:else}<Pin />{/if}{/snippet}
+          {pinned ? 'Unpin' : 'Pin'}
         </Button>
         <Button onclick={() => (silenceOpen = true)}>
           {#snippet icon()}<BellOff />{/snippet}
@@ -308,42 +372,31 @@
         <Stat
           label="CPU"
           value={stale || current.cpuHostPct == null
-            ? '—'
+            ? missing
             : formatNumber(current.cpuHostPct)}
           unit={stale || current.cpuHostPct == null ? '' : '%'}
           sparkline={spark('cpu')}
           sparklineLabel="CPU over the last hour"
-          secondary="host-normalized"
+          secondary={`of the host · ${cpuTrend}`}
         />
         <Stat
           label="Memory"
           value={stale || current.memoryBytes == null
-            ? '—'
+            ? missing
             : formatBytes(current.memoryBytes)}
           sparkline={spark('memory')}
           sparklineLabel="Memory over the last hour"
-          tone="info"
-          secondary="working set"
+          secondary={`working set · ${memoryTrend}`}
         />
         <Stat
           label="Network"
-          value={stale || current.rxBps == null
-            ? '—'
-            : formatRate(current.rxBps)}
-          secondary={current.txBps == null
-            ? ''
-            : `↓ receive · ↑ ${formatRate(current.txBps)}`}
-          tone="accent"
+          value={network.value}
+          secondary={network.secondary}
         />
         <Stat
           label="Block I/O"
-          value={stale || current.blockReadBps == null
-            ? '—'
-            : formatRate(current.blockReadBps)}
-          secondary={current.blockWriteBps == null
-            ? ''
-            : `read · write ${formatRate(current.blockWriteBps)}`}
-          tone="accent"
+          value={block.value}
+          secondary={block.secondary}
         />
       </div>
     {/if}
@@ -393,29 +446,40 @@
       {/if}
     </div>
     <div
-      id={tabPanelId('resource', 'alerts')}
+      id={tabPanelId('resource', 'incidents')}
       role="tabpanel"
-      aria-labelledby={tabId('resource', 'alerts')}
-      hidden={tab !== 'alerts'}
+      aria-labelledby={tabId('resource', 'incidents')}
+      hidden={tab !== 'incidents'}
     >
-      {#if tab === 'alerts'}
+      {#if tab === 'incidents'}
         <ResourceAlerts
           resourceId={id}
+          resourceName={resource.name}
           project={resource.project}
           onsilence={() => (silenceOpen = true)}
           refreshKey={alertsRefresh}
         />
       {/if}
     </div>
+    <div
+      id={tabPanelId('resource', 'logs')}
+      role="tabpanel"
+      aria-labelledby={tabId('resource', 'logs')}
+      hidden={tab !== 'logs'}
+    >
+      {#if tab === 'logs'}
+        <LogsTab resourceId={id} {components} />
+      {/if}
+    </div>
   {/if}
 
   <div
-    id={tabPanelId('resource', 'activity')}
+    id={tabPanelId('resource', 'changes')}
     role="tabpanel"
-    aria-labelledby={tabId('resource', 'activity')}
-    hidden={tab !== 'activity'}
+    aria-labelledby={tabId('resource', 'changes')}
+    hidden={tab !== 'changes'}
   >
-    {#if tab === 'activity'}
+    {#if tab === 'changes'}
       <Card padded={false}>
         <EventList
           {events}
@@ -508,14 +572,6 @@
   .id :global(svg) {
     width: 12px;
     height: 12px;
-  }
-  .component-name {
-    display: grid;
-    gap: 2px;
-  }
-  .component-id {
-    color: var(--muted);
-    font-size: 11px;
   }
   .runtime {
     font-family: var(--font-mono);

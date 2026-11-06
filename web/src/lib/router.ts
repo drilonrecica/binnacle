@@ -13,7 +13,6 @@ export type RouteName =
   | 'incidents'
   | 'incident'
   | 'changes'
-  | 'logs'
   | 'settings'
   | 'login'
   | 'setup'
@@ -41,9 +40,6 @@ export const routes: RouteDefinition[] = [
   { name: 'incidents', pattern: '/incidents' },
   { name: 'incident', pattern: '/incidents/:id' },
   { name: 'changes', pattern: '/changes' },
-  // Not in the navigation: reached from "Logs for …" in the palette and from
-  // event rows until the Logs tab on the resource detail replaces it (P4-07).
-  { name: 'logs', pattern: '/logs' },
   { name: 'settings', pattern: '/settings' },
   { name: 'settings', pattern: '/settings/:section' },
   { name: 'login', pattern: '/login', bare: true, public: true },
@@ -117,12 +113,37 @@ const legacy: Record<string, string> = {
   '/settings/diagnostics': '/settings/system',
 };
 
-/** Returns the replacement URL for a retired path, or null if none applies. */
+/**
+ * Where the retired Logs page goes: the Logs tab of the resource it named,
+ * else of the last resource viewed, else Resources with a prompt to pick one.
+ */
+export function resolveLogsPath(
+  search: string,
+  lastResource?: string | null,
+): string {
+  const query = new URLSearchParams(search);
+  const resource = query.get('resource')?.trim() || lastResource?.trim();
+  if (!resource) return '/resources?prompt=logs';
+  return buildPath(resourcePath(resource), {
+    tab: 'logs',
+    container: query.get('resource')
+      ? query.get('container')?.trim() || null
+      : null,
+    at: query.get('at')?.trim() || null,
+  });
+}
+
+/**
+ * Returns the replacement URL for a retired path, or null if none applies.
+ * `lastLogsResource` is the resource whose detail was viewed last, for `/logs`.
+ */
 export function resolveLegacyPath(
   pathname: string,
   search: string,
+  lastLogsResource?: string | null,
 ): string | null {
   const clean = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  if (clean === '/logs') return resolveLogsPath(search, lastLogsResource);
   if (clean === '/watch') {
     const inspect = new URLSearchParams(search).get('inspect')?.trim();
     if (inspect) return resourcePath(inspect);
@@ -157,8 +178,9 @@ export function incidentPath(id: string): string {
   return `/incidents/${encodeURIComponent(id)}`;
 }
 
+/** The Logs tab of a resource, optionally centred on a moment. */
 export function logsPath(resourceId: string, at?: string): string {
-  return buildPath('/logs', { resource: resourceId, at: at ?? null });
+  return buildPath(resourcePath(resourceId), { tab: 'logs', at: at ?? null });
 }
 
 /**

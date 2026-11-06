@@ -6,6 +6,7 @@ import {
   splitHref,
   type RouteMatch,
 } from './router';
+import { lastLogsResource } from './logs/last-resource';
 
 /**
  * Reactive location store backed by the History API. Screens read
@@ -29,7 +30,11 @@ class Router {
    * whether the path changed, so callers can move focus to the new page.
    */
   sync(): boolean {
-    const legacy = resolveLegacyPath(location.pathname, location.search);
+    const legacy = resolveLegacyPath(
+      location.pathname,
+      location.search,
+      lastLogsResource(),
+    );
     if (legacy) {
       history.replaceState({}, '', legacy);
     }

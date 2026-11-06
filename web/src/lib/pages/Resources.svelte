@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Archive from '@lucide/svelte/icons/archive';
+  import ScrollText from '@lucide/svelte/icons/scroll-text';
   import Search from '@lucide/svelte/icons/search';
   import type { LiveStore } from '../live.svelte';
   import {
@@ -13,10 +14,11 @@
   import { fetchSparklines, type SparklineResponse } from '../api/metrics';
   import { errorMessage } from '../api/client';
   import { router } from '../router.svelte';
-  import { resourcePath } from '../router';
+  import { logsPath, resourcePath } from '../router';
   import { prefs } from '../preferences.svelte';
   import { prioritizedResources, staleResource } from '../watch';
   import ResourceTable from '../resources/ResourceTable.svelte';
+  import ResourcePicker from '../resources/ResourcePicker.svelte';
   import Badge from '../ui/Badge.svelte';
   import Button from '../ui/Button.svelte';
   import Card from '../ui/Card.svelte';
@@ -29,6 +31,7 @@
   import Input from '../ui/Input.svelte';
   import PageHeader from '../ui/PageHeader.svelte';
   import RelativeTime from '../ui/RelativeTime.svelte';
+  import SegmentedControl from '../ui/SegmentedControl.svelte';
   import Select from '../ui/Select.svelte';
   import StatusPill from '../ui/StatusPill.svelte';
   import Switch from '../ui/Switch.svelte';
@@ -39,6 +42,10 @@
 
   const sortKey = 'binnacle.resources.sort.v2';
   const groupKey = 'binnacle.resources.grouped';
+  const viewKey = 'binnacle.resources.view';
+
+  /** Arrived from the retired Logs page without a resource to show. */
+  const logsPrompt = $derived(router.param('prompt') === 'logs');
 
   let tab = $state('active');
   let search = $state('');
@@ -48,6 +55,8 @@
   let project = $state('');
   let environment = $state('');
   let grouped = $state(true);
+  let view = $state<'table' | 'cards'>('table');
+  let logsResource = $state('');
   let sort = $state<SortState | undefined>(undefined);
   let sparklines = $state<SparklineResponse | null>(null);
   let archived = $state<ArchivedResource[]>([]);
@@ -210,6 +219,7 @@
       if (sort) localStorage.setItem(sortKey, JSON.stringify(sort));
       else localStorage.removeItem(sortKey);
       localStorage.setItem(groupKey, grouped ? 'yes' : 'no');
+      localStorage.setItem(viewKey, view);
     } catch {
       /* Preferences are a convenience. */
     }
@@ -226,6 +236,7 @@
       )
         sort = saved;
       grouped = localStorage.getItem(groupKey) !== 'no';
+      view = localStorage.getItem(viewKey) === 'cards' ? 'cards' : 'table';
     } catch {
       /* ignore */
     }
@@ -339,6 +350,17 @@
           >{/each}
       </Select>
     {/if}
+    <span class="view">
+      <SegmentedControl
+        label="Layout"
+        size="sm"
+        bind:value={view}
+        options={[
+          { value: 'table', label: 'Table' },
+          { value: 'cards', label: 'Cards' },
+        ]}
+      />
+    </span>
     {#if projects.length}
       <Field label="Group by project" inline id="group-toggle">
         {#snippet children({ id })}
@@ -348,6 +370,24 @@
     {/if}
   {/if}
 </div>
+
+{#if logsPrompt && tab === 'active'}
+  <div class="prompt" role="status">
+    <span class="prompt-icon" aria-hidden="true"><ScrollText /></span>
+    <p>
+      Logs now live on each resource, in its <strong>Logs</strong> tab. Choose the
+      resource to read.
+    </p>
+    <div class="prompt-picker">
+      <ResourcePicker
+        label="Resource for logs"
+        snapshot={live.snapshot}
+        bind:value={logsResource}
+        onchange={(value) => value && router.navigate(logsPath(value))}
+      />
+    </div>
+  </div>
+{/if}
 
 <div
   id={tabPanelId('resources', 'active')}
@@ -363,6 +403,8 @@
           snapshotTs={snapshot.ts}
           {sparklines}
           {grouped}
+          pinned={prefs.value.pinnedResources}
+          layout={view === 'cards' ? 'cards' : 'auto'}
           bind:sort
           emptyTitle={all.length ? 'No matching resources' : 'No resources yet'}
           emptyDescription={all.length
@@ -433,6 +475,36 @@
   }
   .toolbar :global(.select-wrap) {
     width: auto;
+  }
+  .view {
+    display: contents;
+  }
+  .prompt {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--info-border);
+    border-radius: var(--radius-card);
+    background: var(--info-bg);
+    color: var(--info-fg);
+    font-size: var(--text-meta);
+  }
+  .prompt p {
+    flex: 1;
+  }
+  .prompt-picker {
+    width: min(100%, 280px);
+  }
+  .prompt-icon {
+    display: inline-flex;
+    flex: none;
+  }
+  .prompt-icon :global(svg) {
+    width: 16px;
+    height: 16px;
   }
   .waiting {
     padding: var(--space-8);

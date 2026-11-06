@@ -4,33 +4,42 @@
   import Copy from '@lucide/svelte/icons/copy';
   import ScrollText from '@lucide/svelte/icons/scroll-text';
   import type { LogEntry } from '../api/logs';
+  import type { LogLine } from './ring';
   import Button from '../ui/Button.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import { toasts } from '../ui/toast.svelte';
   import { formatClock } from '../ui/relative-time';
 
   let {
-    entries,
+    lines,
+    hiddenBefore = 0,
+    onshowearlier,
     following = false,
     wrap = true,
     colors = true,
     search = '',
     loading = false,
     componentNames = new Map<string, string>(),
+    emptyDescription = 'Load a range, or start following to stream new lines.',
   }: {
-    entries: LogEntry[];
+    /** The rendered window, oldest first; the ring holds the rest (UI-15). */
+    lines: LogLine[];
+    /** Lines held in memory before the window. */
+    hiddenBefore?: number;
+    onshowearlier?: () => void;
     following?: boolean;
     wrap?: boolean;
     colors?: boolean;
     search?: string;
     loading?: boolean;
     componentNames?: Map<string, string>;
+    emptyDescription?: string;
   } = $props();
 
   let scroller = $state<HTMLDivElement | null>(null);
   let pinned = $state(true);
   let unseen = $state(0);
-  let lastCount = 0;
+  let lastSeq = -1;
 
   const palette = [
     'var(--chart-1)',
@@ -99,12 +108,12 @@
   }
 
   $effect(() => {
-    const count = entries.length;
-    if (count > lastCount && following) {
+    const newest = lines.at(-1)?.seq ?? -1;
+    if (newest > lastSeq && following) {
       if (pinned) void jump();
-      else unseen += count - lastCount;
+      else if (lastSeq >= 0) unseen += newest - lastSeq;
     }
-    lastCount = count;
+    lastSeq = newest;
   });
 
   async function copyLine(entry: LogEntry) {
@@ -120,11 +129,8 @@
 </script>
 
 <div class="viewer" class:wrap>
-  {#if !entries.length && !loading}
-    <EmptyState
-      title="No log lines"
-      description="Pick a resource and load a range, or start following to stream new lines."
-    >
+  {#if !lines.length && !loading}
+    <EmptyState title="No log lines" description={emptyDescription}>
       {#snippet icon()}<ScrollText />{/snippet}
     </EmptyState>
   {:else}
@@ -137,8 +143,15 @@
       role="region"
       aria-label="Log lines"
     >
+      {#if hiddenBefore > 0 && onshowearlier}
+        <div class="earlier">
+          <Button size="sm" variant="quiet" onclick={onshowearlier}>
+            Show earlier lines ({hiddenBefore} more)
+          </Button>
+        </div>
+      {/if}
       <ol class="lines">
-        {#each entries as entry, index (`${entry.timestamp}-${index}`)}
+        {#each lines as { seq, entry } (seq)}
           <li
             class={`line ${colors ? severityClass(entry.severity) : ''}`}
             class:stderr={entry.stream === 'stderr'}
@@ -279,6 +292,11 @@
   .copy :global(svg) {
     width: 12px;
     height: 12px;
+  }
+  .earlier {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-2) 0 0;
   }
   .jump {
     position: absolute;

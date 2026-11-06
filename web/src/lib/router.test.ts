@@ -4,9 +4,11 @@ import {
   incidentPath,
   landingPath,
   loginPath,
+  logsPath,
   matchRoute,
   resolveLegacyPath,
   routes,
+  splitHref,
   type RouteName,
 } from './router';
 import { landingPages } from './preferences';
@@ -70,7 +72,6 @@ describe('matchRoute', () => {
       'incidents',
       'incident',
       'changes',
-      'logs',
       'settings',
       'login',
       'setup',
@@ -82,6 +83,27 @@ describe('matchRoute', () => {
 });
 
 describe('resolveLegacyPath', () => {
+  it('folds the Logs page into the resource Logs tab', () => {
+    expect(
+      resolveLegacyPath('/logs', '?resource=res_1&container=c9&at=2026-01-01'),
+    ).toBe('/resources/res_1?tab=logs&container=c9&at=2026-01-01');
+    expect(resolveLegacyPath('/logs', '', 'res_last')).toBe(
+      '/resources/res_last?tab=logs',
+    );
+    expect(resolveLegacyPath('/logs/', '?resource=res_2', 'res_last')).toBe(
+      '/resources/res_2?tab=logs',
+    );
+    expect(resolveLegacyPath('/logs', '')).toBe('/resources?prompt=logs');
+    expect(matchRoute('/logs')).toBeNull();
+  });
+
+  it('links to the Logs tab of a resource', () => {
+    expect(logsPath('res 1')).toBe('/resources/res%201?tab=logs');
+    expect(logsPath('res_1', '2026-01-01T00:00:00Z')).toBe(
+      '/resources/res_1?tab=logs&at=2026-01-01T00%3A00%3A00Z',
+    );
+  });
+
   it('maps retired page names to the new ones', () => {
     expect(resolveLegacyPath('/overview', '')).toBe('/headroom');
     expect(resolveLegacyPath('/watch', '')).toBe('/headroom');
@@ -149,8 +171,11 @@ describe('loginPath', () => {
 
 describe('landingPath', () => {
   it('opens a routable page for every stored start-page token', () => {
-    for (const page of landingPages)
-      expect(matchRoute(landingPath(page))).not.toBeNull();
+    for (const page of landingPages) {
+      const { pathname, search } = splitHref(landingPath(page));
+      const target = resolveLegacyPath(pathname, search) ?? pathname;
+      expect(matchRoute(splitHref(target).pathname)).not.toBeNull();
+    }
     expect(landingPath('overview')).toBe('/headroom');
     expect(landingPath('host')).toBe('/server');
     expect(landingPath('alerts')).toBe('/incidents');

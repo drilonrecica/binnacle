@@ -32,7 +32,7 @@ export const navigation: NavItem[] = [
     href: '/resources',
     label: 'Resources',
     icon: Boxes,
-    matches: ['resources', 'resource', 'logs'],
+    matches: ['resources', 'resource'],
     keywords: ['services', 'containers', 'apps', 'logs'],
   },
   {
@@ -89,8 +89,6 @@ export function pageTitle(route: RouteName | null): string {
       return 'Resource';
     case 'incident':
       return 'Incident';
-    case 'logs':
-      return 'Logs';
     case 'login':
       return 'Sign in';
     case 'setup':

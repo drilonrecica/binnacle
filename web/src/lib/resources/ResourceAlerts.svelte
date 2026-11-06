@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import BellOff from '@lucide/svelte/icons/bell-off';
   import ShieldCheck from '@lucide/svelte/icons/shield-check';
   import {
+    incidentTitle,
     listAlerts,
     listIncidents,
     type Alert,
@@ -19,6 +19,7 @@
   import Badge from '../ui/Badge.svelte';
   import Button from '../ui/Button.svelte';
   import Card from '../ui/Card.svelte';
+  import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import EmptyState from '../ui/EmptyState.svelte';
   import RelativeTime from '../ui/RelativeTime.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
@@ -28,11 +29,14 @@
 
   let {
     resourceId,
+    resourceName,
     project,
     onsilence,
     refreshKey = 0,
   }: {
     resourceId: string;
+    /** Shown in incident titles instead of the raw id (UI-18). */
+    resourceName: string;
     project?: string;
     onsilence?: () => void;
     refreshKey?: number;
@@ -43,6 +47,8 @@
   let silences = $state<Silence[]>([]);
   let loading = $state(true);
   let error = $state('');
+  let ending = $state<Silence | null>(null);
+  let confirmOpen = $state(false);
 
   async function load() {
     error = '';
@@ -73,21 +79,29 @@
     }
   }
 
-  async function endSilence(silence: Silence) {
-    try {
-      await deleteSilence(silence.id);
-      toasts.success('Silence removed');
-      await load();
-    } catch (reason) {
-      toasts.error('Silence could not be removed', {
-        description: errorMessage(reason),
-      });
-    }
+  function askToEnd(silence: Silence) {
+    ending = silence;
+    confirmOpen = true;
   }
 
-  onMount(() => {
-    void load();
-  });
+  /** Runs inside the confirmation; a failure stays in the dialog. */
+  async function endSilence() {
+    if (!ending) return;
+    await deleteSilence(ending.id);
+    toasts.success('Silence ended', {
+      description: 'Notifications for this scope are active again.',
+    });
+    ending = null;
+    await load();
+  }
+
+  function scopeName(silence: Silence) {
+    return silence.scopeType === 'server'
+      ? 'the whole server'
+      : silence.scopeType === 'project'
+        ? `project ${silence.scopeId}`
+        : resourceName;
+  }
 
   $effect(() => {
     void refreshKey;
@@ -134,7 +148,9 @@
                   : 'Resolved'}
               />
               <div class="text">
-                <a href={incidentPath(incident.id)}>{incident.title}</a>
+                <a href={incidentPath(incident.id)}
+                  >{incidentTitle(incident, resourceName)}</a
+                >
                 <span class="meta">
                   {incident.firingAlertCount} firing of {incident.alertCount} · opened
                   <RelativeTime value={incident.openedAt} />
@@ -213,7 +229,7 @@
               <Button
                 size="sm"
                 variant="quiet"
-                onclick={() => endSilence(silence)}>End now</Button
+                onclick={() => askToEnd(silence)}>End now…</Button
               >
             </li>
           {/each}
@@ -222,6 +238,16 @@
     </Card>
   {/if}
 </div>
+
+<ConfirmDialog
+  bind:open={confirmOpen}
+  title="End this silence?"
+  description={ending
+    ? `Notifications for ${scopeName(ending)} resume now. Alerts that are still firing notify again.`
+    : undefined}
+  confirmLabel="End silence"
+  onconfirm={endSilence}
+/>
 
 <style>
   .stack {

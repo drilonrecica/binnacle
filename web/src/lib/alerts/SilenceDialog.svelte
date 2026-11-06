@@ -13,6 +13,7 @@
   import Input from '../ui/Input.svelte';
   import Select from '../ui/Select.svelte';
   import { toasts } from '../ui/toast.svelte';
+  import { silenceSummary } from './silence-summary';
 
   let {
     open = $bindable(false),
@@ -63,6 +64,17 @@
         : scope === 'rule'
           ? 'Rule'
           : '',
+  );
+
+  const summary = $derived(
+    silenceSummary({
+      scope,
+      scopeId,
+      resourceName: resources.find((item) => item.id === scopeId)?.name,
+      ruleName: rules.find((item) => item.id === scopeId)?.name,
+      preset,
+      customEnd,
+    }),
   );
 
   async function submit() {
@@ -222,6 +234,7 @@
         />
       {/snippet}
     </Field>
+    {#if summary}<p class="summary" aria-live="polite">{summary}</p>{/if}
     {#if error}<p class="error" role="alert">{error}</p>{/if}
   </form>
   {#snippet footer()}
@@ -243,6 +256,13 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--space-3);
+  }
+  .summary {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--panel-2);
+    font-size: var(--text-meta);
   }
   .error {
     color: var(--critical-fg);
