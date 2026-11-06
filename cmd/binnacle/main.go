@@ -97,7 +97,7 @@ func main() {
 	sessions := auth.NewSessions(nil, auth.SessionConfig{IdleTimeout: config.Sessions.IdleTimeout, AbsoluteLifetime: config.Sessions.AbsoluteLifetime})
 	tokenRepository := auth.NewAPITokenRepository(nil)
 	preferenceRepository := preferences.NewRepository(nil)
-	checker := diagnostics.OnboardingChecker{HostProc: config.Paths.HostProc, HostSys: config.Paths.HostSys, DataDir: config.Paths.DataDir}
+	checker := diagnostics.OnboardingChecker{HostProc: config.Paths.HostProc, HostSys: config.Paths.HostSys, DataDir: config.Paths.DataDir, Demo: *demoMode || config.Demo}
 	onboardingService := onboarding.New(nil, checker)
 	// The estimator recomputes time-to-full trends every five minutes; a
 	// window change wakes it so the new window shows without the wait.

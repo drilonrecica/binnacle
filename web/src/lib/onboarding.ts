@@ -1,4 +1,5 @@
 import { authenticatedMutation } from './auth';
+import type { Tone } from './ui/status';
 
 export interface DiagnosticResult {
   id: string;
@@ -8,6 +9,40 @@ export interface DiagnosticResult {
   reason: string;
   suggestedFix?: string;
   technicalDetail?: string;
+  /** Demo mode replaced this check's source with synthetic data. */
+  synthetic?: boolean;
+}
+
+/**
+ * How one check reads in the interface: a tone (which sets the marker shape)
+ * and a word. A synthetic check is neither a pass nor a failure (P4-12).
+ */
+export function diagnosticDisplay(check: DiagnosticResult): {
+  tone: Tone;
+  label: string;
+} {
+  if (check.synthetic) return { tone: 'info', label: 'synthetic data' };
+  switch (check.status) {
+    case 'passed':
+      return { tone: 'ok', label: 'passed' };
+    case 'failed':
+      return { tone: 'critical', label: 'failed' };
+    case 'warning':
+      return { tone: 'warn', label: 'warning' };
+    default:
+      return { tone: 'neutral', label: 'not run' };
+  }
+}
+
+/** Counts for the onboarding summary; synthetic checks are their own group. */
+export function diagnosticSummary(checks: DiagnosticResult[]) {
+  const real = checks.filter((check) => !check.synthetic);
+  return {
+    total: checks.length,
+    passed: real.filter((check) => check.status === 'passed').length,
+    synthetic: checks.length - real.length,
+    toReview: real.filter((check) => check.status === 'failed').length,
+  };
 }
 
 export interface OnboardingState {
@@ -78,4 +113,65 @@ export function dismissChecklist() {
     '/api/v1/onboarding/checklist/dismiss',
     'POST',
   );
+}
+
+export interface ChecklistItem {
+  id: string;
+  label: string;
+  status: 'done' | 'attention' | 'optional';
+  detail: string;
+  href: string;
+}
+
+/**
+ * The "Finish setting up" items on Headroom, from the last diagnostics run.
+ * Demo mode's synthetic Docker counts as done and says so; it never asks the
+ * user to mount a socket that demo mode does not use (P4-12).
+ */
+export function setupChecklistItems(
+  diagnostics: DiagnosticResult[],
+): ChecklistItem[] {
+  const docker = diagnostics.find((item) => item.id === 'docker_api');
+  const metadata = diagnostics.find(
+    (item) => item.id === 'deployment_metadata',
+  );
+  return [
+    {
+      id: 'docker',
+      label: 'Docker monitoring',
+      status: docker?.status === 'passed' ? 'done' : 'attention',
+      detail: docker?.synthetic
+        ? 'Demo mode: containers are synthetic data.'
+        : docker?.status === 'passed'
+          ? 'Containers are being observed.'
+          : (docker?.suggestedFix ??
+            'Mount the Docker socket or configure a socket proxy.'),
+      href: '/server?tab=collectors',
+    },
+    {
+      id: 'metadata',
+      label: 'Compose or Coolify grouping',
+      status: metadata?.status === 'passed' ? 'done' : 'optional',
+      detail: metadata?.synthetic
+        ? 'Demo mode: projects come from the synthetic catalogue.'
+        : metadata?.status === 'passed'
+          ? 'Resources are grouped by project.'
+          : 'Connect Coolify to enrich names and grouping.',
+      href: '/settings/integrations',
+    },
+    {
+      id: 'channel',
+      label: 'Add a notification channel',
+      status: 'optional',
+      detail: 'Get incidents by webhook or email.',
+      href: '/settings/notifications',
+    },
+    {
+      id: 'check',
+      label: 'Create a health check',
+      status: 'optional',
+      detail: 'Probe an HTTP endpoint on a schedule.',
+      href: '/incidents?tab=checks',
+    },
+  ];
 }

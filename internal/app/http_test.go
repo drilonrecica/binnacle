@@ -3,11 +3,14 @@
 package app_test
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/drilonrecica/binnacle/internal/api"
@@ -53,5 +56,28 @@ func TestRootRoutesCarrySecurityHeaders(t *testing.T) {
 	}
 	if !regexp.MustCompile(`frame-ancestors 'none'`).MatchString(api.ContentSecurityPolicy) {
 		t.Fatal("CSP must forbid framing")
+	}
+}
+
+// TestInlineScriptsMatchCSP: every inline script in the served index.html must
+// be allowed by its hash, or the browser blocks it and light-theme users get
+// the dark flash back (UI-20). Scripts stay out of 'unsafe-inline'.
+func TestInlineScriptsMatchCSP(t *testing.T) {
+	rec := httptest.NewRecorder()
+	webembed.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	inline := regexp.MustCompile(`(?s)<script>(.*?)</script>`).FindAllStringSubmatch(rec.Body.String(), -1)
+	if len(inline) == 0 {
+		t.Fatalf("index.html has no inline theme script: %s", rec.Body.String())
+	}
+	for _, match := range inline {
+		sum := sha256.Sum256([]byte(match[1]))
+		hash := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+		if !strings.Contains(api.ContentSecurityPolicy, hash) {
+			t.Errorf("CSP does not allow inline script %s; update themeScriptHash in internal/api/server.go", hash)
+		}
+	}
+	scriptSrc := regexp.MustCompile(`script-src [^;]*`).FindString(api.ContentSecurityPolicy)
+	if strings.Contains(scriptSrc, "unsafe-inline") {
+		t.Fatalf("script-src must not allow unsafe-inline: %s", scriptSrc)
 	}
 }

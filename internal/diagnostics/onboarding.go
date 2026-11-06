@@ -34,6 +34,10 @@ type CheckResult struct {
 	Reason          string      `json:"reason"`
 	SuggestedFix    string      `json:"suggestedFix,omitempty"`
 	TechnicalDetail string      `json:"technicalDetail,omitempty"`
+	// Synthetic marks a check whose source demo mode replaces with generated
+	// data. The status is passed because nothing is broken; the interface
+	// shows "synthetic data" instead of a pass, never a failure (P4-12).
+	Synthetic bool `json:"synthetic,omitempty"`
 }
 
 type DockerDiagnostics interface {
@@ -52,6 +56,10 @@ type OnboardingChecker struct {
 	OutboundURL     string
 	ReadFile        func(string) ([]byte, error)
 	PersistentProbe func(string) error
+	// Demo is set in demo mode, where host metrics, cgroups and Docker are
+	// synthetic: those checks report that instead of probing real sources
+	// that demo mode never reads. Storage and network are still checked.
+	Demo bool
 }
 
 func (c OnboardingChecker) Run(ctx context.Context, includeOutbound bool) []CheckResult {
@@ -60,6 +68,17 @@ func (c OnboardingChecker) Run(ctx context.Context, includeOutbound bool) []Chec
 	}
 	if c.PersistentProbe == nil {
 		c.PersistentProbe = persistentProbe
+	}
+	if c.Demo {
+		return []CheckResult{
+			synthetic("host_metrics", "Host metrics access", true, "Demo mode: host CPU, memory and disks are synthetic data; /proc is not read."),
+			synthetic("docker_api", "Docker API access", true, "Demo mode: containers are synthetic data; the Docker API is not queried."),
+			synthetic("cgroup", "cgroup access", false, "Demo mode: container resource usage is synthetic data; cgroups are not read."),
+			synthetic("deployment_metadata", "Compose/Coolify detection", false, "Demo mode: projects and environments come from the synthetic catalogue."),
+			c.persistence(),
+			c.database(ctx),
+			c.outbound(ctx, includeOutbound),
+		}
 	}
 	return []CheckResult{
 		c.hostMetrics(),
@@ -194,6 +213,12 @@ func (c OnboardingChecker) outbound(ctx context.Context, include bool) CheckResu
 
 func base(id, name string, required bool) CheckResult {
 	return CheckResult{ID: id, Name: name, Required: required}
+}
+
+func synthetic(id, name string, required bool, reason string) CheckResult {
+	result := base(id, name, required)
+	result.Status, result.Reason, result.Synthetic = CheckPassed, reason, true
+	return result
 }
 
 func failed(result CheckResult, reason, fix string, err error) CheckResult {

@@ -174,10 +174,17 @@ func setSecurityHeaders(w http.ResponseWriter, r *http.Request, secure bool) {
 	}
 }
 
+// themeScriptHash allows the one inline script in web/index.html, which
+// applies the saved theme before first paint so light-theme users see no dark
+// flash (UI-20). Any edit to that script needs a new hash;
+// TestInlineScriptsMatchCSP in internal/app fails until it matches.
+const themeScriptHash = "'sha256-lTAkg84mggIj4zealV0EmdCnfNgweGfe4bz3fbHxO6A='"
+
 // ContentSecurityPolicy is sent on every response. The embedded UI loads only
-// same-origin module scripts and stylesheets; Svelte sets inline style
-// attributes, hence 'unsafe-inline' for styles only.
-const ContentSecurityPolicy = "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';"
+// same-origin module scripts and stylesheets, plus the hash-pinned theme
+// script; Svelte sets inline style attributes, hence 'unsafe-inline' for
+// styles only.
+const ContentSecurityPolicy = "default-src 'self'; connect-src 'self'; script-src 'self' " + themeScriptHash + "; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';"
 
 func sanitizePath(u *url.URL) string {
 	values := u.Query()

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/drilonrecica/binnacle/internal/dockerapi"
@@ -64,5 +65,41 @@ func TestMetadataDetectionPassesWithCompose(t *testing.T) {
 	result := checker.metadata(context.Background())
 	if result.Status != CheckPassed {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+// TestDemoModeReportsSyntheticSources: demo mode has no Docker client and
+// never reads /proc, so those checks must say "synthetic" rather than fail,
+// while storage is still checked for real (P4-12).
+func TestDemoModeReportsSyntheticSources(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	db := storage.New(filepath.Join(dir, "binnacle.db"), filepath.Join(dir, "run"))
+	if err := db.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	checker := OnboardingChecker{
+		Demo: true, HostProc: "/missing/proc", HostSys: "/missing/sys", DataDir: dir, DB: db.DB(),
+		PersistentProbe: func(string) error { return errors.New("read-only") },
+	}
+	byID := map[string]CheckResult{}
+	for _, result := range checker.Run(ctx, false) {
+		byID[result.ID] = result
+	}
+	for _, id := range []string{"host_metrics", "docker_api", "cgroup", "deployment_metadata"} {
+		result := byID[id]
+		if result.Status == CheckFailed || !result.Synthetic || !strings.Contains(result.Reason, "synthetic") {
+			t.Errorf("%s = %+v, want a synthetic, non-failed result", id, result)
+		}
+	}
+	if result := byID["persistent_storage"]; result.Status != CheckFailed || result.Synthetic {
+		t.Errorf("persistent_storage = %+v, want the real probe's failure", result)
+	}
+	if result := byID["database"]; result.Status != CheckPassed || result.Synthetic {
+		t.Errorf("database = %+v, want a real pass", result)
+	}
+	if byID["outbound_network"].Status != CheckNotRun {
+		t.Fatal("outbound check ran without consent")
 	}
 }

@@ -10,6 +10,7 @@
     type AuthMethods,
   } from '../auth';
   import { router } from '../router.svelte';
+  import { homePath } from '../router';
   import AuthShell from '../auth/AuthShell.svelte';
   import Button from '../ui/Button.svelte';
   import Field from '../ui/Field.svelte';
@@ -27,6 +28,12 @@
   let retryAt = $state<number | null>(null);
   let now = $state(Date.now());
   let errorElement = $state<HTMLElement | null>(null);
+
+  /** Where sign-in leads: the `next` deep link when it is safe, else home. */
+  const destination = $derived(safeRedirect(router.param('next') || null));
+  const returning = $derived(
+    Boolean(router.param('next')) && destination !== homePath,
+  );
 
   const retrySeconds = $derived(
     retryAt ? Math.max(0, Math.ceil((retryAt - now) / 1000)) : 0,
@@ -66,7 +73,7 @@
     error = '';
     try {
       await login(username, password, code);
-      onauthenticated(safeRedirect(router.param('next') || null));
+      onauthenticated(destination);
     } catch (reason) {
       await fail(reason);
     } finally {
@@ -79,7 +86,7 @@
     error = '';
     try {
       await bootstrapExternalSession();
-      onauthenticated(safeRedirect(router.param('next') || null));
+      onauthenticated(destination);
     } catch (reason) {
       await fail(reason);
     } finally {
@@ -94,6 +101,11 @@
     ? 'This server signs you in through its reverse proxy.'
     : 'Use the local administrator account for this server.'}
 >
+  {#if returning}
+    <p class="returning">
+      After signing in you return to <code>{destination}</code>.
+    </p>
+  {/if}
   {#if methods?.proxy && methods.proxyAvailable}
     <Button
       variant={methods.local ? 'secondary' : 'primary'}
@@ -177,6 +189,16 @@
   .form {
     display: grid;
     gap: var(--space-4);
+  }
+  .returning {
+    color: var(--muted);
+    font-size: var(--text-meta);
+    overflow-wrap: anywhere;
+  }
+  .returning code {
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: var(--text-mono);
   }
   .or {
     color: var(--muted);

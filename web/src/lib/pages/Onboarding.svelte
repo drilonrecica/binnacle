@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import CircleAlert from '@lucide/svelte/icons/circle-alert';
-  import CircleCheck from '@lucide/svelte/icons/circle-check';
-  import Circle from '@lucide/svelte/icons/circle';
+  import FlaskConical from '@lucide/svelte/icons/flask-conical';
   import ShieldAlert from '@lucide/svelte/icons/shield-alert';
   import {
     completeOnboarding,
+    diagnosticDisplay,
+    diagnosticSummary,
     onboardingState,
     runDiagnostics,
     saveOnboarding,
@@ -14,8 +14,10 @@
   import { retentionPresets } from '../api/settings';
   import { errorMessage } from '../api/client';
   import AuthShell from '../auth/AuthShell.svelte';
+  import Steps from '../auth/Steps.svelte';
   import Button from '../ui/Button.svelte';
   import RadioCards from '../ui/RadioCards.svelte';
+  import Status from '../ui/Status.svelte';
   import Switch from '../ui/Switch.svelte';
 
   let { oncomplete }: { oncomplete: () => void } = $props();
@@ -30,9 +32,10 @@
   const steps = ['Security', 'Retention', 'Diagnostics', 'Done'];
   const diagnostics = $derived(onboarding.diagnostics ?? []);
   const failures = $derived(
-    diagnostics.filter((item) => item.status === 'failed'),
+    diagnostics.filter((item) => item.status === 'failed' && !item.synthetic),
   );
   const requiredFailures = $derived(failures.filter((item) => item.required));
+  const summary = $derived(diagnosticSummary(diagnostics));
 
   onMount(() => {
     void onboardingState()
@@ -112,15 +115,9 @@
       ? 'Change this later under Settings → Data.'
       : step === 3
         ? 'Each check explains what to fix if it fails. Required checks affect what Binnacle can see.'
-        : 'The dashboard is ready. The checklist on the Overview points at the remaining optional setup.'}
+        : 'Binnacle is ready. The checklist on Headroom points at the remaining optional setup.'}
 >
-  <ol class="steps" aria-label="Onboarding progress">
-    {#each steps as label, index (label)}
-      <li class:done={step > index + 1} class:current={step === index + 1}>
-        {label}
-      </li>
-    {/each}
-  </ol>
+  <Steps label="Onboarding progress" {steps} current={step} />
 
   {#if step === 1}
     <div class="notice">
@@ -170,31 +167,40 @@
     {#if busy && !diagnostics.length}
       <p class="running" role="status">Running checks…</p>
     {:else if diagnostics.length}
+      {#if summary.synthetic}
+        <div class="notice info" role="note">
+          <FlaskConical aria-hidden="true" />
+          <div>
+            <strong>Demo mode: host and Docker data are synthetic.</strong>
+            <p>
+              Those checks show “synthetic data” because demo mode generates
+              them instead of reading this server. Storage and the database are
+              checked for real.
+            </p>
+          </div>
+        </div>
+      {/if}
       <ul class="checks">
         {#each diagnostics as check (check.id)}
-          <li class={check.status}>
-            <span class="check-icon" aria-hidden="true">
-              {#if check.status === 'passed'}<CircleCheck
-                />{:else if check.status === 'failed'}<CircleAlert
-                />{:else}<Circle />{/if}
-            </span>
-            <div class="check-text">
+          {@const display = diagnosticDisplay(check)}
+          <li data-status={check.status} data-synthetic={check.synthetic}>
+            <div class="check-head">
               <span class="check-title"
                 >{check.name}{#if check.required}<span class="required">
                     · required</span
                   >{/if}</span
               >
-              <span class="check-reason">{check.reason}</span>
-              {#if check.suggestedFix}<span class="check-fix"
-                  >{check.suggestedFix}</span
-                >{/if}
-              {#if check.technicalDetail}<details>
-                  <summary>Technical detail</summary><code
-                    >{check.technicalDetail}</code
-                  >
-                </details>{/if}
+              <Status tone={display.tone} label={display.label} size="sm" />
             </div>
-            <span class="sr-only">{check.status.replaceAll('_', ' ')}</span>
+            <span class="check-reason">{check.reason}</span>
+            {#if check.suggestedFix}<span class="check-fix"
+                >{check.suggestedFix}</span
+              >{/if}
+            {#if check.technicalDetail}<details>
+                <summary>Technical detail</summary><code
+                  >{check.technicalDetail}</code
+                >
+              </details>{/if}
           </li>
         {/each}
       </ul>
@@ -215,9 +221,10 @@
       </li>
       <li>
         Diagnostics: <strong
-          >{diagnostics.filter((item) => item.status === 'passed').length} of {diagnostics.length}
-          passed</strong
-        >{#if failures.length}, {failures.length} to review{/if}
+          >{summary.passed} of {summary.total - summary.synthetic} passed</strong
+        >{#if summary.toReview}, {summary.toReview} to review{/if}{#if summary.synthetic};
+          {summary.synthetic}
+          on synthetic data (demo mode){/if}
       </li>
       <li>
         Next: add a notification channel and a health check when you are ready.
@@ -257,48 +264,6 @@
 </AuthShell>
 
 <style>
-  .steps {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-4);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    counter-reset: step;
-  }
-  .steps li {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    color: var(--muted);
-    font-size: var(--text-mono);
-    font-weight: 500;
-  }
-  .steps li::before {
-    counter-increment: step;
-    content: counter(step);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    border: 1px solid var(--line-strong);
-    border-radius: 50%;
-    font-family: var(--font-mono);
-  }
-  .steps li.current {
-    color: var(--fg);
-  }
-  .steps li.current::before {
-    border-color: var(--accent);
-    background: var(--accent);
-    color: var(--accent-contrast);
-  }
-  .steps li.done::before {
-    content: '✓';
-    border-color: var(--ok-solid);
-    color: var(--ok-fg);
-  }
   .notice {
     display: flex;
     gap: var(--space-3);
@@ -317,6 +282,14 @@
   }
   .notice strong {
     color: var(--warn-fg);
+  }
+  .notice.info {
+    border-color: var(--info-border);
+    background: var(--info-bg);
+  }
+  .notice.info :global(svg),
+  .notice.info strong {
+    color: var(--info-fg);
   }
   .notice p {
     margin-top: 2px;
@@ -356,42 +329,30 @@
     list-style: none;
   }
   .checks li {
-    display: flex;
-    gap: var(--space-3);
+    display: grid;
+    gap: 2px;
     padding: var(--space-3);
     border: 1px solid var(--line);
     border-radius: var(--radius-control);
-    background: var(--bg);
-  }
-  .check-icon {
-    display: inline-flex;
-    margin-top: 2px;
-    color: var(--muted);
-  }
-  .check-icon :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  li.passed .check-icon {
-    color: var(--ok-fg);
-  }
-  li.failed .check-icon {
-    color: var(--critical-fg);
-  }
-  li.warning .check-icon {
-    color: var(--warn-fg);
-  }
-  .check-text {
-    display: grid;
-    gap: 2px;
+    background: var(--panel-2);
     font-size: var(--text-meta);
   }
+  .checks li[data-status='failed']:not([data-synthetic='true']) {
+    border-color: var(--critical-border);
+  }
+  .check-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-3);
+  }
   .check-title {
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
   .required {
     color: var(--muted);
-    font-weight: 400;
+    font-weight: var(--weight-regular);
     font-size: var(--text-mono);
   }
   .check-reason {
@@ -422,12 +383,15 @@
   }
   .actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
   }
   .actions-right {
     display: flex;
+    flex-wrap: wrap;
+    margin-left: auto;
     gap: var(--space-2);
   }
 </style>

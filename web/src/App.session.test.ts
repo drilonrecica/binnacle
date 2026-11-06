@@ -16,7 +16,10 @@ const stub = vi.hoisted(() => async () => ({
   default: (await import('./lib/shell/testing/PageStub.test.svelte')).default,
 }));
 
-vi.mock('./lib/auth', () => ({
+vi.mock('./lib/auth', async () => ({
+  safeRedirect: (
+    await vi.importActual<typeof import('./lib/auth')>('./lib/auth')
+  ).safeRedirect,
   currentSession: mocks.currentSession,
   authMethods: vi.fn().mockResolvedValue({ proxyAvailable: false }),
   bootstrapExternalSession: vi.fn(),
@@ -125,5 +128,24 @@ describe('session expiry (UI-5)', () => {
     expect(new URLSearchParams(location.search).get('next')).toBe(
       '/incidents/inc_9',
     );
+  });
+});
+
+describe('sign-in honours next (P4-12)', () => {
+  it('sends a signed-in visit to /login on to its next', async () => {
+    visit('/login?next=%2Fincidents%2Finc_9%3Ftab%3Dalerts');
+    mocks.currentSession.mockResolvedValue(session);
+    render(App);
+    await waitFor(() => expect(location.pathname).toBe('/incidents/inc_9'));
+    expect(location.search).toBe('?tab=alerts');
+  });
+
+  it('ignores a next that leaves the app', async () => {
+    visit('/login?next=https%3A%2F%2Fevil.example%2F');
+    mocks.currentSession.mockResolvedValue(session);
+    render(App);
+    await waitFor(() => expect(location.pathname).not.toBe('/login'));
+    expect(location.host).not.toBe('evil.example');
+    expect(location.pathname).toBe('/headroom');
   });
 });

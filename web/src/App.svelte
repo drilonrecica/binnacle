@@ -20,8 +20,10 @@
     authMethods,
     bootstrapExternalSession,
     currentSession,
+    safeRedirect,
     type SessionInfo,
   } from './lib/auth';
+  import BrandMark from './lib/auth/BrandMark.svelte';
   import { onboardingState, setupAvailable } from './lib/onboarding';
   import Login from './lib/pages/Login.svelte';
   import Setup from './lib/pages/Setup.svelte';
@@ -123,7 +125,10 @@
         if (value) {
           startSession(value);
           if (!router.match || definition?.public) {
-            router.navigate(homePath, { replace: true });
+            // Already signed in (or by the proxy) on /login: honour its
+            // `next` instead of dropping the user on the home page.
+            const next = router.name === 'login' ? router.param('next') : '';
+            router.navigate(safeRedirect(next || null), { replace: true });
           }
           void prefs
             .load()
@@ -191,8 +196,8 @@
 <a class="skip-link" href="#content">Skip to content</a>
 {#if loading}
   <main class="access-state" aria-busy="true">
-    <img src="/brand/binnacle-mark.svg" alt="" width="48" height="48" />
-    <p>Checking access…</p>
+    <span class="access-mark"><BrandMark size={48} /></span>
+    <p role="status">Checking access…</p>
   </main>
 {:else if !allowed}
   <main id="content" class="public-shell">
@@ -208,3 +213,38 @@
     <RouteView {live} viewer={session.user.username} onsignedout={signedOut} />
   </AppShell>
 {/if}
+
+<style>
+  /* Loading screen: the M1 mark on slate, theme-correct from the first frame
+     because index.html sets data-theme before the bundle runs. */
+  .access-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: var(--space-6) var(--space-4);
+    background: var(--bg);
+    color: var(--muted);
+    font-size: var(--text-meta);
+  }
+  .access-mark {
+    display: inline-flex;
+    animation: settle 1.6s var(--ease-out) infinite alternate;
+  }
+  @keyframes settle {
+    from {
+      transform: rotate(-8deg);
+    }
+    to {
+      transform: rotate(8deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .access-mark {
+      animation: none;
+    }
+  }
+</style>

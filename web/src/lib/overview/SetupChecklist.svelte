@@ -6,6 +6,7 @@
   import {
     dismissChecklist,
     onboardingState,
+    setupChecklistItems,
     type OnboardingState,
   } from '../onboarding';
   import { errorMessage } from '../api/client';
@@ -22,51 +23,7 @@
       !dismissed,
   );
 
-  function diagnostic(id: string) {
-    return onboarding?.diagnostics?.find((item) => item.id === id);
-  }
-
-  const items = $derived.by(() => {
-    const docker = diagnostic('docker_api');
-    const metadata = diagnostic('deployment_metadata');
-    return [
-      {
-        id: 'docker',
-        label: 'Docker monitoring',
-        status: docker?.status === 'passed' ? 'done' : 'attention',
-        detail:
-          docker?.status === 'passed'
-            ? 'Containers are being observed.'
-            : (docker?.suggestedFix ??
-              'Mount the Docker socket or configure a socket proxy.'),
-        href: '/server?tab=collectors',
-      },
-      {
-        id: 'metadata',
-        label: 'Compose or Coolify grouping',
-        status: metadata?.status === 'passed' ? 'done' : 'optional',
-        detail:
-          metadata?.status === 'passed'
-            ? 'Resources are grouped by project.'
-            : 'Connect Coolify to enrich names and grouping.',
-        href: '/settings/integrations',
-      },
-      {
-        id: 'channel',
-        label: 'Add a notification channel',
-        status: 'optional',
-        detail: 'Get incidents by webhook or email.',
-        href: '/settings/notifications',
-      },
-      {
-        id: 'check',
-        label: 'Create a health check',
-        status: 'optional',
-        detail: 'Probe an HTTP endpoint on a schedule.',
-        href: '/incidents?tab=checks',
-      },
-    ] as const;
-  });
+  const items = $derived(setupChecklistItems(onboarding?.diagnostics ?? []));
 
   onMount(() => {
     void onboardingState()

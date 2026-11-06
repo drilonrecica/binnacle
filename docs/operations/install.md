@@ -210,7 +210,11 @@ Every response, including the UI document, its assets, `/healthz` and
 `frame-ancestors 'none'`), `X-Frame-Options: DENY`,
 `X-Content-Type-Options: nosniff`, `Referrer-Policy:
 strict-origin-when-cross-origin` and an `X-Request-ID`. Binnacle cannot be
-embedded in a frame. A proxy that adds its own CSP should not loosen these.
+embedded in a frame. The only inline script, which applies the saved theme
+before the page paints, is allowed by its SHA-256 hash rather than
+`'unsafe-inline'`. A proxy that adds its own CSP should not loosen these, and
+one that replaces Binnacle's CSP must keep that hash or light-theme users see
+a dark flash on load.
 
 The listener waits at most 10 s for request headers, closes idle keep-alive
 connections after 120 s and refuses request headers above 64 KiB. Each request

@@ -3,6 +3,7 @@
   import { claimSetup, verifySetupToken } from '../onboarding';
   import { errorMessage } from '../api/client';
   import AuthShell from '../auth/AuthShell.svelte';
+  import Steps from '../auth/Steps.svelte';
   import Button from '../ui/Button.svelte';
   import Field from '../ui/Field.svelte';
   import Input from '../ui/Input.svelte';
@@ -77,10 +78,11 @@
     ? 'Enter the one-time setup token: the BINNACLE_SETUP_TOKEN value from your deployment or, on a loopback-only install, the contents of the setup-token file whose path Binnacle logs at startup.'
     : 'This is the only account. It signs in locally with a password; two-factor can be added later.'}
 >
-  <ol class="steps" aria-label="Setup progress">
-    <li class:done={step > 1} class:current={step === 1}>Verify token</li>
-    <li class:current={step === 2}>Administrator</li>
-  </ol>
+  <Steps
+    label="Setup progress"
+    steps={['Verify token', 'Administrator']}
+    current={step}
+  />
   {#if step === 1}
     <form class="form" onsubmit={verify} aria-busy={busy}>
       <Field label="Setup token" required>
@@ -182,47 +184,6 @@
 </AuthShell>
 
 <style>
-  .steps {
-    display: flex;
-    gap: var(--space-4);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    counter-reset: step;
-  }
-  .steps li {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    color: var(--muted);
-    font-size: var(--text-mono);
-    font-weight: 500;
-  }
-  .steps li::before {
-    counter-increment: step;
-    content: counter(step);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    border: 1px solid var(--line-strong);
-    border-radius: 50%;
-    font-family: var(--font-mono);
-  }
-  .steps li.current {
-    color: var(--fg);
-  }
-  .steps li.current::before {
-    border-color: var(--accent);
-    background: var(--accent);
-    color: var(--accent-contrast);
-  }
-  .steps li.done::before {
-    content: '✓';
-    border-color: var(--ok-solid);
-    color: var(--ok-fg);
-  }
   .form {
     display: grid;
     gap: var(--space-4);

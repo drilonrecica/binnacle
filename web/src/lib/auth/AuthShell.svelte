@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import Toaster from '../ui/Toaster.svelte';
+  import BrandMark from './BrandMark.svelte';
 
   let {
     title,
@@ -24,20 +25,7 @@
   <div class="card" class:wide>
     <header class="head">
       <span class="brand">
-        <img
-          class="mark dark"
-          src="/brand/binnacle-mark.svg"
-          alt=""
-          width="36"
-          height="36"
-        />
-        <img
-          class="mark light"
-          src="/brand/binnacle-mark-on-light.svg"
-          alt=""
-          width="36"
-          height="36"
-        />
+        <BrandMark size={32} />
         <span class="wordmark">Binnacle</span>
       </span>
       {#if eyebrow}<span class="eyebrow">{eyebrow}</span>{/if}
@@ -101,32 +89,28 @@
   .brand {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-    margin-bottom: var(--space-3);
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
   }
-  .mark.light {
-    display: none;
-  }
-  :global(html[data-theme='light']) .mark.light {
-    display: block;
-  }
-  :global(html[data-theme='light']) .mark.dark {
-    display: none;
-  }
+  /* Lockup (DESIGN §Logo): Barlow Condensed 600, gap 0.5x cap height. */
   .wordmark {
-    font-size: var(--text-h2);
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-display);
+    line-height: 1;
   }
   .eyebrow {
     color: var(--accent-text);
-    font-size: var(--text-mono);
-    font-weight: 600;
+    font-size: var(--text-label);
+    font-weight: var(--weight-semibold);
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;
   }
   h1 {
+    font-family: var(--font-display);
     font-size: var(--text-h1);
+    letter-spacing: var(--tracking-display);
   }
   .description {
     color: var(--muted);
@@ -143,8 +127,13 @@
     font-size: var(--text-mono);
   }
   .foot {
+    position: relative;
     color: var(--muted);
-    font-size: var(--text-mono);
-    letter-spacing: var(--tracking-label);
+    font-size: var(--text-meta);
+  }
+  @media (max-width: 560px) {
+    .card {
+      padding: var(--space-6) var(--space-4);
+    }
   }
 </style>

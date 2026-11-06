@@ -12,6 +12,43 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Binnacle</title>
+    <!--
+      Applies the saved theme and density before first paint so light-theme
+      users never see a dark flash (UI-20). Mirrors preferences() and
+      resolveTheme() in src/lib/preferences.ts. The CSP allows this script by
+      its hash (api.ContentSecurityPolicy); changing a byte needs a new hash,
+      which TestInlineScriptsMatchCSP in internal/app enforces.
+    -->
+    <script>
+      (function () {
+        var theme = 'dark';
+        var density = 'comfortable';
+        try {
+          var saved = JSON.parse(
+            localStorage.getItem('binnacle.preferences.v1') || 'null',
+          );
+          theme =
+            (saved && saved.theme) ||
+            localStorage.getItem('binnacle.theme') ||
+            theme;
+          density =
+            (saved && saved.density) ||
+            localStorage.getItem('binnacle.density') ||
+            density;
+        } catch (error) {
+          /* Storage is unavailable; keep the defaults. */
+        }
+        if (theme === 'system') {
+          theme = matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+        }
+        var root = document.documentElement;
+        root.dataset.theme = theme === 'light' ? 'light' : 'dark';
+        root.dataset.density =
+          density === 'compact' ? 'compact' : 'comfortable';
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>
