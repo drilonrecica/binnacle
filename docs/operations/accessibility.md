@@ -31,6 +31,13 @@ Verify each item in a supported browser with keyboard-only interaction and, wher
 - [ ] Focus moves to the error message after a failed submission.
 - [ ] Password fields use `type="password"` and appropriate autocomplete tokens.
 
+### Headroom
+
+- [ ] Each instrument is a link to Server whose accessible name starts with the gauge's visible words ("CPU 42%, steady"; "Root disk / 88 GiB of 100 GiB, full in ~6 d, 88% used"); the gauge inside is a `meter` with min, max and value text.
+- [ ] A gauge over its warn or critical line says "Above N%" next to a ring or square marker, not by colour alone.
+- [ ] "Nothing needs attention" appears only while the stream is live and the incident list has loaded; otherwise the attention strip shows "Status unknown since hh:mm" with the last update.
+- [ ] No boot id, container id or resource id appears as text on the page.
+
 ### Color and visual information
 
 - [ ] Status badges (healthy, degraded, down, unknown, archived) are readable with the text label; the colored dot is `aria-hidden`.

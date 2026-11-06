@@ -62,6 +62,32 @@ describe('Gauge', () => {
     ).toContain('at or above the 90 percent threshold');
   });
 
+  it('takes the warn tone between the warn and critical lines', () => {
+    const { container } = render(Gauge, {
+      value: 86,
+      label: 'Memory',
+      warn: 85,
+      threshold: 95,
+      unit: '',
+      valueText: '6.9 GiB',
+      trend: 'full in ~3 d',
+      trendTone: 'critical',
+    });
+    const gauge = container.querySelector('.gauge');
+    expect(gauge?.classList.contains('warning')).toBe(true);
+    expect(gauge?.classList.contains('over')).toBe(false);
+    expect(screen.getByText(/Above 85%/)).toBeTruthy();
+    expect(container.querySelectorAll('.tick')).toHaveLength(2);
+    expect(container.querySelector('.trend.critical')?.textContent).toBe(
+      'full in ~3 d',
+    );
+    expect(
+      screen
+        .getByRole('meter', { name: 'Memory' })
+        .getAttribute('aria-valuetext'),
+    ).toBe('6.9 GiB, 86 percent, threshold 95 percent');
+  });
+
   it('states missing data instead of drawing a needle at zero', () => {
     const { container } = render(Gauge, { value: null, label: 'CPU' });
     expect(screen.queryByRole('meter')).toBeNull();

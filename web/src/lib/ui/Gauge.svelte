@@ -6,20 +6,27 @@
   let {
     value,
     label,
+    sublabel,
     threshold,
+    warn,
     valueText,
     unit = '%',
     size = 'md',
     caption,
     trend,
+    trendTone = 'accent',
     children,
   }: {
     /** Reading on a true 0..100 scale; null when unknown. */
     value: number | null | undefined;
     /** Instrument name, e.g. "CPU" or "/var/lib/docker". */
     label: string;
+    /** Second line under the label in mono, e.g. a mount point. */
+    sublabel?: string;
     /** Above this the fill turns critical and a tick marks the line. */
     threshold?: number | null;
+    /** Above this (and below `threshold`) the fill takes the warn tone. */
+    warn?: number | null;
     /** Overrides the displayed number, e.g. "73.4". Defaults to the rounded value. */
     valueText?: string;
     unit?: string;
@@ -29,6 +36,8 @@
     caption?: string;
     /** Brass trend text, e.g. "full in 6 days". */
     trend?: string;
+    /** Brass when the trend carries a date, critical when it is close, muted otherwise. */
+    trendTone?: 'accent' | 'critical' | 'muted';
     children?: Snippet;
   } = $props();
 
@@ -42,6 +51,10 @@
   const reading = $derived(clampReading(value));
   const limit = $derived(clampReading(threshold));
   const over = $derived(reading != null && limit != null && reading >= limit);
+  const warnLimit = $derived(clampReading(warn));
+  const warning = $derived(
+    !over && reading != null && warnLimit != null && reading >= warnLimit,
+  );
   const shown = $derived(
     reading == null ? '—' : (valueText ?? String(Math.round(reading))),
   );
@@ -50,19 +63,29 @@
       ? null
       : arcPath(cx, cy, radius, 0, fraction(reading)),
   );
-  const tick = $derived.by(() => {
-    if (limit == null) return null;
-    const at = fraction(limit);
+  function tickAt(value: number | null) {
+    if (value == null) return null;
+    const at = fraction(value);
     return {
       inner: arcPoint(cx, cy, radius - stroke / 2 - 3, at),
       outer: arcPoint(cx, cy, radius + stroke / 2 + 3, at),
     };
-  });
+  }
+  const tick = $derived(tickAt(limit));
+  const warnTick = $derived(tickAt(warnLimit));
   const needleAngle = $derived(reading == null ? 0 : fraction(reading) * 180);
+  // A reading in bytes still says its percentage, the scale the arc uses.
+  const spoken = $derived(
+    unit === '%'
+      ? `${shown} percent`
+      : unit
+        ? `${shown} ${unit}`
+        : `${shown}, ${Math.round(reading ?? 0)} percent`,
+  );
   const valueTextForAt = $derived(
     reading == null
       ? 'No data'
-      : `${shown}${unit === '%' ? ' percent' : ` ${unit}`}${
+      : `${spoken}${
           limit != null
             ? over
               ? `, at or above the ${Math.round(limit)} percent threshold`
@@ -75,6 +98,7 @@
 <div
   class={`gauge ${size}`}
   class:over
+  class:warning
   class:unknown={reading == null}
   role={reading == null ? 'img' : 'meter'}
   aria-label={reading == null ? `${label}: no data` : label}
@@ -91,6 +115,15 @@
     />
     {#if fillPath}
       <path class="fill" d={fillPath} stroke-width={stroke} />
+    {/if}
+    {#if warnTick}
+      <line
+        class="tick warn-tick"
+        x1={warnTick.inner.x}
+        y1={warnTick.inner.y}
+        x2={warnTick.outer.x}
+        y2={warnTick.outer.y}
+      />
     {/if}
     {#if tick}
       <line
@@ -113,6 +146,7 @@
   </svg>
   <div class="readout">
     <span class="label">{label}</span>
+    {#if sublabel}<span class="sublabel">{sublabel}</span>{/if}
     <span class="value">
       <span class="number">{shown}</span>{#if reading != null && unit}<span
           class="unit">{unit}</span
@@ -122,9 +156,13 @@
       <span class="over-word">
         <StatusMarker tone="critical" size={7} />Above {Math.round(limit)}%
       </span>
+    {:else if warning && warnLimit != null}
+      <span class="over-word warn-word">
+        <StatusMarker tone="warn" size={7} />Above {Math.round(warnLimit)}%
+      </span>
     {/if}
     {#if caption}<span class="caption">{caption}</span>{/if}
-    {#if trend}<span class="trend">{trend}</span>{/if}
+    {#if trend}<span class={`trend ${trendTone}`}>{trend}</span>{/if}
     {@render children?.()}
   </div>
 </div>
@@ -157,6 +195,9 @@
     stroke: var(--accent);
     transition: stroke var(--motion) var(--ease-out);
   }
+  .warning .fill {
+    stroke: var(--warn-solid);
+  }
   .over .fill {
     stroke: var(--critical-solid);
   }
@@ -188,6 +229,15 @@
     font-weight: var(--weight-semibold);
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;
+  }
+  .sublabel {
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: var(--text-mono);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .value {
     display: inline-flex;
@@ -226,9 +276,18 @@
     font-size: var(--text-mono);
     font-variant-numeric: tabular-nums;
   }
+  .warn-word {
+    color: var(--warn-fg);
+  }
   .trend {
     color: var(--accent-text);
     font-size: var(--text-meta);
     font-weight: var(--weight-medium);
+  }
+  .trend.critical {
+    color: var(--critical-fg);
+  }
+  .trend.muted {
+    color: var(--muted);
   }
 </style>

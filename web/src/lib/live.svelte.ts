@@ -30,6 +30,8 @@ export interface LiveSnapshot {
     uptimeSeconds?: number | null;
     networkRxBps?: number | null;
     networkTxBps?: number | null;
+    /** Time-to-full estimate of used memory (SPEC §P3-12). */
+    memoryTrend?: Trend | null;
   };
   resources: Array<{
     id: string;
@@ -82,6 +84,24 @@ export interface FilesystemObservation {
   inodesTotal?: number | null;
   inodesUsed?: number | null;
   inodesUsedPct?: number | null;
+  /** Which disk this is; the host collector sets it (SPEC §P3-12). */
+  role?: FilesystemRole;
+  /** Time-to-full estimate of used bytes (SPEC §P3-12). */
+  trend?: Trend | null;
+}
+
+export type FilesystemRole = 'root' | 'docker' | 'data' | 'other';
+
+/**
+ * A time-to-full estimate. `daysToFull` and `fullAt` are set only while the
+ * state is `filling`; `unknown` means fewer than three hours of history.
+ */
+export interface Trend {
+  state: 'steady' | 'filling' | 'shrinking' | 'unknown';
+  daysToFull: number | null;
+  fullAt: string | null;
+  confidence: number;
+  windowHours: number;
 }
 export interface LiveEvent {
   /** ULID, unique across restarts; equals the stored event id. */

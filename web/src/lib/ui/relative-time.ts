@@ -68,11 +68,15 @@ export function formatAbsolute(
   }).format(date);
 }
 
+/** Time of day, e.g. "11:32:05", or "11:32" with `seconds` off. */
 export function formatClock(
   value: string | number | Date,
   locale?: string,
+  seconds = true,
 ): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return '—';
-  return new Intl.DateTimeFormat(locale, { timeStyle: 'medium' }).format(date);
+  return new Intl.DateTimeFormat(locale, {
+    timeStyle: seconds ? 'medium' : 'short',
+  }).format(date);
 }

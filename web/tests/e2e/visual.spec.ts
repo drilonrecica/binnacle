@@ -19,8 +19,11 @@ test('overview renders the headroom row and the grouped resource table', async (
   expect(
     await mark.evaluate((image) => (image as HTMLImageElement).naturalWidth),
   ).toBeGreaterThan(0);
+  // The CPU arc gauge: a meter inside a link to Server named "CPU <value>, <trend>".
+  const cpu = page.getByRole('link', { name: /^CPU \d/ });
+  await expect(cpu).toBeVisible();
   await expect(
-    page.getByRole('meter', { name: 'CPU utilization' }),
+    cpu.getByRole('meter', { name: 'CPU', exact: true }),
   ).toBeVisible();
   const resources = page.getByRole(mobile ? 'list' : 'table', {
     name: 'Resources',

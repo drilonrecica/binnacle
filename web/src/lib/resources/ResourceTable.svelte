@@ -1,5 +1,6 @@
 <script lang="ts">
   import Boxes from '@lucide/svelte/icons/boxes';
+  import Pin from '@lucide/svelte/icons/pin';
   import type { LiveResource } from '../api/resources';
   import { categoryLabel, resourceGroup } from '../api/resources';
   import type { SparklineResponse } from '../api/metrics';
@@ -28,6 +29,9 @@
     emptyTitle = 'No resources yet',
     emptyDescription = 'Containers appear here as soon as the Docker collector sees them.',
     density = 'default',
+    groupKey,
+    groupSequence,
+    pinned = [],
   }: {
     resources: LiveResource[];
     snapshotTs: string;
@@ -37,7 +41,15 @@
     emptyTitle?: string;
     emptyDescription?: string;
     density?: 'default' | 'compact';
+    /** Replaces the project / environment grouping, e.g. to add "Pinned". */
+    groupKey?: (resource: LiveResource) => string;
+    /** Replaces the alphabetical group order. */
+    groupSequence?: string[];
+    /** Ids of pinned resources; their rows carry a pin. */
+    pinned?: string[];
   } = $props();
+
+  const pinnedIds = $derived(new Set(pinned));
 
   const hasGroups = $derived(
     grouped &&
@@ -72,6 +84,7 @@
   }
 
   const groupOrder = $derived.by(() => {
+    if (groupSequence) return groupSequence;
     const keys = [...new Set(resources.map(resourceGroup))]
       .filter((key) => key !== 'Infrastructure' && key !== 'Ungrouped')
       .sort();
@@ -141,7 +154,13 @@
 
 {#snippet nameCell(row: LiveResource)}
   <div class="name-cell">
-    <a class="name" href={resourcePath(row.id)}>{row.name}</a>
+    <a class="name" href={resourcePath(row.id)}
+      >{#if pinnedIds.has(row.id)}<Pin
+          class="pin"
+          aria-label="Pinned"
+          role="img"
+        />{/if}{row.name}</a
+    >
     <span class="context">
       <Badge tone="neutral">{categoryLabel(row.category)}</Badge>
       {#if row.context && !row.project}<span class="context-text"
@@ -221,7 +240,13 @@
   {@const stale = isStale(row)}
   <a class="card-link" href={resourcePath(row.id)}>
     <div class="card-top">
-      <span class="name">{row.name}</span>
+      <span class="name"
+        >{#if pinnedIds.has(row.id)}<Pin
+            class="pin"
+            aria-label="Pinned"
+            role="img"
+          />{/if}{row.name}</span
+      >
       <StatusPill status={displayStatus(row)} size="sm" />
     </div>
     <div class="card-meta">
@@ -248,7 +273,7 @@
   caption="Resources"
   bind:sort
   rowHref={(row) => resourcePath(row.id)}
-  groupBy={hasGroups ? resourceGroup : undefined}
+  groupBy={groupKey ?? (hasGroups ? resourceGroup : undefined)}
   {groupOrder}
   {groupLabel}
   {empty}
@@ -267,6 +292,13 @@
     color: var(--fg);
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .name :global(.pin) {
+    width: 12px;
+    height: 12px;
+    margin-right: var(--space-1);
+    color: var(--accent);
+    vertical-align: -1px;
   }
   .context {
     display: flex;

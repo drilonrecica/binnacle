@@ -1,30 +1,67 @@
 <script lang="ts">
-  import CircleCheck from '@lucide/svelte/icons/circle-check';
-  import ChevronRight from '@lucide/svelte/icons/chevron-right';
-  import type { AttentionItem } from './attention';
+  import type { AttentionItem, AttentionState } from './attention';
   import RelativeTime from '../ui/RelativeTime.svelte';
+  import Skeleton from '../ui/Skeleton.svelte';
+  import StatusMarker from '../ui/StatusMarker.svelte';
+  import { formatAbsolute, formatClock } from '../ui/relative-time';
 
-  let { items, limit = 6 }: { items: AttentionItem[]; limit?: number } =
+  let { state, limit = 6 }: { state: AttentionState; limit?: number } =
     $props();
-  const shown = $derived(items.slice(0, limit));
-  const overflow = $derived(items.length - shown.length);
-  const worst = $derived(
-    items.some((item) => item.tone === 'critical')
-      ? 'critical'
-      : items.length
-        ? 'warn'
-        : 'ok',
+
+  const items = $derived<AttentionItem[]>(
+    state.kind === 'items' || state.kind === 'unknown' ? state.items : [],
   );
+  // The unknown chip takes one of the six places.
+  const room = $derived(state.kind === 'unknown' ? limit - 1 : limit);
+  const shown = $derived(items.slice(0, room));
+  const overflow = $derived(items.length - shown.length);
 </script>
 
-{#if items.length}
-  <section class={`strip ${worst}`} aria-labelledby="attention-title">
-    <h2 id="attention-title" class="sr-only">Needs attention</h2>
+<section class="attention" aria-labelledby="attention-title">
+  <h2 id="attention-title" class="sr-only">Needs attention</h2>
+  {#if state.kind === 'loading'}
+    <div
+      class="loading"
+      role="status"
+      aria-label="Checking what needs attention"
+    >
+      <Skeleton height={40} />
+    </div>
+  {:else if state.kind === 'clear'}
+    <p class="clear" data-testid="attention-clear">
+      <StatusMarker tone="ok" size={9} />
+      Nothing needs attention
+    </p>
+  {:else}
     <ul>
+      {#if state.kind === 'unknown'}
+        <li>
+          <span
+            class="chip neutral unknown"
+            data-testid="attention-unknown"
+            title={formatAbsolute(state.since)}
+          >
+            <StatusMarker tone="neutral" size={9} />
+            <span class="text">
+              <span class="title">
+                Status unknown since <time datetime={state.since}
+                  >{formatClock(state.since, undefined, false)}</time
+                >
+              </span>
+              <span class="detail">
+                {state.reason === 'incidents'
+                  ? 'Incidents could not be loaded'
+                  : 'Live updates paused'}{#if state.lastUpdate}, last update
+                  <RelativeTime value={state.lastUpdate} />{/if}
+              </span>
+            </span>
+          </span>
+        </li>
+      {/if}
       {#each shown as item (item.id)}
         <li>
-          <a href={item.href} class={`item ${item.tone}`}>
-            <span class="dot" aria-hidden="true"></span>
+          <a href={item.href} class={`chip ${item.tone}`}>
+            <StatusMarker tone={item.tone} size={9} />
             <span class="text">
               <span class="title">{item.title}</span>
               <span class="detail">{item.detail}</span>
@@ -32,84 +69,59 @@
             {#if item.since}<span class="since"
                 ><RelativeTime value={item.since} /></span
               >{/if}
-            <ChevronRight class="chev" aria-hidden="true" />
           </a>
         </li>
       {/each}
+      {#if overflow > 0}
+        <li>
+          <a class="chip more" href="/incidents">+{overflow} more</a>
+        </li>
+      {/if}
     </ul>
-    {#if overflow > 0}
-      <a class="more" href="/incidents">+{overflow} more</a>
-    {/if}
-  </section>
-{:else}
-  <p class="clear" role="status">
-    <CircleCheck aria-hidden="true" />
-    All resources healthy, collectors fresh, no open incidents.
-  </p>
-{/if}
+  {/if}
+</section>
 
 <style>
-  .strip {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
+  .attention {
     margin-bottom: var(--space-4);
-    padding: var(--space-2);
-    border: 1px solid var(--strip-border);
-    border-radius: var(--radius-card);
-    background: var(--strip-bg);
   }
-  .strip.critical {
-    --strip-border: var(--critical-border);
-    --strip-bg: var(--critical-bg);
-  }
-  .strip.warn {
-    --strip-border: var(--warn-border);
-    --strip-bg: var(--warn-bg);
+  .loading {
+    max-width: 320px;
   }
   ul {
     display: flex;
-    flex: 1;
     flex-wrap: wrap;
     gap: var(--space-2);
     margin: 0;
     padding: 0;
     list-style: none;
   }
-  .item {
+  .chip {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2);
     min-height: 40px;
-    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-3);
-    border: 1px solid var(--line);
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--chip-border, var(--line));
     border-radius: var(--radius-control);
-    background: var(--panel);
+    background: var(--chip-bg, var(--panel));
     color: var(--fg);
     text-decoration: none;
   }
-  .item:hover {
+  a.chip:hover {
     border-color: var(--line-strong);
     text-decoration: none;
   }
-  .dot {
-    flex: none;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--dot);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--dot) 25%, transparent);
+  .chip.critical {
+    --chip-border: var(--critical-border);
+    --chip-bg: var(--critical-bg);
   }
-  .critical .dot {
-    --dot: var(--critical-solid);
+  .chip.warn {
+    --chip-border: var(--warn-border);
+    --chip-bg: var(--warn-bg);
   }
-  .warn .dot {
-    --dot: var(--warn-solid);
-  }
-  .neutral .dot {
-    --dot: var(--neutral-solid);
-    box-shadow: none;
+  .chip.unknown {
+    border-style: dashed;
   }
   .text {
     display: grid;
@@ -117,37 +129,28 @@
   }
   .title {
     font-size: var(--text-meta);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
-  .detail {
-    color: var(--muted);
-    font-size: var(--text-mono);
-  }
+  .detail,
   .since {
     color: var(--muted);
     font-size: var(--text-mono);
   }
-  .item :global(.chev) {
-    width: 14px;
-    height: 14px;
-    color: var(--muted);
+  .since {
+    margin-left: var(--space-1);
+    font-family: var(--font-mono);
   }
   .more {
-    padding: 0 var(--space-3);
     color: var(--muted);
     font-size: var(--text-meta);
-    font-weight: 500;
+    font-weight: var(--weight-medium);
   }
   .clear {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    margin-bottom: var(--space-4);
     color: var(--ok-fg);
     font-size: var(--text-meta);
-  }
-  .clear :global(svg) {
-    width: 16px;
-    height: 16px;
+    font-weight: var(--weight-medium);
   }
 </style>
