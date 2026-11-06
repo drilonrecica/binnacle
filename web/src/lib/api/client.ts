@@ -100,6 +100,13 @@ async function errorFrom(
   );
 }
 
+/**
+ * Dispatched on `window` when an API call is answered 401. The app checks
+ * whether the session really ended and, if so, signs out to the login page
+ * with a `next` back to the current page.
+ */
+export const sessionEndedEvent = 'binnacle:session-ended';
+
 async function request<T>(
   method: Method,
   path: string,
@@ -117,6 +124,8 @@ async function request<T>(
     signal: options.signal,
   });
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined')
+      window.dispatchEvent(new Event(sessionEndedEvent));
     throw await errorFrom(
       response,
       options.fallback ?? 'The request could not be completed.',

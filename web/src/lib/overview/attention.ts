@@ -69,7 +69,7 @@ export function attentionItems(
       title: `${name} collector ${collector.state}`,
       detail:
         collector.reason ?? 'Telemetry from this collector may be incomplete.',
-      href: '/host?tab=collectors',
+      href: '/server?tab=collectors',
     });
   }
 
@@ -82,7 +82,7 @@ export function attentionItems(
       kind: 'filesystem',
       title: `${mount.mountPoint} is ${Math.round(pct)}% full`,
       detail: 'Disk pressure on this mount',
-      href: '/host?tab=filesystems',
+      href: '/server?tab=filesystems',
     });
   }
 

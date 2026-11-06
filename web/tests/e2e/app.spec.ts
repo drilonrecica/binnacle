@@ -3,18 +3,29 @@ import { mockApp, snapshot } from './fixtures';
 
 test('renders the application shell with the primary navigation', async ({
   page,
-}) => {
+}, testInfo) => {
   await mockApp(page);
-  await page.goto('/overview');
+  await page.goto('/headroom');
 
-  await expect(page).toHaveTitle('Binnacle — Overview');
+  await expect(page).toHaveTitle('Binnacle — Headroom');
   await expect(
-    page.getByRole('heading', { name: 'Overview', level: 1 }),
+    page.getByRole('heading', { name: 'Headroom', level: 1 }),
   ).toBeVisible();
   const nav = page.getByRole('navigation', { name: 'Primary navigation' });
-  for (const label of ['Overview', 'Resources', 'Alerts', 'Activity']) {
+  // Phones show five tabs and keep Settings under "More".
+  const mobile = testInfo.project.name.includes('mobile');
+  for (const label of [
+    'Headroom',
+    'Resources',
+    'Server',
+    'Incidents',
+    'Changes',
+    ...(mobile ? [] : ['Settings']),
+  ]) {
     await expect(nav.getByRole('link', { name: label })).toBeVisible();
   }
+  if (mobile)
+    await expect(nav.getByRole('button', { name: 'More' })).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'Host headroom' }),
   ).toBeAttached();
@@ -26,15 +37,23 @@ test('legacy and unknown routes redirect to their replacements', async ({
 }) => {
   await mockApp(page);
   await page.goto('/watch');
-  await expect(page).toHaveURL(/\/overview$/);
-  await page.goto('/server');
-  await expect(page).toHaveURL(/\/host$/);
+  await expect(page).toHaveURL(/\/headroom$/);
+  await page.goto('/overview');
+  await expect(page).toHaveURL(/\/headroom$/);
+  await page.goto('/host?tab=collectors');
+  await expect(page).toHaveURL(/\/server\?tab=collectors$/);
+  await page.goto('/alerts?tab=checks');
+  await expect(page).toHaveURL(/\/incidents\?tab=checks$/);
+  await page.goto('/alerts/incidents/inc-1');
+  await expect(page).toHaveURL(/\/incidents\/inc-1$/);
+  await page.goto('/activity');
+  await expect(page).toHaveURL(/\/changes$/);
   await page.goto('/events');
-  await expect(page).toHaveURL(/\/activity$/);
+  await expect(page).toHaveURL(/\/changes$/);
   await page.goto('/watch?inspect=res1');
   await expect(page).toHaveURL(/\/resources\/res1$/);
   await page.goto('/not-a-real-view');
-  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page).toHaveURL(/\/headroom$/);
 });
 
 test('resources list filters, sorts, and opens detail with containers', async ({
@@ -94,9 +113,9 @@ test('creates a health check from the Alerts checks tab', async ({ page }) => {
     }
     return route.fulfill({ json: [] });
   });
-  await page.goto('/alerts?tab=checks');
+  await page.goto('/incidents?tab=checks');
   await expect(
-    page.getByRole('heading', { name: 'Alerts', level: 1 }),
+    page.getByRole('heading', { name: 'Incidents', level: 1 }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'New check' }).first().click();
   const dialog = page.getByRole('dialog', { name: 'New health check' });
@@ -231,13 +250,13 @@ test('shows incidents and manages notification channels and deliveries', async (
     },
   );
 
-  await page.goto('/alerts');
+  await page.goto('/incidents');
   await expect(page.getByRole('tab', { name: /Incidents/ })).toHaveAttribute(
     'aria-selected',
     'true',
   );
   await page.getByRole('link', { name: 'Incident on api.production' }).click();
-  await expect(page).toHaveURL(/\/alerts\/incidents\/inc-1$/);
+  await expect(page).toHaveURL(/\/incidents\/inc-1$/);
   await expect(page.getByText('API is unhealthy')).toBeVisible();
   await expect(page.getByText('Existing webhook')).toBeVisible();
 
@@ -305,9 +324,9 @@ test('host charts switch ranges and surface data gaps', async ({ page }) => {
       },
     });
   });
-  await page.goto('/host');
+  await page.goto('/server');
   await expect(
-    page.getByRole('heading', { name: 'Host', level: 1 }),
+    page.getByRole('heading', { name: 'Server', level: 1 }),
   ).toBeVisible();
   await expect(page.getByText('1 gap')).toBeVisible();
   const before = requests.length;
@@ -461,7 +480,7 @@ test('gated features explain themselves and the mobile shell uses a tab bar', as
     // device after load makes Chromium's hit-testing disagree with layout.
     await page.setViewportSize({ width: 390, height: 844 });
   }
-  await page.goto('/overview');
+  await page.goto('/headroom');
   const nav = page.getByRole('navigation', { name: 'Primary navigation' });
   await expect(nav.getByRole('button', { name: 'More' })).toBeVisible();
   await nav.getByRole('button', { name: 'More' }).click();
@@ -510,7 +529,7 @@ test('enrolls two-factor authentication when advanced auth is enabled', async ({
 
 test('the command palette jumps to a resource', async ({ page }) => {
   await mockApp(page);
-  await page.goto('/overview');
+  await page.goto('/headroom');
   // The shortcut listener mounts with the shell; wait for it before pressing.
   await expect(page.getByRole('button', { name: 'Search' })).toBeVisible();
   await page.keyboard.press('Control+k');
@@ -520,7 +539,7 @@ test('the command palette jumps to a resource', async ({ page }) => {
   // Results come from the live snapshot; wait for the match before choosing.
   await expect(
     palette.getByRole('option', {
-      name: new RegExp(snapshot.resources[2].name),
+      name: new RegExp(`^${snapshot.resources[2].name}`),
     }),
   ).toBeVisible();
   await page.keyboard.press('Enter');
@@ -528,4 +547,24 @@ test('the command palette jumps to a resource', async ({ page }) => {
   await expect(
     page.getByRole('heading', { name: snapshot.resources[2].name, level: 1 }),
   ).toBeVisible();
+});
+
+test('the command palette opens logs for a resource', async ({ page }) => {
+  await mockApp(page);
+  await page.goto('/headroom');
+  await expect(page.getByRole('button', { name: 'Search' })).toBeVisible();
+  await page.keyboard.press('Control+k');
+  const palette = page.getByRole('dialog', { name: 'Command palette' });
+  await palette.getByRole('combobox').fill('logs for api');
+  await expect(
+    palette.getByRole('option', { name: /Logs for api\.production/ }),
+  ).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/\/logs\?resource=res1$/);
+  // Focus follows the route change into the page (UI-10).
+  await expect
+    .poll(() =>
+      page.evaluate(() => !!document.activeElement?.closest('main#content')),
+    )
+    .toBe(true);
 });

@@ -212,7 +212,7 @@
   {@const current = incident}
   <PageHeader
     {title}
-    crumbs={[{ label: 'Alerts', href: '/alerts' }]}
+    crumbs={[{ label: 'Incidents', href: '/incidents' }]}
     headingId="incident-title"
   >
     {#snippet meta()}
@@ -286,18 +286,18 @@
 {:else if notFound}
   <PageHeader
     title="Incident not found"
-    crumbs={[{ label: 'Alerts', href: '/alerts' }]}
+    crumbs={[{ label: 'Incidents', href: '/incidents' }]}
   />
   <EmptyState
     title="This incident does not exist"
     description="It may have been cleaned up after its retention period."
   >
-    <Button href="/alerts" variant="primary">Back to alerts</Button>
+    <Button href="/incidents" variant="primary">Back to incidents</Button>
   </EmptyState>
 {:else if error}
   <PageHeader
     title="Incident"
-    crumbs={[{ label: 'Alerts', href: '/alerts' }]}
+    crumbs={[{ label: 'Incidents', href: '/incidents' }]}
   />
   <p class="error" role="alert">{error}</p>
 {:else}

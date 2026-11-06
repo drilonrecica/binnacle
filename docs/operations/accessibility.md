@@ -1,6 +1,6 @@
 # Accessibility
 
-Binnacle targets WCAG 2.2 Level AA. Automated checks run with `@axe-core/playwright` against the login, setup, onboarding, Overview, Host, Resources, resource detail, Activity, Logs, Alerts (every tab), incident detail, every Settings section, the command palette, dialogs, and the standalone landing page.
+Binnacle targets WCAG 2.2 Level AA. Automated checks run with `@axe-core/playwright` against the login, setup, onboarding, Headroom, Server, Resources, resource detail, Changes, Logs, Incidents (every tab), incident detail, every Settings section, the command palette, dialogs, and the standalone landing page.
 
 ## Automated coverage
 
@@ -21,8 +21,9 @@ Verify each item in a supported browser with keyboard-only interaction and, wher
 
 - [ ] Skip-to-content link is the first focusable element and moves focus to `#content`.
 - [ ] Each page has exactly one `<main>` landmark.
-- [ ] Page `<title>` is "Binnacle" and route-specific context is conveyed by the first heading.
-- [ ] Primary navigation uses `<nav aria-label="Primary navigation">` and marks the current page with `aria-current="page"`.
+- [ ] Page `<title>` is "Binnacle — <page>" and route-specific context is conveyed by the first heading.
+- [ ] Primary navigation uses `<nav aria-label="Primary navigation">` with Headroom, Resources, Server, Incidents, Changes and Settings in that order (Settings under "More" on phones), and marks the current page with `aria-current="page"`.
+- [ ] Following a link to another page moves focus to `main#content`; switching a tab or filter (query-only change) leaves focus where it was.
 
 ### Login and setup
 
@@ -53,3 +54,4 @@ Verify each item in a supported browser with keyboard-only interaction and, wher
 - [ ] Loading states use `role="status"`.
 - [ ] Errors use `role="alert"`.
 - [ ] Connection and deletion progress are announced politely.
+- [ ] The connection status in the top bar is the only connection live region and announces only its state word (Live, Stale, Connecting, Disconnected); the "since" time and age next to it are not announced, and no clock sits in any live region.

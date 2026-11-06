@@ -10,9 +10,9 @@ test('overview renders the headroom row and the grouped resource table', async (
 }, testInfo) => {
   const mobile = testInfo.project.name.includes('mobile');
   await mockApp(page);
-  await page.goto('/overview');
+  await page.goto('/headroom');
   await expect(
-    page.getByRole('heading', { name: 'Overview', level: 1 }),
+    page.getByRole('heading', { name: 'Headroom', level: 1 }),
   ).toBeVisible();
   const mark = page.locator('img[src*="binnacle-mark"]:visible').first();
   await expect(mark).toBeVisible();
@@ -44,9 +44,9 @@ test('login renders the branded sign-in card', async ({ page }) => {
 
 test('host renders stat tiles and historical charts', async ({ page }) => {
   await mockApp(page);
-  await page.goto('/host');
+  await page.goto('/server');
   await expect(
-    page.getByRole('heading', { name: 'Host', level: 1 }),
+    page.getByRole('heading', { name: 'Server', level: 1 }),
   ).toBeVisible();
   await expect(
     page.getByRole('meter', { name: 'CPU utilization' }),
@@ -61,7 +61,7 @@ test('host renders stat tiles and historical charts', async ({ page }) => {
 
 test('overview rows link to the resource detail page', async ({ page }) => {
   await mockApp(page);
-  await page.goto('/overview');
+  await page.goto('/headroom');
   await page.getByRole('link', { name: 'api.production' }).click();
   await expect(page).toHaveURL(/\/resources\/res1$/);
   await expect(
@@ -69,14 +69,14 @@ test('overview rows link to the resource detail page', async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open logs' })).toBeVisible();
   await page.goBack();
-  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page).toHaveURL(/\/headroom$/);
 });
 
 test('activity and settings render their sections', async ({ page }) => {
   await mockApp(page);
-  await page.goto('/activity');
+  await page.goto('/changes');
   await expect(
-    page.getByRole('heading', { name: 'Activity', level: 1 }),
+    page.getByRole('heading', { name: 'Changes', level: 1 }),
   ).toBeVisible();
   await page.goto('/settings');
   await expect(
@@ -115,7 +115,7 @@ test('system settings show worker failures and latency', async ({ page }) => {
 
 test('first-time users receive the dark theme', async ({ page }) => {
   await mockApp(page);
-  await page.goto('/overview');
+  await page.goto('/headroom');
   expect(
     await page.evaluate(() => document.documentElement.dataset.theme),
   ).toBe('dark');
@@ -123,13 +123,13 @@ test('first-time users receive the dark theme', async ({ page }) => {
 
 test('mobile layout keeps content inside the viewport', async ({ page }) => {
   await mockApp(page);
-  await page.goto('/overview');
+  await page.goto('/headroom');
   const width = await viewportWidth(page);
   const scrollWidth = await page.evaluate(
     () => document.documentElement.scrollWidth,
   );
   expect(scrollWidth).toBeLessThanOrEqual(width);
-  const heading = page.getByRole('heading', { name: 'Overview', level: 1 });
+  const heading = page.getByRole('heading', { name: 'Headroom', level: 1 });
   const box = await heading.boundingBox();
   expect(box?.width).toBeLessThanOrEqual(width);
 });

@@ -77,7 +77,9 @@ browser updates and network changes without stopping a stolen cookie.
 The live dashboard stream and log follow re-check the session on every
 20-second heartbeat and close when it has been signed out, expired, or ended by
 an MFA or password change. The check does not count as activity, so a tab left
-open still idles out.
+open still idles out. When the stream or any API call finds the session gone,
+the web app ends it and opens the sign-in page with `next` set to the page that
+was open, so signing in again returns there.
 
 Settings → Access can change the administrator password. The current password
 is required, the request is CSRF-protected and login-throttled, and every other

@@ -229,7 +229,7 @@
 </script>
 
 <PageHeader
-  title="Activity"
+  title="Changes"
   description="Everything that changed on this server: container lifecycle, deployments, collector state, storage, and alerts."
 >
   {#snippet actions()}

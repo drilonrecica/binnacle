@@ -125,7 +125,7 @@ async function prepare(
 
 test('dark overview visual baseline', async ({ page }) => {
   await prepare(page);
-  await page.goto('/overview');
+  await page.goto('/headroom');
   await expect(page.getByText('api.production')).toBeVisible();
   await expect(page).toHaveScreenshot('overview-dark.png', screenshotOptions);
 });
@@ -133,7 +133,7 @@ test('dark overview visual baseline', async ({ page }) => {
 test('light overview visual baseline', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium');
   await prepare(page, { theme: 'light' });
-  await page.goto('/overview');
+  await page.goto('/headroom');
   await expect(page.getByText('api.production')).toBeVisible();
   await expect(page).toHaveScreenshot('overview-light.png', screenshotOptions);
 });
@@ -141,7 +141,7 @@ test('light overview visual baseline', async ({ page }, testInfo) => {
 test('degraded overview visual baseline', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium');
   await prepare(page, { degraded: true });
-  await page.goto('/overview');
+  await page.goto('/headroom');
   await expect(
     page.getByText('Docker API responses are delayed'),
   ).toBeVisible();

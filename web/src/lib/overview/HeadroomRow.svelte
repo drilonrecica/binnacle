@@ -80,7 +80,7 @@
       sparkline={spark('cpu')}
       sparklineMax={100}
       sparklineLabel="CPU over the last hour"
-      href="/host"
+      href="/server"
     >
       {#snippet icon()}<Cpu />{/snippet}
     </Stat>
@@ -96,7 +96,7 @@
       sparkline={spark('memory')}
       sparklineMax={100}
       sparklineLabel="Memory over the last hour"
-      href="/host"
+      href="/server"
     >
       {#snippet icon()}<MemoryStick />{/snippet}
     </Stat>
@@ -107,7 +107,7 @@
       secondary={root?.totalBytes == null
         ? 'Filesystem data unavailable'
         : `${pct(diskPct)}% of ${formatBytes(root.totalBytes)} · ${diskFree == null ? '—' : formatBytes(diskFree)} free`}
-      href="/host?tab=filesystems"
+      href="/server?tab=filesystems"
     >
       {#snippet icon()}<HardDrive />{/snippet}
       {#if worstOther}
@@ -127,7 +127,7 @@
       sparkline={spark('rx')}
       sparklineLabel="Receive rate over the last hour"
       tone="accent"
-      href="/host"
+      href="/server"
     >
       {#snippet icon()}<ArrowDownUp />{/snippet}
     </Stat>

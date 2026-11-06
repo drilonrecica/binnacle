@@ -39,7 +39,7 @@
             ? 'Containers are being observed.'
             : (docker?.suggestedFix ??
               'Mount the Docker socket or configure a socket proxy.'),
-        href: '/host?tab=collectors',
+        href: '/server?tab=collectors',
       },
       {
         id: 'metadata',
@@ -63,7 +63,7 @@
         label: 'Create a health check',
         status: 'optional',
         detail: 'Probe an HTTP endpoint on a schedule.',
-        href: '/alerts?tab=checks',
+        href: '/incidents?tab=checks',
       },
     ] as const;
   });

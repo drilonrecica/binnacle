@@ -40,14 +40,14 @@ test('onboarding page has no detectable a11y violations', async ({ page }) => {
 
 test('overview page has no detectable a11y violations', async ({ page }) => {
   await mockApp(page);
-  await page.goto('/overview');
+  await page.goto('/headroom');
   await expect(page.getByText('api.production')).toBeVisible();
   await scan(page);
 });
 
 test('host page has no detectable a11y violations', async ({ page }) => {
   await mockApp(page);
-  await page.goto('/host');
+  await page.goto('/server');
   await expect(
     page.getByRole('heading', { name: 'CPU' }).first(),
   ).toBeVisible();
@@ -89,9 +89,9 @@ test('resource detail has no detectable a11y violations', async ({ page }) => {
 
 test('activity page has no detectable a11y violations', async ({ page }) => {
   await mockApp(page);
-  await page.goto('/activity');
+  await page.goto('/changes');
   await expect(
-    page.getByRole('heading', { name: 'Activity', level: 1 }),
+    page.getByRole('heading', { name: 'Changes', level: 1 }),
   ).toBeVisible();
   await scan(page);
 });
@@ -127,9 +127,9 @@ test('alerts tabs have no detectable a11y violations', async ({ page }) => {
       ],
     }),
   );
-  await page.goto('/alerts');
+  await page.goto('/incidents');
   await expect(
-    page.getByRole('heading', { name: 'Alerts', level: 1 }),
+    page.getByRole('heading', { name: 'Incidents', level: 1 }),
   ).toBeVisible();
   await scan(page);
   for (const tab of ['Firing', 'Rules', 'Checks', 'Silences']) {
@@ -168,7 +168,7 @@ test('incident detail has no detectable a11y violations', async ({ page }) => {
       },
     }),
   );
-  await page.goto('/alerts/incidents/inc-1');
+  await page.goto('/incidents/inc-1');
   await expect(page.getByText('API is unhealthy')).toBeVisible();
   await scan(page);
 });
@@ -199,7 +199,7 @@ test('command palette and dialogs have no detectable a11y violations', async ({
   page,
 }) => {
   await mockApp(page);
-  await page.goto('/overview');
+  await page.goto('/headroom');
   // The shortcut listener mounts with the shell; wait for it before pressing.
   await expect(page.getByRole('button', { name: 'Search' })).toBeVisible();
   await page.keyboard.press('Control+k');
@@ -208,7 +208,7 @@ test('command palette and dialogs have no detectable a11y violations', async ({
   ).toBeVisible();
   await scan(page);
   await page.keyboard.press('Escape');
-  await page.goto('/alerts?tab=checks');
+  await page.goto('/incidents?tab=checks');
   await page.getByRole('button', { name: 'New check' }).first().click();
   await expect(
     page.getByRole('dialog', { name: 'New health check' }),

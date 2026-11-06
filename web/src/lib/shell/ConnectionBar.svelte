@@ -5,34 +5,25 @@
   import { formatClock } from '../ui/relative-time';
 
   let { live }: { live: LiveStore } = $props();
-  const visible = $derived(
-    live.state === 'disconnected' || live.state === 'unauthorized',
-  );
+  // A lost session never shows here: the app ends it and sends the user to
+  // sign in with a `next` back to this page (UI-5). This bar is not a live
+  // region; the connection status in the top bar announces the state once.
+  const visible = $derived(live.state === 'disconnected');
 </script>
 
 {#if visible}
-  <div class="bar" role="status" data-state={live.state}>
+  <div class="bar" data-state={live.state}>
     <WifiOff aria-hidden="true" />
     <div class="text">
-      <strong
-        >{live.state === 'unauthorized'
-          ? 'Your session ended'
-          : 'Live updates disconnected'}</strong
-      >
+      <strong>Live updates disconnected</strong>
       <span>
-        {live.state === 'unauthorized'
-          ? 'Sign in again to resume live monitoring.'
-          : live.error || 'Reconnecting automatically.'}
+        {live.error || 'Reconnecting automatically.'}
         {#if live.lastReceivedAt}Last update {formatClock(
             live.lastReceivedAt,
           )}.{/if}
       </span>
     </div>
-    {#if live.state === 'unauthorized'}
-      <Button size="sm" variant="primary" href="/login">Sign in</Button>
-    {:else}
-      <Button size="sm" onclick={() => live.retry()}>Retry now</Button>
-    {/if}
+    <Button size="sm" onclick={() => live.retry()}>Retry now</Button>
   </div>
 {/if}
 
@@ -49,11 +40,6 @@
     background: var(--warn-bg);
     color: var(--warn-fg);
     font-size: var(--text-meta);
-  }
-  .bar[data-state='unauthorized'] {
-    border-color: var(--critical-border);
-    background: var(--critical-bg);
-    color: var(--critical-fg);
   }
   .bar :global(svg) {
     width: 16px;

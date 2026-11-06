@@ -7,11 +7,28 @@ describe('safeRedirect', () => {
     expect(safeRedirect('/resources/res_1?range=1h')).toBe(
       '/resources/res_1?range=1h',
     );
-    expect(safeRedirect('https://evil.test/steal')).toBe('/overview');
-    expect(safeRedirect('//evil.test/steal')).toBe('/overview');
-    expect(safeRedirect('/login')).toBe('/overview');
-    expect(safeRedirect('/setup')).toBe('/overview');
-    expect(safeRedirect('/not-a-route')).toBe('/overview');
+    expect(safeRedirect('https://evil.test/steal')).toBe('/headroom');
+    expect(safeRedirect('//evil.test/steal')).toBe('/headroom');
+    expect(safeRedirect('/login')).toBe('/headroom');
+    expect(safeRedirect('/setup')).toBe('/headroom');
+    expect(safeRedirect('/not-a-route')).toBe('/headroom');
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps deep links to every authenticated page, old names included', () => {
+    vi.stubGlobal('location', { origin: 'https://binnacle.test' });
+    for (const path of [
+      '/headroom',
+      '/server?tab=collectors',
+      '/incidents/inc_1',
+      '/changes',
+      '/settings/access',
+      '/onboarding',
+      '/alerts/incidents/inc_1',
+      '/host',
+    ])
+      expect(safeRedirect(path)).toBe(path);
+    expect(safeRedirect('/')).toBe('/');
     vi.unstubAllGlobals();
   });
 });

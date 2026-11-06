@@ -1,3 +1,4 @@
+import { tick } from 'svelte';
 import {
   buildPath,
   matchRoute,
@@ -23,33 +24,39 @@ class Router {
 
   private installed = false;
 
-  /** Reads the current browser location, applying legacy redirects. */
-  sync() {
+  /**
+   * Reads the current browser location, applying legacy redirects. Returns
+   * whether the path changed, so callers can move focus to the new page.
+   */
+  sync(): boolean {
     const legacy = resolveLegacyPath(location.pathname, location.search);
     if (legacy) {
       history.replaceState({}, '', legacy);
     }
+    const changed = this.path !== location.pathname;
     this.path = location.pathname;
     this.search = location.search;
+    return changed;
   }
 
   install() {
     if (this.installed) return;
     this.installed = true;
     this.sync();
-    addEventListener('popstate', () => this.sync());
+    addEventListener('popstate', () => {
+      if (this.sync()) void focusContent();
+    });
   }
 
   navigate(to: string, options: { replace?: boolean } = {}) {
     const url = splitHref(to);
-    const changedPath = url.pathname !== location.pathname;
     const target = url.pathname + url.search + url.hash;
     if (options.replace) history.replaceState({}, '', target);
     else history.pushState({}, '', target);
-    this.sync();
-    if (changedPath) {
+    if (this.sync()) {
       document.getElementById('content')?.scrollTo?.({ top: 0 });
       window.scrollTo({ top: 0 });
+      void focusContent();
     }
   }
 
@@ -67,6 +74,20 @@ class Router {
 }
 
 export const router = new Router();
+
+/**
+ * Moves focus to the page's main landmark once the new page has rendered,
+ * so keyboard and screen-reader users land on the content they asked for
+ * instead of on the link they activated (UI-10). Query-only changes such as
+ * switching a tab never move focus.
+ */
+export async function focusContent() {
+  await tick();
+  const main = document.getElementById('content');
+  if (!main || main.contains(document.activeElement)) return;
+  if (!main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1');
+  main.focus({ preventScroll: true });
+}
 
 /**
  * Turns every same-origin `<a href>` click into a client-side navigation

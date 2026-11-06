@@ -85,7 +85,7 @@
 </script>
 
 <Card title="Activity" id="activity-title" padded={false}>
-  {#snippet actions()}<a class="all" href="/activity">View all</a>{/snippet}
+  {#snippet actions()}<a class="all" href="/changes">View all</a>{/snippet}
   {#if loading}
     <div class="loading" role="status" aria-label="Loading activity">
       <Skeleton lines={4} height={14} />

@@ -1,12 +1,11 @@
 import type { Component } from 'svelte';
-import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
+import Gauge from '@lucide/svelte/icons/gauge';
 import Boxes from '@lucide/svelte/icons/boxes';
 import Server from '@lucide/svelte/icons/server';
 import Siren from '@lucide/svelte/icons/siren';
-import Activity from '@lucide/svelte/icons/activity';
-import ScrollText from '@lucide/svelte/icons/scroll-text';
+import History from '@lucide/svelte/icons/history';
 import Settings from '@lucide/svelte/icons/settings';
-import type { RouteName } from '../router';
+import { homePath, type RouteName } from '../router';
 
 export interface NavItem {
   route: RouteName;
@@ -18,54 +17,47 @@ export interface NavItem {
   keywords: string[];
 }
 
+/** Primary navigation in the order DESIGN §IA fixes. */
 export const navigation: NavItem[] = [
   {
-    route: 'overview',
-    href: '/overview',
-    label: 'Overview',
-    icon: LayoutDashboard,
-    matches: ['overview'],
-    keywords: ['home', 'dashboard', 'watch'],
+    route: 'headroom',
+    href: homePath,
+    label: 'Headroom',
+    icon: Gauge,
+    matches: ['headroom'],
+    keywords: ['home', 'overview', 'dashboard', 'capacity', 'room left'],
   },
   {
     route: 'resources',
     href: '/resources',
     label: 'Resources',
     icon: Boxes,
-    matches: ['resources', 'resource'],
-    keywords: ['services', 'containers', 'apps'],
+    matches: ['resources', 'resource', 'logs'],
+    keywords: ['services', 'containers', 'apps', 'logs'],
   },
   {
-    route: 'host',
-    href: '/host',
-    label: 'Host',
+    route: 'server',
+    href: '/server',
+    label: 'Server',
     icon: Server,
-    matches: ['host'],
-    keywords: ['server', 'processes', 'filesystems', 'collectors'],
+    matches: ['server'],
+    keywords: ['host', 'processes', 'filesystems', 'disks', 'collectors'],
   },
   {
-    route: 'alerts',
-    href: '/alerts',
-    label: 'Alerts',
+    route: 'incidents',
+    href: '/incidents',
+    label: 'Incidents',
     icon: Siren,
-    matches: ['alerts', 'incident'],
-    keywords: ['incidents', 'rules', 'checks', 'silences'],
+    matches: ['incidents', 'incident'],
+    keywords: ['alerts', 'firing', 'checks', 'silences'],
   },
   {
-    route: 'activity',
-    href: '/activity',
-    label: 'Activity',
-    icon: Activity,
-    matches: ['activity'],
-    keywords: ['events', 'timeline', 'history'],
-  },
-  {
-    route: 'logs',
-    href: '/logs',
-    label: 'Logs',
-    icon: ScrollText,
-    matches: ['logs'],
-    keywords: ['container logs', 'output'],
+    route: 'changes',
+    href: '/changes',
+    label: 'Changes',
+    icon: History,
+    matches: ['changes'],
+    keywords: ['activity', 'events', 'timeline', 'history', 'deploys'],
   },
   {
     route: 'settings',
@@ -77,13 +69,19 @@ export const navigation: NavItem[] = [
   },
 ];
 
-/** Items shown in the mobile tab bar; the rest live behind "More". */
+/** Pages in the phone tab bar; the rest live behind "More". */
 export const mobilePrimary: RouteName[] = [
-  'overview',
+  'headroom',
   'resources',
-  'alerts',
-  'activity',
+  'server',
+  'incidents',
+  'changes',
 ];
+
+/** Whether `item` is the current page; unknown routes highlight nothing. */
+export function isActive(item: NavItem, route: RouteName | null): boolean {
+  return route !== null && item.matches.includes(route);
+}
 
 export function pageTitle(route: RouteName | null): string {
   switch (route) {
@@ -91,6 +89,8 @@ export function pageTitle(route: RouteName | null): string {
       return 'Resource';
     case 'incident':
       return 'Incident';
+    case 'logs':
+      return 'Logs';
     case 'login':
       return 'Sign in';
     case 'setup':

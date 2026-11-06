@@ -60,7 +60,7 @@ export function boundAnnotations(
           ? first.summary
           : `${first.summary} and ${eventsInBucket.length - 1} more events`,
       count: eventsInBucket.length,
-      href: first.resourceId ? `/resources/${first.resourceId}` : '/events',
+      href: first.resourceId ? `/resources/${first.resourceId}` : '/changes',
     };
   });
 }

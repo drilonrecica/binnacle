@@ -358,7 +358,7 @@
 {/snippet}
 
 <PageHeader
-  title="Host"
+  title="Server"
   description="The Linux server itself: CPU, memory, disks, network, and the collectors that observe it."
 >
   {#snippet meta()}

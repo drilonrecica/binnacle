@@ -1,6 +1,7 @@
 <script lang="ts">
   import Search from '@lucide/svelte/icons/search';
   import type { LiveStore } from '../live.svelte';
+  import { homePath } from '../router';
   import { viewport } from '../ui/media.svelte';
   import Kbd from '../ui/Kbd.svelte';
   import { shell } from './shell-state.svelte';
@@ -18,11 +19,24 @@
         )
       : [],
   );
+  const collectorSummary = $derived.by(() => {
+    const [first] = degradedCollectors;
+    if (!first) return null;
+    if (degradedCollectors.length === 1)
+      return {
+        long: `${first[0]} collector ${first[1].state}`,
+        short: `${first[0]} ${first[1].state}`,
+      };
+    return {
+      long: `${degradedCollectors.length} collectors degraded`,
+      short: `${degradedCollectors.length} degraded`,
+    };
+  });
 </script>
 
 <div class="topbar">
   {#if viewport.isMobile}
-    <a class="brand" href="/overview" aria-label="Binnacle overview">
+    <a class="brand" href={homePath} aria-label="Binnacle, Headroom">
       <img
         class="mark dark"
         src="/brand/binnacle-mark.svg"
@@ -41,18 +55,22 @@
   {/if}
   <div class="spacer"></div>
 
-  {#if degradedCollectors.length}
-    <a class="chip warn" href="/host?tab=collectors">
+  {#if collectorSummary}
+    <!-- Kept on phones in a compact form: a degraded collector means the
+         numbers on every page may be incomplete. -->
+    <a
+      class="chip warn"
+      href="/server?tab=collectors"
+      aria-label={collectorSummary.long}
+    >
       <span class="chip-dot" aria-hidden="true"></span>
-      {degradedCollectors.length === 1
-        ? `${degradedCollectors[0][0]} collector ${degradedCollectors[0][1].state}`
-        : `${degradedCollectors.length} collectors degraded`}
+      <span class="chip-long" aria-hidden="true">{collectorSummary.long}</span>
+      <span class="chip-short" aria-hidden="true">{collectorSummary.short}</span
+      >
     </a>
   {/if}
 
-  {#if viewport.isMobile}
-    <ConnectionStatus {live} compact />
-  {/if}
+  <ConnectionStatus {live} compact={viewport.isMobile} />
 
   <button
     type="button"
@@ -164,6 +182,14 @@
       display: none;
     }
     .chip {
+      padding: 0 var(--space-2);
+    }
+    .chip-long {
+      display: none;
+    }
+  }
+  @media (min-width: 900px) {
+    .chip-short {
       display: none;
     }
   }

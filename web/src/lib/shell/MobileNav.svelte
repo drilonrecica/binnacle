@@ -10,7 +10,7 @@
   import Dialog from '../ui/Dialog.svelte';
   import { toasts } from '../ui/toast.svelte';
   import { errorMessage } from '../api/client';
-  import { mobilePrimary, navigation } from './navigation';
+  import { isActive, mobilePrimary, navigation } from './navigation';
   import { shell } from './shell-state.svelte';
 
   let { session, onlogout }: { session: SessionInfo; onlogout: () => void } =
@@ -24,7 +24,7 @@
     navigation.filter((item) => !mobilePrimary.includes(item.route)),
   );
   const moreActive = $derived(
-    secondary.some((item) => item.matches.includes(router.name ?? 'overview')),
+    secondary.some((item) => isActive(item, router.name)),
   );
   const nextTheme = $derived(prefs.resolvedTheme === 'dark' ? 'light' : 'dark');
 
@@ -42,8 +42,8 @@
 <nav class="tabbar" aria-label="Primary navigation">
   <ul>
     {#each primary as item (item.route)}
-      {@const active = item.matches.includes(router.name ?? 'overview')}
-      {@const badge = item.route === 'alerts' ? shell.openIncidents : null}
+      {@const active = isActive(item, router.name)}
+      {@const badge = item.route === 'incidents' ? shell.openIncidents : null}
       <li>
         <a
           href={item.href}
@@ -79,7 +79,11 @@
   <ul class="more-list">
     {#each secondary as item (item.route)}
       <li>
-        <a href={item.href} onclick={() => (moreOpen = false)}>
+        <a
+          href={item.href}
+          aria-current={isActive(item, router.name) ? 'page' : undefined}
+          onclick={() => (moreOpen = false)}
+        >
           <item.icon aria-hidden="true" />
           {item.label}
         </a>
@@ -124,7 +128,7 @@
   }
   ul {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     height: var(--tabbar-h);
     margin: 0;
     padding: 0;
@@ -146,6 +150,12 @@
     font-size: 11px;
     font-weight: 500;
     text-decoration: none;
+  }
+  .label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   a.active,
   button.active {

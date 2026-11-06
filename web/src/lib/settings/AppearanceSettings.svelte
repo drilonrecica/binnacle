@@ -14,6 +14,7 @@
     type LandingPage,
     type Theme,
   } from '../preferences';
+  import { landingPath } from '../router';
   import { navigation } from '../shell/navigation';
   import ResourcePicker from '../resources/ResourcePicker.svelte';
   import Button from '../ui/Button.svelte';
@@ -28,6 +29,12 @@
   let { live = null }: { live?: LiveSnapshot | null } = $props();
 
   let pick = $state('');
+
+  /** Stored tokens keep their old names; show the page they open today. */
+  function landingLabel(page: LandingPage): string {
+    const path = landingPath(page);
+    return navigation.find((item) => item.href === path)?.label ?? 'Logs';
+  }
   const names = $derived(
     new Map(
       (live?.resources ?? []).map((resource) => [resource.id, resource.name]),
@@ -126,10 +133,7 @@
               )}
           >
             {#each landingPages as page (page)}
-              <option value={page}
-                >{navigation.find((item) => item.route === page)?.label ??
-                  page}</option
-              >
+              <option value={page}>{landingLabel(page)}</option>
             {/each}
           </Select>
         {/snippet}

@@ -112,10 +112,7 @@
         })),
         current.from,
         current.to,
-      ).map((marker) => ({
-        ...marker,
-        href: marker.href.replace('/events', '/activity'),
-      }));
+      );
     } catch {
       markers = [];
     }

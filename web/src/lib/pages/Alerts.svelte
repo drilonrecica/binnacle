@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import BellOff from '@lucide/svelte/icons/bell-off';
   import type { LiveStore } from '../live.svelte';
   import { listRules, type Rule } from '../api/alerts';
@@ -93,12 +93,18 @@
     silenceOpen = true;
   }
 
-  onMount(() => {
-    void load();
-    if (router.param('new') === '1') {
+  // Watched, not read once on mount: the palette's "Create a silence…" links
+  // here with new=1 while this page may already be open (UI-20).
+  $effect(() => {
+    if (router.param('new') !== '1') return;
+    untrack(() => {
       openSilence();
       router.setQuery({ new: null });
-    }
+    });
+  });
+
+  onMount(() => {
+    void load();
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') void load(true);
     }, 15_000);
@@ -107,7 +113,7 @@
 </script>
 
 <PageHeader
-  title="Alerts"
+  title="Incidents"
   description="Incidents group firing alerts by target. Rules, checks, and silences decide what fires and who hears about it."
 >
   {#snippet actions()}

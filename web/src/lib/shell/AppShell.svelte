@@ -3,7 +3,6 @@
   import type { SessionInfo } from '../auth';
   import type { LiveStore } from '../live.svelte';
   import { prefs } from '../preferences.svelte';
-  import { resourcePath } from '../router';
   import { viewport } from '../ui/media.svelte';
   import CommandPalette from '../ui/CommandPalette.svelte';
   import type { PaletteItem } from '../ui/palette';
@@ -14,7 +13,7 @@
   import MobileNav from './MobileNav.svelte';
   import Sidebar from './Sidebar.svelte';
   import TopBar from './TopBar.svelte';
-  import { navigation } from './navigation';
+  import { destinationItems } from './palette-items';
   import { shell } from './shell-state.svelte';
 
   let {
@@ -30,43 +29,8 @@
   } = $props();
 
   function paletteItems(): PaletteItem[] {
-    const pages: PaletteItem[] = navigation.map((item) => ({
-      id: `page:${item.route}`,
-      group: 'Pages',
-      label: item.label,
-      href: item.href,
-      keywords: item.keywords,
-    }));
-    const settings: PaletteItem[] = [
-      ['general', 'General settings'],
-      ['data', 'Data & retention'],
-      ['access', 'Access & sessions'],
-      ['notifications', 'Notification channels'],
-      ['appearance', 'Appearance'],
-      ['integrations', 'Integrations & API'],
-      ['system', 'System health & diagnostics'],
-    ].map(([section, label]) => ({
-      id: `settings:${section}`,
-      group: 'Settings',
-      label,
-      href: `/settings/${section}`,
-      keywords: ['settings'],
-    }));
-    const resources: PaletteItem[] = (live.snapshot?.resources ?? []).map(
-      (resource) => ({
-        id: `resource:${resource.id}`,
-        group: 'Resources',
-        label: resource.name,
-        hint:
-          [resource.project, resource.environment]
-            .filter(Boolean)
-            .join(' / ') ||
-          resource.context ||
-          resource.category ||
-          '',
-        href: resourcePath(resource.id),
-        keywords: [resource.id, resource.status],
-      }),
+    const { pages, resources, logs, settings } = destinationItems(
+      live.snapshot?.resources ?? [],
     );
     const actions: PaletteItem[] = [
       {
@@ -107,11 +71,11 @@
         id: 'action:silence',
         group: 'Actions',
         label: 'Create a silence…',
-        href: '/alerts?tab=silences&new=1',
+        href: '/incidents?tab=silences&new=1',
         keywords: ['mute', 'quiet', 'maintenance'],
       },
     ];
-    return [...pages, ...resources, ...actions, ...settings];
+    return [...pages, ...resources, ...logs, ...actions, ...settings];
   }
 </script>
 

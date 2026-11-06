@@ -109,7 +109,7 @@
 </script>
 
 <PageHeader
-  title="Overview"
+  title="Headroom"
   description="Host headroom, resource health, and what changed on this server."
 />
 

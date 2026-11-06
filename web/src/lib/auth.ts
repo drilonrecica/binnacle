@@ -1,3 +1,11 @@
+import {
+  homePath,
+  matchRoute,
+  resolveLegacyPath,
+  routeDefinition,
+  splitHref,
+} from './router';
+
 export interface SessionInfo {
   user: { id: string; username: string };
   expiresAt: string;
@@ -118,35 +126,28 @@ export async function logout(all = false): Promise<void> {
   );
 }
 
+/**
+ * Accepts a `next` value only when it is a same-origin path the app can
+ * route (directly or through a legacy redirect) and not a public page;
+ * anything else falls back to the home page.
+ */
 export function safeRedirect(value: string | null): string {
-  if (!value) return '/overview';
+  if (!value) return homePath;
   try {
     const target = new URL(value, location.origin);
-    if (target.origin !== location.origin || !target.pathname.startsWith('/'))
-      return '/overview';
-    const allowed = [
-      '/overview',
-      '/host',
-      '/activity',
-      '/watch',
-      '/resources',
-      '/server',
-      '/events',
-      '/logs',
-      '/alerts',
-      '/settings',
-      '/onboarding',
-    ];
     if (
-      target.pathname.startsWith('//') ||
-      !allowed.some(
-        (path) =>
-          target.pathname === path || target.pathname.startsWith(`${path}/`),
-      )
+      target.origin !== location.origin ||
+      !target.pathname.startsWith('/') ||
+      target.pathname.startsWith('//')
     )
-      return '/overview';
+      return homePath;
+    const legacy = resolveLegacyPath(target.pathname, target.search);
+    const match = matchRoute(
+      legacy ? splitHref(legacy).pathname : target.pathname,
+    );
+    if (!match || routeDefinition(match.name).public) return homePath;
     return `${target.pathname}${target.search}${target.hash}`;
   } catch {
-    return '/overview';
+    return homePath;
   }
 }

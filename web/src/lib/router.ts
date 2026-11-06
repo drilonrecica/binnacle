@@ -3,14 +3,16 @@
  * The reactive router store lives in `router.svelte.ts`.
  */
 
+import type { LandingPage } from './preferences';
+
 export type RouteName =
-  | 'overview'
+  | 'headroom'
   | 'resources'
   | 'resource'
-  | 'host'
-  | 'alerts'
+  | 'server'
+  | 'incidents'
   | 'incident'
-  | 'activity'
+  | 'changes'
   | 'logs'
   | 'settings'
   | 'login'
@@ -32,13 +34,15 @@ export interface RouteMatch {
 }
 
 export const routes: RouteDefinition[] = [
-  { name: 'overview', pattern: '/overview' },
+  { name: 'headroom', pattern: '/headroom' },
   { name: 'resources', pattern: '/resources' },
   { name: 'resource', pattern: '/resources/:id' },
-  { name: 'host', pattern: '/host' },
-  { name: 'alerts', pattern: '/alerts' },
-  { name: 'incident', pattern: '/alerts/incidents/:id' },
-  { name: 'activity', pattern: '/activity' },
+  { name: 'server', pattern: '/server' },
+  { name: 'incidents', pattern: '/incidents' },
+  { name: 'incident', pattern: '/incidents/:id' },
+  { name: 'changes', pattern: '/changes' },
+  // Not in the navigation: reached from "Logs for …" in the palette and from
+  // event rows until the Logs tab on the resource detail replaces it (P4-07).
   { name: 'logs', pattern: '/logs' },
   { name: 'settings', pattern: '/settings' },
   { name: 'settings', pattern: '/settings/:section' },
@@ -97,16 +101,23 @@ export function routeDefinition(name: RouteName): RouteDefinition {
   return found;
 }
 
+/** The first screen after sign-in when nothing else is asked for. */
+export const homePath = '/headroom';
+
+/** Retired paths and their replacements. The query string is kept. */
 const legacy: Record<string, string> = {
-  '/': '/overview',
-  '/watch': '/overview',
-  '/server': '/host',
-  '/events': '/activity',
+  '/': homePath,
+  '/watch': homePath,
+  '/overview': homePath,
+  '/host': '/server',
+  '/alerts': '/incidents',
+  '/activity': '/changes',
+  '/events': '/changes',
   '/settings/monitor-health': '/settings/system',
   '/settings/diagnostics': '/settings/system',
 };
 
-/** Returns the replacement path for a retired URL, or null if none applies. */
+/** Returns the replacement URL for a retired path, or null if none applies. */
 export function resolveLegacyPath(
   pathname: string,
   search: string,
@@ -114,9 +125,13 @@ export function resolveLegacyPath(
   const clean = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
   if (clean === '/watch') {
     const inspect = new URLSearchParams(search).get('inspect')?.trim();
-    if (inspect) return `/resources/${encodeURIComponent(inspect)}`;
+    if (inspect) return resourcePath(inspect);
+    return homePath;
   }
-  return legacy[clean] ?? null;
+  const incident = /^\/alerts\/incidents\/([^/]+)$/.exec(clean);
+  if (incident) return `/incidents/${incident[1]}${search}`;
+  const target = legacy[clean];
+  return target ? `${target}${search}` : null;
 }
 
 /** Builds a path with the given query values merged over an existing query. */
@@ -139,11 +154,40 @@ export function resourcePath(id: string): string {
 }
 
 export function incidentPath(id: string): string {
-  return `/alerts/incidents/${encodeURIComponent(id)}`;
+  return `/incidents/${encodeURIComponent(id)}`;
 }
 
 export function logsPath(resourceId: string, at?: string): string {
   return buildPath('/logs', { resource: resourceId, at: at ?? null });
+}
+
+/**
+ * The sign-in page with a `next` pointing back at `current`, so a session
+ * that ends mid-visit resumes where it was. Public pages are never a target.
+ */
+export function loginPath(current: string): string {
+  const { pathname } = splitHref(current);
+  const match = matchRoute(pathname);
+  const keep =
+    pathname !== '/' &&
+    (match
+      ? !routeDefinition(match.name).public
+      : resolveLegacyPath(pathname, '') !== null);
+  return buildPath('/login', { next: keep ? current : null });
+}
+
+/** Paths for the stored start-page tokens, which predate the new names. */
+const landingPaths: Record<LandingPage, string> = {
+  overview: homePath,
+  resources: '/resources',
+  host: '/server',
+  alerts: '/incidents',
+  activity: '/changes',
+  logs: '/logs',
+};
+
+export function landingPath(page: LandingPage): string {
+  return landingPaths[page] ?? homePath;
 }
 
 /** Splits a same-origin href into path, search, and hash without the URL API. */

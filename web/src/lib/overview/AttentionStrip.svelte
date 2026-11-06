@@ -38,7 +38,7 @@
       {/each}
     </ul>
     {#if overflow > 0}
-      <a class="more" href="/alerts">+{overflow} more</a>
+      <a class="more" href="/incidents">+{overflow} more</a>
     {/if}
   </section>
 {:else}

@@ -6,9 +6,9 @@
   import { router } from '../router.svelte';
   import { prefs } from '../preferences.svelte';
   import { tooltip } from '../ui/tooltip';
-  import { navigation } from './navigation';
+  import { homePath } from '../router';
+  import { isActive, navigation } from './navigation';
   import { shell } from './shell-state.svelte';
-  import ConnectionStatus from './ConnectionStatus.svelte';
   import UserMenu from './UserMenu.svelte';
 
   let {
@@ -30,7 +30,7 @@
   );
 
   function badgeFor(route: string): number | null {
-    if (route === 'alerts')
+    if (route === 'incidents')
       return shell.openIncidents && shell.openIncidents > 0
         ? shell.openIncidents
         : null;
@@ -40,7 +40,7 @@
 </script>
 
 <aside class="sidebar" class:collapsed>
-  <a class="brand" href="/overview" aria-label="Binnacle overview">
+  <a class="brand" href={homePath} aria-label="Binnacle, Headroom">
     <img
       class="mark dark"
       src="/brand/binnacle-mark.svg"
@@ -61,7 +61,7 @@
   <nav class="nav" aria-label="Primary navigation">
     <ul>
       {#each navigation as item (item.route)}
-        {@const active = item.matches.includes(router.name ?? 'overview')}
+        {@const active = isActive(item, router.name)}
         {@const badge = badgeFor(item.route)}
         <li>
           <a
@@ -78,7 +78,7 @@
                 {#if !collapsed}{badge}{/if}
                 <span class="sr-only"
                   >{badge}
-                  {item.route === 'alerts'
+                  {item.route === 'incidents'
                     ? 'open incidents'
                     : 'resources need attention'}</span
                 >
@@ -91,9 +91,6 @@
   </nav>
 
   <div class="bottom">
-    <div class="status-row">
-      <ConnectionStatus {live} compact={collapsed} />
-    </div>
     <UserMenu {session} {onlogout} {collapsed} />
     <button
       type="button"
@@ -241,7 +238,7 @@
     font-size: var(--text-mono);
     font-weight: 600;
   }
-  .badge[data-route='alerts'] {
+  .badge[data-route='incidents'] {
     background: var(--critical-bg);
     color: var(--critical-fg);
   }
@@ -255,7 +252,7 @@
     padding: 0;
     background: var(--warn-solid);
   }
-  .badge.dot[data-route='alerts'] {
+  .badge.dot[data-route='incidents'] {
     background: var(--critical-solid);
   }
   .bottom {
@@ -267,15 +264,6 @@
   }
   .collapsed .bottom {
     justify-items: center;
-  }
-  .status-row {
-    display: flex;
-    justify-content: flex-start;
-    padding: 0 var(--space-1);
-  }
-  .collapsed .status-row {
-    justify-content: center;
-    padding: 0;
   }
   .collapse {
     display: inline-flex;

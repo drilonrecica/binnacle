@@ -1,14 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { LiveStore } from './lib/live.svelte';
+  import { LiveStore, sessionActive } from './lib/live.svelte';
   import { liveSeries } from './lib/live-series.svelte';
   import { fetchMetrics } from './lib/api/metrics';
   import { prefs } from './lib/preferences.svelte';
   import { interceptLinks, router } from './lib/router.svelte';
-  import { routeDefinition } from './lib/router';
+  import {
+    homePath,
+    landingPath,
+    loginPath,
+    routeDefinition,
+  } from './lib/router';
+  import { sessionEndedEvent } from './lib/api/client';
   import { pageTitle } from './lib/shell/navigation';
   import { shell } from './lib/shell/shell-state.svelte';
   import AppShell from './lib/shell/AppShell.svelte';
+  import RouteView from './lib/shell/RouteView.svelte';
   import {
     authMethods,
     bootstrapExternalSession,
@@ -16,15 +23,6 @@
     type SessionInfo,
   } from './lib/auth';
   import { onboardingState, setupAvailable } from './lib/onboarding';
-  import Overview from './lib/pages/Overview.svelte';
-  import Host from './lib/pages/Host.svelte';
-  import Resources from './lib/pages/Resources.svelte';
-  import Activity from './lib/pages/Activity.svelte';
-  import Logs from './lib/pages/Logs.svelte';
-  import Alerts from './lib/pages/Alerts.svelte';
-  import Incident from './lib/pages/Incident.svelte';
-  import ResourceDetail from './lib/pages/ResourceDetail.svelte';
-  import Settings from './lib/pages/Settings.svelte';
   import Login from './lib/pages/Login.svelte';
   import Setup from './lib/pages/Setup.svelte';
   import Onboarding from './lib/pages/Onboarding.svelte';
@@ -61,11 +59,38 @@
     session = null;
   }
 
+  /**
+   * The session ended while the app was open (expiry, sign-out elsewhere,
+   * revoked token). Drop it and go to sign-in with a `next` back to the page
+   * the user was on, instead of leaving an empty shell (UI-5).
+   */
+  function sessionLost() {
+    if (!session) return;
+    const here = location.pathname + location.search + location.hash;
+    endSession();
+    router.navigate(loginPath(here), { replace: true });
+  }
+
+  $effect(() => {
+    if (session && live.state === 'unauthorized') sessionLost();
+  });
+
   onMount(() => {
     const startedAtRoot = location.pathname === '/';
     prefs.bootstrap();
     router.install();
     const stopLinks = interceptLinks();
+    // Any API call answered 401 may mean the session ended; confirm before
+    // acting so one stray 401 (a revoked token page, say) does not sign out.
+    const onSessionEnded = () => {
+      if (!session) return;
+      void sessionActive()
+        .catch(() => true)
+        .then((active) => {
+          if (!active) sessionLost();
+        });
+    };
+    addEventListener(sessionEndedEvent, onSessionEnded);
 
     void currentSession()
       .catch(() => null)
@@ -87,13 +112,15 @@
         if (value) {
           startSession(value);
           if (!router.match || definition?.public) {
-            router.navigate('/overview', { replace: true });
+            router.navigate(homePath, { replace: true });
           }
           void prefs
             .load()
             .then((saved) => {
               if (startedAtRoot)
-                router.navigate(`/${saved.landingPage}`, { replace: true });
+                router.navigate(landingPath(saved.landingPage), {
+                  replace: true,
+                });
             })
             .catch(() => {
               /* The local mirror remains a usable fallback. */
@@ -108,14 +135,18 @@
               /* Onboarding state is advisory; the dashboard still works. */
             });
         } else if (!definition?.public) {
+          const here = location.pathname + location.search + location.hash;
           void setupAvailable().then((available) => {
-            router.navigate(available ? '/setup' : '/login', { replace: true });
+            router.navigate(available ? '/setup' : loginPath(here), {
+              replace: true,
+            });
           });
         }
       });
 
     return () => {
       stopLinks();
+      removeEventListener(sessionEndedEvent, onSessionEnded);
       endSession();
     };
   });
@@ -138,7 +169,7 @@
   }
 
   function onboardingComplete() {
-    router.navigate('/overview', { replace: true });
+    router.navigate(homePath, { replace: true });
   }
 
   const title = $derived(pageTitle(router.name));
@@ -163,28 +194,6 @@
   </main>
 {:else if session}
   <AppShell {session} {live} onlogout={signedOut}>
-    {#if router.name === 'overview'}
-      <Overview {live} />
-    {:else if router.name === 'resource'}
-      <ResourceDetail {live} id={router.params.id} />
-    {:else if router.name === 'resources'}
-      <Resources {live} />
-    {:else if router.name === 'host'}
-      <Host {live} />
-    {:else if router.name === 'activity'}
-      <Activity {live} />
-    {:else if router.name === 'logs'}
-      <Logs {live} />
-    {:else if router.name === 'incident'}
-      <Incident {live} id={router.params.id} />
-    {:else if router.name === 'alerts'}
-      <Alerts {live} />
-    {:else if router.name === 'settings'}
-      <Settings
-        {live}
-        section={router.params.section}
-        onsignedout={signedOut}
-      />
-    {/if}
+    <RouteView {live} onsignedout={signedOut} />
   </AppShell>
 {/if}
