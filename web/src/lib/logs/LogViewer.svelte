@@ -167,8 +167,9 @@
               >{componentNames.get(entry.component) ??
                 entry.component.slice(0, 12)}</span
             >
-            <span class="stream" aria-label={entry.stream}
-              >{entry.stream === 'stderr' ? 'E' : ''}</span
+            <span class="stream"
+              >{#if entry.stream === 'stderr'}<span aria-hidden="true">E</span
+                >{/if}<span class="sr-only">{entry.stream}</span></span
             >
             <span class="message">
               {#each parts(entry.message) as part, partIndex (partIndex)}
@@ -247,8 +248,12 @@
     color: var(--muted);
     white-space: nowrap;
   }
+  /* The chart palette is tuned for marks, not text: the name keeps body
+     contrast and the colour sits in a bar beside it. */
   .component {
-    color: var(--component-color);
+    padding-left: var(--space-1);
+    border-left: 3px solid var(--component-color);
+    color: var(--fg);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

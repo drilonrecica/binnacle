@@ -1,138 +1,246 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mockApp } from './fixtures';
+import {
+  fixtureNow,
+  mockApp,
+  mockPopulated,
+  snapshot,
+  themes,
+  type MockOptions,
+  type Theme,
+} from './fixtures';
 
-async function viewportWidth(page: Page) {
-  return page.viewportSize()?.width ?? 0;
+// Visual baselines for every screen in both themes. The two projects in the
+// Playwright configs give each one a desktop (1280 px) and a phone (Pixel 7,
+// 412 px) width, so a screen here is four baselines.
+//
+// Update after an intended change with
+//   pnpm exec playwright test visual.spec.ts --update-snapshots
+// and review every changed image before committing it.
+
+// Motion and time are frozen here only; the functional suites run with the
+// browser's defaults so they would catch motion that hides content (UI-12).
+test.use({
+  contextOptions: { reducedMotion: 'reduce' },
+  locale: 'en-US',
+  timezoneId: 'UTC',
+});
+
+const screenshotOptions = {
+  animations: 'disabled' as const,
+  caret: 'hide' as const,
+  fullPage: true,
+  // Bound Fedora/Ubuntu font rendering drift without masking layout changes.
+  maxDiffPixelRatio: 0.005,
+};
+
+interface Screen {
+  name: string;
+  path: string;
+  mock?: MockOptions;
+  /** Waits for the content that makes the screen what it is. */
+  ready: (page: Page) => Promise<void>;
+  /** Extra routes installed after the populated data. */
+  setup?: (page: Page) => Promise<void>;
 }
 
-test('overview renders the headroom row and the grouped resource table', async ({
-  page,
-}, testInfo) => {
-  const mobile = testInfo.project.name.includes('mobile');
-  await mockApp(page);
-  await page.goto('/headroom');
-  await expect(
-    page.getByRole('heading', { name: 'Headroom', level: 1 }),
-  ).toBeVisible();
-  const mark = page.locator('img[src*="binnacle-mark"]:visible').first();
-  await expect(mark).toBeVisible();
-  expect(
-    await mark.evaluate((image) => (image as HTMLImageElement).naturalWidth),
-  ).toBeGreaterThan(0);
-  // The CPU arc gauge: a meter inside a link to Server named "CPU <value>, <trend>".
-  const cpu = page.getByRole('link', { name: /^CPU \d/ });
-  await expect(cpu).toBeVisible();
-  await expect(
-    cpu.getByRole('meter', { name: 'CPU', exact: true }),
-  ).toBeVisible();
-  const resources = page.getByRole(mobile ? 'list' : 'table', {
-    name: 'Resources',
+const heading = (name: string) => async (page: Page) => {
+  await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
+};
+
+const settings = (section: string, card: string): Screen => ({
+  name: `settings-${section}`,
+  path: `/settings/${section}`,
+  ready: async (page) => {
+    await heading('Settings')(page);
+    await expect(
+      page.getByRole('heading', { name: card, exact: true }).first(),
+    ).toBeVisible();
+  },
+});
+
+const screens: Screen[] = [
+  {
+    name: 'login',
+    path: '/login',
+    mock: { authenticated: false },
+    ready: async (page) => {
+      await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    },
+  },
+  {
+    name: 'setup',
+    path: '/setup',
+    mock: { authenticated: false, setupAvailable: true },
+    ready: async (page) => {
+      await expect(
+        page.getByRole('heading', { name: 'Set up Binnacle' }),
+      ).toBeVisible();
+    },
+  },
+  {
+    name: 'onboarding',
+    path: '/onboarding',
+    mock: { onboarded: false },
+    ready: async (page) => {
+      await expect(
+        page.getByRole('heading', { name: 'Before you start' }),
+      ).toBeVisible();
+    },
+  },
+  {
+    name: 'headroom',
+    path: '/headroom',
+    ready: async (page) => {
+      await heading('Headroom')(page);
+      await expect(
+        page.getByRole('region', { name: 'Needs attention' }),
+      ).toContainText('worker.production');
+      await expect(page.getByText('api.production deployed')).toBeVisible();
+    },
+  },
+  {
+    name: 'headroom-degraded',
+    path: '/headroom',
+    mock: { liveSnapshot: degraded() },
+    ready: async (page) => {
+      await heading('Headroom')(page);
+      await expect(
+        page.getByText('Docker API responses are delayed').first(),
+      ).toBeVisible();
+    },
+  },
+  {
+    name: 'resources',
+    path: '/resources',
+    ready: async (page) => {
+      await heading('Resources')(page);
+      await expect(page.getByText('binnacle / production')).toBeVisible();
+    },
+  },
+  {
+    name: 'resource-detail',
+    path: '/resources/res1',
+    ready: async (page) => {
+      await heading('api.production')(page);
+      await expect(page.getByRole('tabpanel')).toBeVisible();
+    },
+  },
+  {
+    name: 'resource-logs',
+    path: '/resources/res1?tab=logs',
+    ready: async (page) => {
+      await expect(
+        page.getByRole('region', { name: 'Log lines' }),
+      ).toContainText('connection refused');
+    },
+  },
+  {
+    name: 'server',
+    path: '/server',
+    ready: async (page) => {
+      await heading('Server')(page);
+      await expect(
+        page.getByRole('heading', { name: 'Load average' }),
+      ).toBeVisible();
+      await expect(page.getByText('1 gap').first()).toBeVisible();
+    },
+  },
+  {
+    name: 'incidents',
+    path: '/incidents',
+    ready: async (page) => {
+      await heading('Incidents')(page);
+      await expect(
+        page.getByRole('link', { name: /Resource incident on worker/ }),
+      ).toBeVisible();
+    },
+  },
+  {
+    name: 'incident-detail',
+    path: '/incidents/inc-1',
+    ready: async (page) => {
+      await expect(page.getByText(/restarted 4 times/).first()).toBeVisible();
+      await expect(page.getByText('Operations webhook').first()).toBeVisible();
+    },
+  },
+  {
+    name: 'changes',
+    path: '/changes',
+    ready: async (page) => {
+      await heading('Changes')(page);
+      await expect(
+        page.getByText('worker.production was OOM killed'),
+      ).toBeVisible();
+    },
+  },
+  settings('general', 'Collection'),
+  settings('data', 'Retention'),
+  settings('access', 'Sessions'),
+  settings('notifications', 'Channels'),
+  settings('alerting', 'Alert rules'),
+  settings('appearance', 'Theme'),
+  settings('integrations', 'Coolify'),
+  settings('system', 'Background workers'),
+];
+
+/** A server under pressure: hot gauges, a degraded resource and collector. */
+function degraded() {
+  const value = structuredClone(snapshot);
+  value.host.cpuPct = 81;
+  value.host.memoryUsedBytes = 7_838_318_592;
+  value.host.memoryPct = 91;
+  value.host.diskUsedBytes = 94_489_280_512;
+  value.filesystems[0]!.usedBytes = 94_489_280_512;
+  value.filesystems[0]!.usedPct = 88;
+  value.host.load1 = 3.86;
+  value.resources[1]!.status = 'degraded';
+  value.resources[1]!.cpuHostPct = 72.4;
+  value.collectors.docker = {
+    state: 'degraded',
+    freshAt: '2026-07-11T12:00:00Z',
+    reason: 'Docker API responses are delayed',
+  } as (typeof value.collectors)['docker'];
+  return value;
+}
+
+async function show(page: Page, screen: Screen, theme: Theme) {
+  // Relative times ("4m ago") and the stale check read this clock.
+  await page.clock.setFixedTime(fixtureNow);
+  await mockApp(page, { ...screen.mock, theme });
+  await mockPopulated(page);
+  await screen.setup?.(page);
+  await page.goto(screen.path);
+  await screen.ready(page);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+  // Webfonts finish loading before the first comparison.
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+}
+
+for (const theme of themes) {
+  test.describe(`${theme} theme`, () => {
+    for (const screen of screens) {
+      test(screen.name, async ({ page }) => {
+        await show(page, screen, theme);
+        await expect(page).toHaveScreenshot(
+          `${screen.name}-${theme}.png`,
+          screenshotOptions,
+        );
+      });
+    }
   });
-  await expect(resources).toBeVisible();
-  await expect(page.getByText('binnacle / production')).toBeVisible();
-  const box = await resources.boundingBox();
-  expect(box?.width).toBeLessThanOrEqual(await viewportWidth(page));
-});
+}
 
-test('login renders the branded sign-in card', async ({ page }) => {
-  await mockApp(page, { authenticated: false });
-  await page.goto('/login');
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-  const mark = page.locator('img[src*="binnacle-mark"]:visible').first();
-  expect(
-    await mark.evaluate((image) => (image as HTMLImageElement).naturalWidth),
-  ).toBeGreaterThan(0);
-  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
-});
-
-test('server renders instruments and historical charts', async ({ page }) => {
-  await mockApp(page);
-  await page.goto('/server');
-  await expect(
-    page.getByRole('heading', { name: 'Server', level: 1 }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('meter', { name: 'CPU', exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: 'Load average' }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: /Inspect CPU/ }),
-  ).toBeAttached();
-});
-
-test('overview rows link to the resource detail page', async ({ page }) => {
-  await mockApp(page);
-  await page.goto('/headroom');
-  await page.getByRole('link', { name: 'api.production' }).click();
-  await expect(page).toHaveURL(/\/resources\/res1$/);
-  await expect(
-    page.getByRole('heading', { name: 'api.production', level: 1 }),
-  ).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'Logs' })).toBeVisible();
-  await page.goBack();
-  await expect(page).toHaveURL(/\/headroom$/);
-});
-
-test('activity and settings render their sections', async ({ page }) => {
-  await mockApp(page);
-  await page.goto('/changes');
-  await expect(
-    page.getByRole('heading', { name: 'Changes', level: 1 }),
-  ).toBeVisible();
-  await page.goto('/settings');
-  await expect(
-    page.getByRole('heading', { name: 'Collection', exact: true }),
-  ).toBeVisible();
-  await page.goto('/settings/data');
-  await expect(
-    page.getByRole('heading', { name: 'Retention', exact: true }),
-  ).toBeVisible();
-  await page.goto('/settings/access');
-  await expect(
-    page.getByRole('heading', { name: 'Sessions', exact: true }),
-  ).toBeVisible();
-});
-
-test('system settings show worker failures and latency', async ({ page }) => {
-  await mockApp(page);
-  await page.goto('/settings/system');
-  await expect(
-    page.getByRole('heading', { name: 'Background workers', exact: true }),
-  ).toBeVisible();
-  const failures = page.getByRole('list', { name: 'Failures since start' });
-  await expect(failures.getByText('Docker API calls')).toBeVisible();
-  await expect(failures.getByText('2', { exact: true })).toBeVisible();
-  const table = page.getByRole('table', { name: /Latency of the latest runs/ });
-  const write = table.getByRole('row', { name: /Persistence write/ });
-  await expect(write.getByRole('cell', { name: '9.8 ms' })).toBeVisible();
-  await expect(write.getByRole('cell', { name: '41.5 ms' })).toBeVisible();
-  const vacuum = table.getByRole('row', { name: /Incremental vacuum/ });
-  await expect(vacuum.getByRole('cell', { name: '—' }).first()).toBeVisible();
-  const scrollWidth = await page.evaluate(
-    () => document.documentElement.scrollWidth,
+// The landing page's hero image is this exact baseline (landing.spec.ts
+// compares the bytes), so the site always shows a screen the suite tests.
+test('landing hero', async ({ page }, testInfo) => {
+  test.skip(
+    testInfo.project.name !== 'chromium',
+    'The hero is the desktop screen.',
   );
-  expect(scrollWidth).toBeLessThanOrEqual(await viewportWidth(page));
-});
-
-test('first-time users receive the dark theme', async ({ page }) => {
-  await mockApp(page);
-  await page.goto('/headroom');
-  expect(
-    await page.evaluate(() => document.documentElement.dataset.theme),
-  ).toBe('dark');
-});
-
-test('mobile layout keeps content inside the viewport', async ({ page }) => {
-  await mockApp(page);
-  await page.goto('/headroom');
-  const width = await viewportWidth(page);
-  const scrollWidth = await page.evaluate(
-    () => document.documentElement.scrollWidth,
-  );
-  expect(scrollWidth).toBeLessThanOrEqual(width);
-  const heading = page.getByRole('heading', { name: 'Headroom', level: 1 });
-  const box = await heading.boundingBox();
-  expect(box?.width).toBeLessThanOrEqual(width);
+  const screen = screens.find((item) => item.name === 'headroom-degraded')!;
+  await show(page, screen, 'dark');
+  await expect(page).toHaveScreenshot('landing-overview.png', {
+    ...screenshotOptions,
+    fullPage: false,
+  });
 });

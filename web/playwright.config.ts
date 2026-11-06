@@ -8,7 +8,6 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'list',
   use: {
     baseURL: 'http://127.0.0.1:4173',
-    contextOptions: { reducedMotion: 'reduce' },
     trace: 'on-first-retry',
   },
   webServer: {

@@ -34,6 +34,30 @@ writing a large patch. See [GOVERNANCE.md](GOVERNANCE.md) for the ADR process.
   outside tests. Only calls documented never to fail (`crypto/rand.Read`,
   `hash.Hash.Write`, `bytes.Buffer` and `strings.Builder` writes) are exempt.
 
+## Frontend tests
+
+`make check` runs the Vitest unit and component tests. The Playwright suites
+in `web/tests/e2e` run against the Vite dev server with every API mocked
+(`fixtures.ts`), on a desktop and a phone project:
+
+```bash
+pnpm --dir web exec playwright install chromium   # once
+pnpm --dir web test:e2e                           # everything
+pnpm --dir web test:e2e live.spec.ts              # one suite
+```
+
+- One spec per area (`shell`, `headroom`, `resources`, `server`,
+  `incidents`, `changes`, `settings`, `entry`), plus `live.spec.ts` for the
+  stream, `a11y.spec.ts` for axe in both themes and `visual.spec.ts` for the
+  screenshots.
+- The mocked live stream stays open like the real one. A spec can send
+  frames with `emitLive` and end the connection with `dropLive` to test
+  disconnects and session expiry.
+- `visual.spec.ts` holds a baseline per screen, theme and width. After an
+  intended UI change, regenerate them with
+  `pnpm --dir web exec playwright test visual.spec.ts --update-snapshots`
+  and review every changed image in the pull request.
+
 ## Pull requests
 
 Use a focused branch and explain the problem, approach, tests, and any

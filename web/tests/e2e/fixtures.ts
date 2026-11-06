@@ -1,4 +1,5 @@
-import type { Page } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { expect, type Page, type Route } from '@playwright/test';
 
 export const session = {
   user: { id: 'admin', username: 'admin' },
@@ -191,6 +192,33 @@ export interface MockOptions {
   advancedAuth?: boolean;
   setupAvailable?: boolean;
   liveSnapshot?: typeof snapshot | null;
+  /** The saved theme; every page and dialog is checked in both. */
+  theme?: Theme;
+}
+
+export type Theme = 'dark' | 'light';
+export const themes: Theme[] = ['dark', 'light'];
+
+/**
+ * Fails on any WCAG 2.1/2.2 A/AA violation axe can detect on the page. The
+ * suites run with motion on, so it first waits for dialogs and menus to
+ * finish fading in: axe would otherwise measure contrast on a frame halfway
+ * through the transition. Endless animations (the live pulse) are ignored.
+ */
+export async function scan(page: Page) {
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (animation) =>
+          animation.playState !== 'running' ||
+          animation.effect?.getComputedTiming().endTime === Infinity,
+      ),
+  );
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze();
+  expect(results.violations).toEqual([]);
 }
 
 /**
@@ -206,9 +234,20 @@ export async function mockApp(page: Page, options: MockOptions = {}) {
     advancedAuth = false,
     setupAvailable = false,
     liveSnapshot = snapshot,
+    theme,
   } = options;
+  const saved = { ...preferences, theme: theme ?? preferences.theme };
 
   await page.addInitScript(holdLiveStreamOpen);
+  // A chosen theme is also stored locally: the inline theme script reads it
+  // before first paint and the server copy below agrees, so the page never
+  // switches theme after loading. Only on the first load, so a test that
+  // changes the theme keeps its choice across navigations.
+  if (theme)
+    await page.addInitScript((value) => {
+      if (!localStorage.getItem('binnacle.preferences.v1'))
+        localStorage.setItem('binnacle.preferences.v1', JSON.stringify(value));
+    }, saved);
 
   await page.route('**/api/v1/auth/session', (route) =>
     authenticated
@@ -262,9 +301,9 @@ export async function mockApp(page: Page, options: MockOptions = {}) {
   await page.route('**/api/v1/preferences', (route) =>
     route.request().method() === 'PUT'
       ? route.fulfill({
-          json: { ...preferences, ...route.request().postDataJSON() },
+          json: { ...saved, ...route.request().postDataJSON() },
         })
-      : route.fulfill({ json: { exists: true, preferences } }),
+      : route.fulfill({ json: { exists: true, preferences: saved } }),
   );
   await page.route('**/api/v1/settings', (route) =>
     route.fulfill({
@@ -419,16 +458,315 @@ export async function mockApp(page: Page, options: MockOptions = {}) {
   );
 }
 
+/** The fixtures' "now": silences, incidents and checks are current at it. */
+export const fixtureNow = new Date('2026-07-11T12:00:30Z');
+
+export const openIncident = {
+  id: 'inc-1',
+  status: 'open',
+  severity: 'critical',
+  title: 'resource incident on res_beta',
+  targetType: 'resource',
+  targetId: 'res_beta',
+  alertCount: 1,
+  firingAlertCount: 1,
+  openedAt: '2026-07-11T11:50:00Z',
+};
+
+const firingAlert = {
+  id: 'alert-1',
+  ruleId: 'builtin-restart-storm',
+  family: 'restart_storm',
+  severity: 'critical',
+  status: 'firing',
+  message: 'worker.production restarted 4 times in 10 minutes',
+  startedAt: '2026-07-11T11:50:00Z',
+  targetType: 'resource',
+  targetId: 'res_beta',
+  incidentId: 'inc-1',
+};
+
+const rule = {
+  id: 'builtin-host-cpu-warning',
+  family: 'host_cpu_warning',
+  name: 'Host CPU warning',
+  builtIn: true,
+  enabled: true,
+  severity: 'warning',
+  scopeType: 'global',
+  threshold: 90,
+  recoveryThreshold: 80,
+  triggerSeconds: 300,
+  recoverySeconds: 120,
+  suppressDuringDeployment: false,
+};
+
+const check = {
+  id: 'check-1',
+  resourceId: 'res1',
+  name: 'Public health',
+  url: 'https://api.example.com/health',
+  method: 'GET',
+  interval: 30e9,
+  timeout: 5e9,
+  expectedStatusMin: 200,
+  expectedStatusMax: 299,
+  required: true,
+  enabled: true,
+  createdAt: '2026-07-10T12:00:00Z',
+  updatedAt: '2026-07-10T12:00:00Z',
+  state: {
+    checkId: 'check-1',
+    status: 'success',
+    httpStatus: 200,
+    latencyMs: 84,
+    checkedAt: '2026-07-11T11:59:45Z',
+    consecutiveSuccesses: 12,
+    consecutiveFailures: 0,
+  },
+};
+
+export const historicalEvents = [
+  {
+    id: '01J2ZQ6V8M0000000000000040',
+    ts: '2026-07-11T11:40:00Z',
+    type: 'deployment',
+    severity: 'info',
+    summary: 'api.production deployed',
+    resourceId: 'res1',
+    source: 'docker',
+  },
+  {
+    id: '01J2ZQ6V8M0000000000000041',
+    ts: '2026-07-11T11:58:00Z',
+    type: 'container_oom',
+    severity: 'critical',
+    summary: 'worker.production was OOM killed',
+    resourceId: 'res_beta',
+    source: 'docker',
+  },
+];
+
+/**
+ * Fills every list a page can show (incidents, alerts, rules, checks,
+ * silences, events, channels, deliveries, tokens), so accessibility scans
+ * and screenshots see populated tables and every row action has a target.
+ * Install it after `mockApp`; its routes win.
+ */
+export async function mockPopulated(page: Page) {
+  const json = (value: unknown) => (route: Route) =>
+    route.fulfill({ json: value });
+  await page.route('**/api/v1/incidents?*', (route) =>
+    route.fulfill({
+      json:
+        new URL(route.request().url()).searchParams.get('status') === 'resolved'
+          ? [
+              {
+                ...openIncident,
+                id: 'inc-0',
+                status: 'resolved',
+                severity: 'warning',
+                targetId: 'res1',
+                title: 'resource incident on res1',
+                openedAt: '2026-07-11T08:00:00Z',
+                resolvedAt: '2026-07-11T08:20:00Z',
+              },
+            ]
+          : [openIncident],
+    }),
+  );
+  await page.route('**/api/v1/incidents', json([openIncident]));
+  await page.route(
+    '**/api/v1/incidents/inc-1',
+    json({
+      ...openIncident,
+      alerts: [firingAlert],
+      deliveries: [
+        {
+          id: 'delivery-1',
+          channelId: 'channel-1',
+          incidentId: 'inc-1',
+          eventType: 'opened',
+          status: 'succeeded',
+          attemptCount: 1,
+          updatedAt: '2026-07-11T11:50:05Z',
+        },
+      ],
+    }),
+  );
+  await page.route('**/api/v1/alerts?*', json([firingAlert]));
+  await page.route('**/api/v1/alert-rules', json([rule]));
+  await page.route('**/api/v1/checks?*', json([check]));
+  await page.route('**/api/v1/checks', json([check]));
+  const silence = {
+    id: 'sil-1',
+    scopeType: 'resource',
+    scopeId: 'res1',
+    reason: 'Planned maintenance',
+    startsAt: '2026-07-11T11:30:00Z',
+    endsAt: '2026-07-11T13:30:00Z',
+    createdBy: 'admin',
+  };
+  await page.route('**/api/v1/silences?*', json([silence]));
+  await page.route('**/api/v1/silences', json([silence]));
+  await page.route('**/api/v1/events?*', json(historicalEvents));
+  await page.route(
+    '**/api/v1/notification-channels',
+    json([
+      {
+        id: 'channel-1',
+        name: 'Operations webhook',
+        kind: 'webhook',
+        enabled: true,
+        minimumSeverity: 'warning',
+        notifyResolved: true,
+        config: { url: 'https://hooks.example.com/ops' },
+        secretConfigured: true,
+      },
+    ]),
+  );
+  await page.route(
+    '**/api/v1/notification-deliveries?*',
+    json([
+      {
+        id: 'delivery-2',
+        channelId: 'channel-1',
+        eventType: 'opened',
+        status: 'permanent_failure',
+        attemptCount: 7,
+        failureCode: 'http_400',
+        updatedAt: '2026-07-11T11:00:00Z',
+      },
+    ]),
+  );
+  await page.route(
+    '**/api/v1/api-tokens',
+    json({
+      tokens: [
+        {
+          id: 'tok-1',
+          name: 'Prometheus',
+          prefix: 'bnk_abc',
+          scopes: ['metrics:read'],
+          createdAt: '2026-07-01T12:00:00Z',
+          lastUsedAt: '2026-07-11T11:59:00Z',
+        },
+      ],
+      scopes: ['server:read', 'resources:read', 'metrics:read'],
+    }),
+  );
+  await page.route(
+    '**/api/v1/processes?*',
+    json({
+      sampled: true,
+      processes: [
+        {
+          pid: 4242,
+          name: 'postgres',
+          command: 'postgres -D [redacted]',
+          cpuPct: 3.5,
+          memoryBytes: 104_857_600,
+        },
+      ],
+    }),
+  );
+  await page.route(
+    '**/api/v1/logs?*',
+    json({
+      entries: [
+        {
+          timestamp: '2026-07-11T11:59:58Z',
+          component: 'api-1',
+          stream: 'stdout',
+          severity: 'info',
+          message: 'GET /health 200 3ms',
+        },
+        {
+          timestamp: '2026-07-11T11:59:59Z',
+          component: 'api-2',
+          stream: 'stderr',
+          severity: 'error',
+          message: 'connection refused: postgres.internal:5432',
+        },
+      ],
+      truncated: false,
+      redaction: 'best-effort',
+    }),
+  );
+}
+
+/** What `holdLiveStreamOpen` exposes on `window` so specs can drive the stream. */
+export interface LiveControl {
+  /** Every URL a stream was opened with, oldest first. */
+  opened: string[];
+  /** Dispatches a frame on the open stream, as the server would. */
+  emit(kind: string, data: unknown, id?: string): boolean;
+  /** Ends the open stream the way a browser reports a dropped connection. */
+  drop(): boolean;
+}
+
+declare global {
+  interface Window {
+    __binnacleLive?: LiveControl;
+  }
+}
+
+/** The URLs the app has opened the live stream with so far. */
+export function openedStreams(page: Page): Promise<string[]> {
+  return page.evaluate(() => window.__binnacleLive?.opened ?? []);
+}
+
+/** Sends a frame on the open mocked stream; fails when none is open. */
+export async function emitLive(
+  page: Page,
+  kind: 'snapshot' | 'event',
+  data: unknown,
+  id: string,
+) {
+  const sent = await page.evaluate(
+    ({ kind, data, id }) => window.__binnacleLive?.emit(kind, data, id),
+    { kind, data, id },
+  );
+  expect(sent, 'a live stream is open').toBe(true);
+}
+
+/** Drops the open mocked stream; fails when none is open. */
+export async function dropLive(page: Page) {
+  const dropped = await page.evaluate(() => window.__binnacleLive?.drop());
+  expect(dropped, 'a live stream is open').toBe(true);
+}
+
 /**
  * Replaces EventSource with one that keeps the mocked live stream open (UI-2).
  * Playwright can only fulfil a route with a finished body, which a real
  * EventSource reads as a dropped stream and retries, so every test would run
  * with the connection flapping. This one fetches the routed body once,
- * dispatches its frames with their ids and then stays open; a non-stream
- * answer (401, 503) closes it as a browser would. A spec that installs its
- * own EventSource first keeps it.
+ * dispatches its frames with their ids and then stays open until a spec
+ * drops it through `window.__binnacleLive`; a non-stream answer (401, 503)
+ * closes it as a browser would. A spec that installs its own EventSource
+ * first keeps it.
  */
 function holdLiveStreamOpen() {
+  // A spec that installed its own stand-in first keeps it.
+  if (!String(window.EventSource).includes('[native code]')) return;
+  let current: HeldEventSource | null = null;
+  const track = (source: HeldEventSource) => {
+    current = source;
+    control.opened.push(source.url);
+  };
+  const control = {
+    opened: [] as string[],
+    emit(kind: string, data: unknown, id = '') {
+      if (current?.readyState !== 1) return false;
+      current.dispatch(kind, JSON.stringify(data), id);
+      return true;
+    },
+    drop() {
+      if (current?.readyState !== 1) return false;
+      current.fail();
+      return true;
+    },
+  };
   class HeldEventSource extends EventTarget {
     static readonly CONNECTING = 0;
     static readonly OPEN = 1;
@@ -437,6 +775,7 @@ function holdLiveStreamOpen() {
     onerror: ((event: Event) => void) | null = null;
     constructor(readonly url: string) {
       super();
+      track(this);
       void fetch(url, { credentials: 'same-origin' }).then(
         async (response) => {
           if (this.readyState === 2) return;
@@ -456,29 +795,26 @@ function holdLiveStreamOpen() {
               else if (line.startsWith('id: ')) id = line.slice(4);
               else if (line.startsWith('data: ')) data.push(line.slice(6));
             }
-            if (data.length && this.readyState === 1)
-              this.dispatchEvent(
-                new MessageEvent(kind, {
-                  data: data.join('\n'),
-                  lastEventId: id,
-                }),
-              );
+            if (data.length) this.dispatch(kind, data.join('\n'), id);
           }
         },
         () => this.fail(),
       );
     }
+    dispatch(kind: string, data: string, id: string) {
+      if (this.readyState !== 1) return;
+      this.dispatchEvent(new MessageEvent(kind, { data, lastEventId: id }));
+    }
     close() {
       this.readyState = 2;
     }
-    private fail() {
+    fail() {
       this.readyState = 2;
       const event = new Event('error');
       this.dispatchEvent(event);
       this.onerror?.(event);
     }
   }
-  // A spec that installed its own stand-in first keeps it.
-  if (!String(window.EventSource).includes('[native code]')) return;
   Object.defineProperty(window, 'EventSource', { value: HeldEventSource });
+  Object.defineProperty(window, '__binnacleLive', { value: control });
 }

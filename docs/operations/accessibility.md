@@ -1,6 +1,6 @@
 # Accessibility
 
-Binnacle targets WCAG 2.2 Level AA. Automated checks run with `@axe-core/playwright` against the login, setup, onboarding, Headroom, Server, Resources (including the logs prompt), resource detail (every tab, Logs included), Changes, Incidents (every tab), incident detail, every Settings section, the command palette, dialogs, and the standalone landing page.
+Binnacle targets WCAG 2.2 Level AA. Automated checks run with `@axe-core/playwright` in both the dark and the light theme, at desktop and phone width, against every page (sign-in, setup in both steps, onboarding, Headroom live, stale and disconnected, Resources as table, cards and archived, the logs prompt, every resource detail tab, Server and its tabs, every Incidents tab, incident detail, Changes, every Settings section), every dialog (command palette, silence, health check, rule, channel, password, two-factor, API token, every confirmation, the unsaved-changes guard, the phone "More" sheet, the custom time range), the row and account menus, empty and failed states, and the standalone landing page.
 
 ## Automated coverage
 
@@ -11,7 +11,7 @@ pnpm --dir web test:e2e a11y.spec.ts
 pnpm --dir web test:landing
 ```
 
-The tests scan each page with `wcag2a`, `wcag2aa`, `wcag21a`, and `wcag21aa` rules and fail on any violation.
+The tests scan with the `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa` and `wcag22aa` rules and fail on any violation. Pages and dialogs are scanned with populated lists so every row action exists, and each scan waits for dialogs and menus to finish animating in, so contrast is measured on the settled frame. The suites run with motion on; only the visual baselines force reduced motion.
 
 ## Manual checklist for releases
 

@@ -22,7 +22,10 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.svelte",
+    "tests/**/*.ts",
     "vite.config.ts",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "playwright.visual.config.ts",
+    "playwright.landing.config.ts"
   ]
 }

@@ -1,3 +1,4 @@
+import { within } from '@testing-library/svelte';
 import { createRawSnippet, type Snippet } from 'svelte';
 
 /** A snippet rendering plain text, for children props in component tests. */
@@ -27,4 +28,12 @@ export function polyfillDom() {
     this.removeAttribute('open');
     this.dispatchEvent(new Event('close'));
   };
+}
+
+/**
+ * The control labelled `text` inside `container`. A required field's label
+ * ends in an asterisk, which getByLabelText would otherwise need spelled out.
+ */
+export function field(container: HTMLElement, text: string): HTMLElement {
+  return within(container).getByLabelText(new RegExp(`^${text}\\s*\\*?$`));
 }

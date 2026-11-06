@@ -70,7 +70,7 @@ test('landing Overview screenshot matches the tested app baseline', async () => 
       .digest('hex');
   expect(await digest('../landing/assets/overview.png')).toBe(
     await digest(
-      'tests/e2e/overview-visual.spec.ts-snapshots/overview-degraded-chromium-linux.png',
+      'tests/e2e/visual.spec.ts-snapshots/landing-overview-chromium-linux.png',
     ),
   );
 });
