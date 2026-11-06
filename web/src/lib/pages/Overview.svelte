@@ -243,6 +243,7 @@
         <ResourceTable
           resources={filtered}
           snapshotTs={snapshot.ts}
+          summary
           bind:sort
           groupKey={grouped.groupOf}
           groupSequence={grouped.groupOrder}

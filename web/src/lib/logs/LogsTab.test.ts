@@ -91,6 +91,8 @@ describe('Logs tab', () => {
       expect(container.querySelectorAll('li.line')).toHaveLength(400),
     );
     expect(container.textContent).toContain('line 999');
+    // The server always reports "best-effort"; the note says it once.
+    expect(container.textContent).toContain('Redaction is best-effort;');
     expect(container.textContent).not.toContain('line 599 ');
     screen
       .getByRole('button', { name: /Show earlier lines \(600 more\)/ })

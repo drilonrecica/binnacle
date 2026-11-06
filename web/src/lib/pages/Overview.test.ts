@@ -6,6 +6,7 @@ import type { LiveSnapshot, LiveStore } from '../live.svelte';
 import { listIncidents } from '../api/incidents';
 import { FakeLive } from '../shell/testing/fake-live.svelte';
 import { polyfillDom } from '../ui/testing';
+import { viewport } from '../ui/media.svelte';
 
 vi.mock('../api/incidents', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/incidents')>()),
@@ -152,5 +153,40 @@ describe('Headroom page', () => {
     expect(screen.getByRole('alert').textContent).toMatch(
       /Live data could not be loaded/,
     );
+  });
+
+  it('keeps the resource table to status, name, CPU and memory at laptop width (DSC-24)', async () => {
+    vi.mocked(listIncidents).mockResolvedValue([]);
+    const width = viewport.width;
+    viewport.width = 1280;
+    try {
+      render(Overview, { live: liveStore('live', new Date().toISOString()) });
+      const table = await screen.findByRole('table', { name: 'Resources' });
+      const headers = [...table.querySelectorAll('th[scope="col"]')].map((th) =>
+        th.textContent?.trim(),
+      );
+      expect(headers).toEqual(['Status', 'Resource', 'CPU', 'Memory']);
+    } finally {
+      viewport.width = width;
+    }
+  });
+
+  it('counts one container in the singular on the phone card', async () => {
+    vi.mocked(listIncidents).mockResolvedValue([]);
+    const width = viewport.width;
+    viewport.width = 412;
+    const live = liveStore('live', new Date().toISOString()) as unknown as {
+      snapshot: LiveSnapshot;
+    };
+    live.snapshot.resources[0]!.components = [
+      { id: 'c1', name: 'api', status: 'running' },
+    ] as NonNullable<LiveSnapshot['resources'][number]['components']>;
+    try {
+      render(Overview, { live: live as unknown as LiveStore });
+      expect(await screen.findByText('1 container')).toBeTruthy();
+      expect(screen.queryByText('1 containers')).toBeNull();
+    } finally {
+      viewport.width = width;
+    }
   });
 });

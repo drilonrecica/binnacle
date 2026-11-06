@@ -126,7 +126,7 @@
     border-top: 1px solid var(--line);
     background: var(--panel);
   }
-  ul {
+  .tabbar ul {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
     height: var(--tabbar-h);

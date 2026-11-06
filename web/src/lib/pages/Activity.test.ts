@@ -173,4 +173,18 @@ describe('Changes page (UI-14)', () => {
       ),
     );
   });
+
+  it('marks severity by shape, not colour alone', async () => {
+    vi.mocked(eventsApi.listEvents).mockResolvedValue([
+      { ...event('a', 50), severity: 'critical' },
+      { ...event('b', 40), severity: 'info' },
+    ]);
+    visit('/changes');
+    const { container } = render(Activity, { live: new LiveStore() });
+    await screen.findByText('event a');
+    const shapes = [...container.querySelectorAll('.event .sev svg')].map(
+      (svg) => svg.getAttribute('data-shape'),
+    );
+    expect(shapes).toEqual(['square', 'diamond']);
+  });
 });

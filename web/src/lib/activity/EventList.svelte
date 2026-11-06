@@ -7,6 +7,7 @@
   import EmptyState from '../ui/EmptyState.svelte';
   import RelativeTime from '../ui/RelativeTime.svelte';
   import Skeleton from '../ui/Skeleton.svelte';
+  import StatusMarker from '../ui/StatusMarker.svelte';
   import { formatAbsolute, formatClock } from '../ui/relative-time';
   import { severityTone } from '../ui/status';
   import { SvelteSet } from 'svelte/reactivity';
@@ -109,10 +110,9 @@
               <span class="time num" use:tooltip={formatAbsolute(event.ts)}
                 >{formatClock(event.ts)}</span
               >
-              <span
-                class={`sev ${severityTone(event.severity)}`}
-                aria-hidden="true"
-              ></span>
+              <span class="sev" aria-hidden="true"
+                ><StatusMarker tone={severityTone(event.severity)} /></span
+              >
               <span class="sr-only">{event.severity}</span>
               <div class="body">
                 <p class="summary">
@@ -228,20 +228,8 @@
     font-size: var(--text-mono);
   }
   .sev {
-    width: 8px;
-    height: 8px;
+    display: inline-flex;
     margin-top: 6px;
-    border-radius: 50%;
-    background: var(--neutral-solid);
-  }
-  .sev.warn {
-    background: var(--warn-solid);
-  }
-  .sev.critical {
-    background: var(--critical-solid);
-  }
-  .sev.info {
-    background: var(--info-solid);
   }
   .body {
     display: grid;

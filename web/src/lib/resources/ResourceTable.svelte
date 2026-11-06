@@ -34,6 +34,7 @@
     groupSequence,
     pinned = [],
     layout = 'auto',
+    summary = false,
   }: {
     resources: LiveResource[];
     snapshotTs: string;
@@ -51,6 +52,11 @@
     pinned?: string[];
     /** `cards` shows the card form at every width. */
     layout?: 'auto' | 'table' | 'cards';
+    /**
+     * Headroom's summary form: status, name, CPU and memory only
+     * (DESIGN §Headroom item 4), so it fits beside the change feed.
+     */
+    summary?: boolean;
   } = $props();
 
   const pinnedIds = $derived(new Set(pinned));
@@ -95,7 +101,9 @@
     return [...keys, 'Ungrouped', 'Infrastructure'];
   });
 
-  const columns: Column<LiveResource>[] = [
+  const summaryKeys = new Set(['status', 'name', 'cpu', 'memory']);
+
+  const allColumns: Column<LiveResource>[] = [
     {
       key: 'status',
       label: 'Status',
@@ -150,6 +158,12 @@
       cell: componentsCell,
     },
   ];
+
+  const columns = $derived(
+    summary
+      ? allColumns.filter((column) => summaryKeys.has(column.key))
+      : allColumns,
+  );
 </script>
 
 {#snippet statusCell(row: LiveResource)}
@@ -242,6 +256,7 @@
 
 {#snippet mobileCard(row: LiveResource)}
   {@const stale = isStale(row)}
+  {@const count = row.components?.length ?? 0}
   <a class="card-link" href={resourcePath(row.id)}>
     <div class="card-top">
       <span class="name"
@@ -265,7 +280,8 @@
           ? missing
           : formatBytes(row.memoryBytes)}</span
       >
-      <span class="num">{row.components?.length ?? 0} containers</span>
+      <span class="num">{count} {count === 1 ? 'container' : 'containers'}</span
+      >
     </div>
   </a>
 {/snippet}

@@ -279,7 +279,8 @@
             ? ` (newest ${logCapacity} kept)`
             : ''}.
         {/if}
-        Logs are not stored. Redaction is best-effort{redaction
+        Logs are not stored. Redaction is best-effort{redaction &&
+        redaction !== 'best-effort'
           ? ` (${redaction})`
           : ''}; avoid logging secrets.
       </p>

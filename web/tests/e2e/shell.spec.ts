@@ -172,6 +172,16 @@ test('the phone shell uses a tab bar with Settings under More', async ({
   await nav.getByRole('button', { name: 'More' }).click();
   const more = page.getByRole('dialog', { name: 'More' });
   await expect(more).toBeVisible();
+  // The sheet lists its items one per row, each on a single line; it once
+  // inherited the tab bar's six-column grid and wrapped word by word.
+  const rows = more.getByRole('listitem');
+  await expect(rows).toHaveCount(3);
+  const boxes = await rows.evaluateAll((items) =>
+    items.map((item) => item.getBoundingClientRect()),
+  );
+  for (let index = 1; index < boxes.length; index += 1)
+    expect(boxes[index]!.top).toBeGreaterThanOrEqual(boxes[index - 1]!.bottom);
+  for (const box of boxes) expect(box.height).toBeLessThanOrEqual(48);
   await more.getByRole('link', { name: 'Settings' }).click();
   await expect(page).toHaveURL(/\/settings(\/general)?$/);
   await expect(more).toBeHidden();

@@ -272,6 +272,7 @@
               {markers}
               formatValue={formatters[group.format]}
               max={group.max}
+              legend={false}
               variant={group.variant ??
                 (group.metrics.length === 1 ? 'area' : 'line')}
             />

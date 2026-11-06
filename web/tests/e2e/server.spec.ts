@@ -18,6 +18,12 @@ test('renders instruments and historical charts', async ({ page }) => {
   await expect(
     page.getByRole('button', { name: /Inspect CPU/ }),
   ).toBeAttached();
+  // One legend per chart: the latest-value list above the plot, not a
+  // second copy from the chart primitive below it.
+  const cpu = page.locator('.chart-slot').filter({
+    has: page.getByRole('heading', { name: 'CPU', exact: true }),
+  });
+  await expect(cpu.getByText('Busy', { exact: true })).toHaveCount(1);
 });
 
 test('charts switch ranges and surface data gaps', async ({ page }) => {
