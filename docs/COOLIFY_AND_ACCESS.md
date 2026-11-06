@@ -41,10 +41,12 @@ manual `binnacle.*` labels, Coolify API metadata, then Docker/Compose metadata.
 
 ## Local MFA
 
-TOTP and trusted-proxy authentication are implemented but disabled by default
-pending advanced-auth acceptance testing. Enable them with
-`BINNACLE_FEATURE_ADVANCED_AUTH=true`. Coolify enrichment is independent and
-remains available while advanced authentication is off. If stored TOTP
+TOTP and trusted-proxy authentication are enabled in the packaged Compose and
+Coolify defaults (`BINNACLE_FEATURE_ADVANCED_AUTH=true`) after passing the
+advanced-auth acceptance suite. A standalone binary still defaults to off; set
+the variable explicitly there. Set it to `false` to turn the feature off.
+Coolify enrichment is independent and remains available while advanced
+authentication is off. If stored TOTP
 enrollment exists, Binnacle refuses to start with the gate off so the
 administrator cannot be locked out; enrollment data is never deleted.
 

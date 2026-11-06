@@ -7,9 +7,9 @@ Binnacle is distributed as a container image. The supported paths are Coolify
 > The `stable` tag tracks the latest stable release. Qualify a source-built
 > `local` image before using it in production.
 
-> **Qualification gates:** advanced authentication and portability are
-> implemented but disabled in packaged defaults. Leave both feature flags off
-> unless you are explicitly running their acceptance tests.
+> **Feature gates:** advanced authentication and portability are enabled in
+> packaged defaults. Set `BINNACLE_FEATURE_ADVANCED_AUTH=false` or
+> `BINNACLE_FEATURE_PORTABILITY=false` to turn either off.
 
 ## Requirements
 
@@ -295,8 +295,8 @@ Key variables you may need to set at deployment time:
 - `BINNACLE_COOLIFY_URL` and `BINNACLE_COOLIFY_API_TOKEN[_FILE]` — optional read-only Coolify enrichment.
 - `BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS` — lets a Coolify URL entered in Settings resolve to a private address; a URL from `BINNACLE_COOLIFY_URL` never needs it. Defaults to `false` and requires restart.
 - `BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS` — private HTTP check target opt-in; defaults to `false` and requires restart.
-- `BINNACLE_FEATURE_ADVANCED_AUTH` — enables TOTP and trusted-proxy authentication; defaults to `false` pending qualification.
-- `BINNACLE_FEATURE_PORTABILITY` — enables personal API tokens, exports, and eligibility for Prometheus; defaults to `false` pending qualification.
+- `BINNACLE_FEATURE_ADVANCED_AUTH` — enables TOTP and trusted-proxy authentication; defaults to `true` in the packaged Compose and Coolify files and `false` in a standalone binary.
+- `BINNACLE_FEATURE_PORTABILITY` — enables personal API tokens, exports, and eligibility for Prometheus; defaults to `true` in the packaged Compose and Coolify files and `false` in a standalone binary.
 - `BINNACLE_PROMETHEUS_ENABLED` — enables token-authenticated `/metrics` only when portability is also enabled; defaults to `false`.
 - `BINNACLE_AUTH_MODE` — `local`, `proxy`, or `local_and_proxy`; defaults to `local`. Proxy modes require advanced authentication to be enabled.
 - `BINNACLE_AUTH_PROXY_CIDRS`, `BINNACLE_AUTH_IDENTITY_HEADER`, and `BINNACLE_AUTH_ALLOWED_SUBJECT` — required together for proxy modes; CIDRs must be exact `/32` or `/128` immediate peers.

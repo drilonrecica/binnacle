@@ -10,8 +10,8 @@ Detailed feature specifications belong in release planning, not here.
 | v0.2 checks and alerts | Released in v0.6.0 | HTTP/HTTPS checks, deterministic local alerts, timed silences, deployment grace, and effective resource health. |
 | v0.3 notifications and incident grouping | Released in v0.6.0 | Durable HTTPS webhook and SMTP delivery with automatic target-based incidents. |
 | v0.4 diagnostics | Released in v0.6.0 | Bounded log access and read-only process diagnostics. |
-| v0.5 access and Coolify enrichment | Released in v0.6.0; advanced-auth acceptance pending | Coolify API enrichment is available. TOTP and external authentication are deployment-gated off by default pending qualification. |
-| v0.6 portability and integration | Released in v0.6.0; portability acceptance pending | Personalization is available. Scoped API tokens, bounded exports, and Prometheus eligibility are deployment-gated off by default pending qualification. |
+| v0.5 access and Coolify enrichment | Released in v0.6.0; advanced-auth acceptance passed | Coolify API enrichment is available. TOTP and external authentication passed acceptance and are enabled in packaged defaults; the gate remains available to turn them off. |
+| v0.6 portability and integration | Released in v0.6.0; portability acceptance passed | Personalization is available. Scoped API tokens, bounded exports, and Prometheus eligibility passed acceptance and are enabled in packaged defaults; Prometheus stays opt-in. |
 
 ## Later direction
 

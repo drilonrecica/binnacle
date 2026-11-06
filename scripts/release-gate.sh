@@ -109,6 +109,11 @@ run_check "Compose validation" scripts/validate-compose.sh
 run_check "Socket proxy policy" scripts/smoke-socket-proxy.sh
 run_check "Coolify validation" scripts/validate-coolify-template.sh
 
+# Feature acceptance (PRC-1): real-binary Go and Playwright suites with each
+# gate on. Both must pass before the packaged defaults may enable the gates.
+run_check "advanced-auth acceptance" make acceptance-auth
+run_check "portability acceptance" make acceptance-portability
+
 # 4. Build container image.
 if [[ -n "$DOCKER_CMD" ]]; then
   run_check "build container image" make image DOCKER="$DOCKER_CMD" VERSION="$VERSION"

@@ -88,6 +88,8 @@ expected_coolify_environment = {
     "BINNACLE_COOLIFY_API_TOKEN": "${BINNACLE_COOLIFY_API_TOKEN:-}",
     "BINNACLE_PUBLIC_URL": "${SERVICE_URL_BINNACLE_8080}",
     "BINNACLE_TRUSTED_PROXY_CIDRS": "${BINNACLE_TRUSTED_PROXY_CIDRS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}",
+    "BINNACLE_FEATURE_ADVANCED_AUTH": "${BINNACLE_FEATURE_ADVANCED_AUTH:-true}",
+    "BINNACLE_FEATURE_PORTABILITY": "${BINNACLE_FEATURE_PORTABILITY:-true}",
 }
 for label, doc in (("Coolify template", template), ("Git-backed Coolify", source)):
     if set(doc.get("services", {})) != {"binnacle", "binnacle-docker-socket-proxy"}:

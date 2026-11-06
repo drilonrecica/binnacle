@@ -16,11 +16,12 @@ The access and portability work retains schemas 19 through 21. Back up
 enrollment, API-token metadata, preferences, resources, alerts, checks,
 incidents, sessions, secrets, settings, and history are preserved.
 
-Advanced authentication and portability now default to disabled. An upgraded
-instance with stored TOTP enrollment will refuse startup until
-`BINNACLE_FEATURE_ADVANCED_AUTH=true` is set, preventing an administrator from
-being silently locked out. Existing API tokens remain stored but inactive while
-portability is disabled. Re-enabling either gate requires no migration or data
+Packaged Compose and Coolify defaults now enable advanced authentication and
+portability, so an upgraded instance with stored TOTP enrollment keeps working.
+If you set `BINNACLE_FEATURE_ADVANCED_AUTH=false` while TOTP enrollment is
+stored, Binnacle refuses to start so the administrator is never silently locked
+out. Existing API tokens remain stored but inactive while portability is
+disabled. Switching either gate requires no migration or data
 conversion. Prometheus additionally requires both
 `BINNACLE_FEATURE_PORTABILITY=true` and
 `BINNACLE_PROMETHEUS_ENABLED=true`.

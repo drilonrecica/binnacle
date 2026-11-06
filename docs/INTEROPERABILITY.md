@@ -1,8 +1,10 @@
 # Interoperability, exports, and personalization
 
-Personal API tokens, attachment exports, and Prometheus eligibility are
-implemented but disabled by default pending portability acceptance testing. To
-qualify them, set `BINNACLE_FEATURE_PORTABILITY=true`. Existing token data is
+Personal API tokens, attachment exports, and Prometheus eligibility are enabled
+in the packaged Compose and Coolify defaults (`BINNACLE_FEATURE_PORTABILITY=true`)
+after passing the portability acceptance suite. A standalone binary still
+defaults to off; set the variable explicitly there. Prometheus additionally
+needs `BINNACLE_PROMETHEUS_ENABLED=true`. Existing token data is
 preserved while the gate is off, token-management and export routes return 404,
 and Bearer credentials do not authorize normal read endpoints. Personalization
 remains available independently.

@@ -31,8 +31,9 @@ seeded history.
 
 The current stable release is v0.6.0. Advanced authentication (TOTP and
 trusted-proxy authentication) and portability (personal API tokens, exports,
-and Prometheus eligibility) remain disabled by default pending their acceptance
-tests. Exact release tags and the `stable` container image are production
+and Prometheus eligibility) have passed their acceptance suites, which run in
+CI and in the release gate, and are enabled in the packaged Compose and Coolify
+defaults. Prometheus stays opt-in. Exact release tags and the `stable` container image are production
 artifacts; untagged source builds are development builds. See the
 [roadmap](ROADMAP.md) and [release checklist](docs/operations/release-checklist.md)
 for qualification details.

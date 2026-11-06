@@ -49,10 +49,10 @@ table and captured benchmark output.
 - **NO-GO:** Any critical security defect, normal-operation data loss, or
   required gate failure remains.
 
-Until the two feature-specific acceptance gates pass, packaged defaults keep
-`BINNACLE_FEATURE_ADVANCED_AUTH=false` and
-`BINNACLE_FEATURE_PORTABILITY=false`; implementation completion alone does not
-authorize enabling them by default.
+Packaged defaults enable `BINNACLE_FEATURE_ADVANCED_AUTH` and
+`BINNACLE_FEATURE_PORTABILITY` because both acceptance suites
+(`make acceptance-auth`, `make acceptance-portability`) run in CI and in
+`scripts/release-gate.sh`. If either suite fails, the release is NO-GO.
 
 ## Evidence retention
 
