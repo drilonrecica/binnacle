@@ -7,6 +7,7 @@ import {
   type RouteMatch,
 } from './router';
 import { lastLogsResource } from './logs/last-resource';
+import { leaveGuard } from './leave-guard.svelte';
 
 /**
  * Reactive location store backed by the History API. Screens read
@@ -49,13 +50,31 @@ class Router {
     this.installed = true;
     this.sync();
     addEventListener('popstate', () => {
+      if (location.pathname !== this.path) {
+        const target = location.pathname + location.search + location.hash;
+        // Back and forward cannot be cancelled; put the page back and ask.
+        if (leaveGuard.intercept(target)) {
+          history.pushState({}, '', this.path + this.search);
+          return;
+        }
+      }
       if (this.sync()) void focusContent();
     });
   }
 
-  navigate(to: string, options: { replace?: boolean } = {}) {
+  /**
+   * Changes location. A change of path waits for confirmation while a form
+   * on the page has unsaved edits, unless `force` is set.
+   */
+  navigate(to: string, options: { replace?: boolean; force?: boolean } = {}) {
     const url = splitHref(to);
     const target = url.pathname + url.search + url.hash;
+    if (
+      !options.force &&
+      url.pathname !== this.path &&
+      leaveGuard.intercept(target)
+    )
+      return;
     if (options.replace) history.replaceState({}, '', target);
     else history.pushState({}, '', target);
     if (this.sync()) {

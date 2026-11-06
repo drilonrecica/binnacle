@@ -52,6 +52,7 @@ export const settingsSections = [
   'data',
   'access',
   'notifications',
+  'alerting',
   'appearance',
   'integrations',
   'system',

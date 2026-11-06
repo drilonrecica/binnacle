@@ -67,8 +67,12 @@
     background: var(--panel);
     transition: opacity var(--motion) var(--ease-out);
   }
-  /* Old numbers stay readable but recede while the stream is stale (UI-1). */
-  .stale {
+  /*
+   * Old values recede while the stream is stale (UI-1): only the arcs dim.
+   * Dimming the whole card dropped muted text below 4.5:1, so every word and
+   * number keeps full contrast; the stale banner carries the message.
+   */
+  .stale :global(svg) {
     opacity: 0.55;
   }
   ul {

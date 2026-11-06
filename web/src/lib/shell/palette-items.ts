@@ -13,6 +13,7 @@ const settingsSections: Array<[string, string]> = [
   ['data', 'Data & retention'],
   ['access', 'Access & sessions'],
   ['notifications', 'Notification channels'],
+  ['alerting', 'Alert rules & checks'],
   ['appearance', 'Appearance'],
   ['integrations', 'Integrations & API'],
   ['system', 'System health & diagnostics'],

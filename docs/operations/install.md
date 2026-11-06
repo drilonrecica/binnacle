@@ -304,6 +304,10 @@ Key variables you may need to set at deployment time:
 - `BINNACLE_NOTIFICATIONS_DELIVERY_TIMEOUT` — per-attempt timeout; defaults to `15s`.
 - `BINNACLE_NOTIFICATIONS_REMINDER_INTERVAL` — open-incident reminders; defaults to `2h`.
 
-Additional settings are available in the authenticated Settings interface. See
-the [product boundaries](../PRODUCT.md) for the supported runtime and security
-model.
+Additional settings are available in the authenticated Settings interface,
+in eight sections: General, Data, Access, Notifications, Alerting (alert rules
+and health checks), Appearance, Integrations and System. It shows only
+settings that take effect. Each card saves on its own with an explicit Save;
+leaving Settings with an unsaved card asks first, and closing the tab triggers
+the browser's own prompt. See the [product boundaries](../PRODUCT.md) for the
+supported runtime and security model.

@@ -41,7 +41,7 @@
   });
 
   $effect(() => {
-    if (snapshot) form.reset();
+    if (snapshot) form.sync();
   });
 
   function aggressive(key: string) {

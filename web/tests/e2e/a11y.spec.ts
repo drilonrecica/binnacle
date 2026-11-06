@@ -38,6 +38,20 @@ test('onboarding page has no detectable a11y violations', async ({ page }) => {
   await scan(page);
 });
 
+test('stale instruments keep readable contrast', async ({ page }) => {
+  // The mocked stream sends its frames once; moving the clock past the
+  // stale threshold turns Headroom and Server stale on purpose.
+  await page.clock.install();
+  await mockApp(page);
+  for (const path of ['/headroom', '/server']) {
+    await page.goto(path);
+    await expect(page.getByTestId('instruments')).toBeVisible();
+    await page.clock.fastForward(30_000);
+    await expect(page.getByTestId('instruments')).toHaveClass(/stale/);
+    await scan(page);
+  }
+});
+
 test('overview page has no detectable a11y violations', async ({ page }) => {
   await mockApp(page);
   await page.goto('/headroom');
@@ -191,6 +205,7 @@ test('settings sections have no detectable a11y violations', async ({
     'data',
     'access',
     'notifications',
+    'alerting',
     'appearance',
     'integrations',
     'system',

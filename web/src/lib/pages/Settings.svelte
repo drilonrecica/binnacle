@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import BellRing from '@lucide/svelte/icons/bell-ring';
+  import Siren from '@lucide/svelte/icons/siren';
   import Database from '@lucide/svelte/icons/database';
   import HeartPulse from '@lucide/svelte/icons/heart-pulse';
   import KeyRound from '@lucide/svelte/icons/key-round';
@@ -17,6 +18,8 @@
   import { settingsSections, type SettingsSection } from '../router';
   import { viewport } from '../ui/media.svelte';
   import AccessSettings from '../settings/AccessSettings.svelte';
+  import AlertingSettings from '../settings/AlertingSettings.svelte';
+  import LeaveDialog from '../settings/LeaveDialog.svelte';
   import AppearanceSettings from '../settings/AppearanceSettings.svelte';
   import DataSettings from '../settings/DataSettings.svelte';
   import GeneralSettings from '../settings/GeneralSettings.svelte';
@@ -76,6 +79,12 @@
       icon: BellRing,
     },
     {
+      id: 'alerting',
+      label: 'Alerting',
+      description: 'Alert rules and health checks',
+      icon: Siren,
+    },
+    {
       id: 'appearance',
       label: 'Appearance',
       description: 'Theme, density, pins',
@@ -114,7 +123,7 @@
 
 <PageHeader
   title="Settings"
-  description="Everything Binnacle can be told from the browser. Deployment-level options are shown read-only under System."
+  description="Everything Binnacle can be told from the browser. Each card saves on its own. Deployment-level options are shown read-only under System."
 />
 
 <div class="layout" class:mobile={viewport.isMobile}>
@@ -144,7 +153,7 @@
     <h2 id="settings-section-title" class="sr-only">{current.label}</h2>
     {#if error}
       <p class="error" role="alert">{error}</p>
-    {:else if !snapshot && active !== 'appearance' && active !== 'notifications'}
+    {:else if !snapshot && !['appearance', 'notifications', 'alerting'].includes(active)}
       <div class="loading" role="status" aria-label="Loading settings">
         <Skeleton height={180} /><Skeleton height={180} />
       </div>
@@ -156,6 +165,8 @@
       <AccessSettings {snapshot} {apply} {onsignedout} />
     {:else if active === 'notifications'}
       <NotificationsSettings />
+    {:else if active === 'alerting'}
+      <AlertingSettings live={live.snapshot} />
     {:else if active === 'appearance'}
       <AppearanceSettings live={live.snapshot} />
     {:else if active === 'integrations'}
@@ -165,6 +176,8 @@
     {/if}
   </section>
 </div>
+
+<LeaveDialog />
 
 <style>
   .layout {

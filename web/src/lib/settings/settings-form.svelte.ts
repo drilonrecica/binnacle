@@ -1,16 +1,22 @@
+import { untrack } from 'svelte';
 import type { SettingsSnapshot } from '../api/settings';
 import { errorMessage, isApiError } from '../api/client';
+import { leaveGuard } from '../leave-guard.svelte';
 import { toasts } from '../ui/toast.svelte';
 
 /**
- * Tracks edits to a subset of setting keys with dirty state, validation, and a
- * single save that sends only the changed keys against the current revision.
+ * Tracks edits to the setting keys of one card with dirty state, validation,
+ * and a single save that sends only the changed keys against the current
+ * revision. One form backs one card (UI-8). Created during component setup,
+ * it registers with the leave guard for that component's lifetime (UI-21).
  */
 export class SettingsForm {
   values = $state<Record<string, string>>({});
   errors = $state<Record<string, string>>({});
   saving = $state(false);
   error = $state('');
+  /** False until the first snapshot has filled the values. */
+  loaded = $state(false);
 
   private keys: string[];
   private validators: Record<string, (value: string) => string | null>;
@@ -28,6 +34,18 @@ export class SettingsForm {
     this.values = Object.fromEntries(options.keys.map((key) => [key, '']));
     this.apply = options.apply;
     this.validators = options.validators ?? {};
+    $effect(() => untrack(() => leaveGuard.register(() => this.dirty)));
+  }
+
+  /**
+   * Follows a new snapshot without losing edits: fills the values on first
+   * load and whenever this card has nothing unsaved. A save in another card
+   * replaces the snapshot and must not wipe this card's edits.
+   */
+  sync() {
+    untrack(() => {
+      if (!this.loaded || !this.dirty) this.reset();
+    });
   }
 
   /** Reloads the editable values from the snapshot, discarding edits. */
@@ -38,10 +56,12 @@ export class SettingsForm {
     this.values = next;
     this.errors = {};
     this.error = '';
+    if (snapshot) this.loaded = true;
   }
 
   get dirty(): boolean {
     const snapshot = this.snapshot();
+    if (!this.loaded || !snapshot) return false;
     return this.keys.some(
       (key) =>
         (snapshot?.values[key]?.value ?? '') !== (this.values[key] ?? ''),

@@ -87,6 +87,13 @@ critical or worse) with a short pause between batches so persistence keeps
 flowing. A pass has a 30-second budget; when it runs out the pass stops,
 `retention_incomplete` is reported, and the next pass resumes the work.
 
+Shortening retention in Settings › Data is treated as a deletion. Before a
+change that makes any tier keep less history is saved, Binnacle runs the
+history deletion preview for the new, shortest cutoff and shows how many rows
+are older than it; that count is an upper bound, since tiers that still keep
+longer hold on to their rows. The change is saved only after confirmation, and
+nothing is saved when the preview fails. Lengthening retention saves directly.
+
 Besides the sample and rollup tables, retention prunes (ADR 021 §6):
 
 | Table | Rule |

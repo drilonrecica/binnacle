@@ -143,11 +143,8 @@ test('resources switch to cards and the detail reads logs in a tab', async ({
   await expect(page).toHaveURL(/\/resources\/res1\?tab=logs$/);
 });
 
-// Checks became read-only on Incidents (P4-09); creating them moves to
-// Settings › Alerting in P4-11, which re-points this test there.
-test.fixme('creates a health check from Settings › Alerting', async ({
-  page,
-}) => {
+// Checks are read-only on Incidents; they are created under Settings › Alerting.
+test('creates a health check from Settings › Alerting', async ({ page }) => {
   await mockApp(page);
   let body: Record<string, unknown> | null = null;
   await page.route('**/api/v1/checks', async (route) => {
@@ -160,9 +157,9 @@ test.fixme('creates a health check from Settings › Alerting', async ({
     }
     return route.fulfill({ json: [] });
   });
-  await page.goto('/incidents?tab=checks');
+  await page.goto('/settings/alerting');
   await expect(
-    page.getByRole('heading', { name: 'Incidents', level: 1 }),
+    page.getByRole('heading', { name: 'Settings', level: 1 }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'New check' }).first().click();
   const dialog = page.getByRole('dialog', { name: 'New health check' });

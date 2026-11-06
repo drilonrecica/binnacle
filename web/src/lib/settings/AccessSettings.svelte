@@ -46,7 +46,7 @@
   });
 
   $effect(() => {
-    if (snapshot) form.reset();
+    if (snapshot) form.sync();
   });
 
   onMount(() => {

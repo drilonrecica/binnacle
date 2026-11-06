@@ -1,7 +1,10 @@
 <script lang="ts">
   import type { LiveSnapshot } from '../live.svelte';
   import { retentionPresets, type SettingsSnapshot } from '../api/settings';
-  import { monitorHealth } from '../api/access';
+  import { monitorHealth, previewDeletion } from '../api/access';
+  import { errorMessage } from '../api/client';
+  import { formatDate } from '../i18n';
+  import ConfirmDialog from '../ui/ConfirmDialog.svelte';
   import { formatBytes } from '../i18n';
   import Field from '../ui/Field.svelte';
   import Input from '../ui/Input.svelte';
@@ -20,7 +23,13 @@
     parseGoDuration,
     type ByteUnit,
   } from './units';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
+  import {
+    effectiveTiers,
+    shortening,
+    tierKeys,
+    tierLabels,
+  } from './retention';
 
   let {
     snapshot,
@@ -32,40 +41,81 @@
     live?: LiveSnapshot | null;
   } = $props();
 
-  const tierKeys = [
-    'retention.raw',
-    'retention.one_minute',
-    'retention.fifteen_minute',
-    'retention.one_hour',
-  ];
-  const tierLabels: Record<string, string> = {
-    'retention.raw': 'Raw samples (10s)',
-    'retention.one_minute': '1-minute rollups',
-    'retention.fifteen_minute': '15-minute rollups',
-    'retention.one_hour': 'Hourly rollups',
-  };
-
-  const form = new SettingsForm({
-    keys: ['retention.preset', ...tierKeys, 'database.target_budget_bytes'],
+  const retention = new SettingsForm({
+    keys: ['retention.preset', ...tierKeys],
     snapshot: () => snapshot,
     apply: (changes) => apply(changes),
-    validators: Object.fromEntries([
-      ...tierKeys.map((key) => [
+    validators: Object.fromEntries(
+      tierKeys.map((key) => [
         key,
         (value: string) =>
           parseGoDuration(value) == null && value !== '0' && value !== '0s'
             ? 'Use a duration such as 48h or 720h.'
             : null,
       ]),
-      [
-        'database.target_budget_bytes',
-        (value: string) =>
-          /^\d+$/.test(value) && Number(value) >= 64 * 1024 * 1024
-            ? null
-            : 'At least 64 MiB.',
-      ],
-    ]),
+    ),
   });
+
+  const budget = new SettingsForm({
+    keys: ['database.target_budget_bytes'],
+    snapshot: () => snapshot,
+    apply: (changes) => apply(changes),
+    validators: {
+      'database.target_budget_bytes': (value: string) =>
+        /^\d+$/.test(value) && Number(value) >= 64 * 1024 * 1024
+          ? null
+          : 'At least 64 MiB.',
+    },
+  });
+
+  /** What a shortening save would remove, shown before it is confirmed. */
+  let pendingCut = $state<{
+    tiers: string[];
+    cutoff: Date;
+    rows: number;
+  } | null>(null);
+  let confirmOpen = $state(false);
+  let previewing = $state(false);
+
+  /**
+   * Saves retention, but when any tier would keep less history than today,
+   * first asks the server how many rows are older than the new cutoff and
+   * waits for confirmation (UI-8). A failed preview never saves.
+   */
+  async function saveRetention() {
+    if (!retention.dirty || retention.saving || previewing) return;
+    if (!retention.validate()) return;
+    const current: Record<string, string> = {};
+    for (const [key, setting] of Object.entries(snapshot?.values ?? {}))
+      current[key] = setting.value;
+    const cut = shortening(
+      effectiveTiers(current),
+      effectiveTiers(retention.values),
+    );
+    if (!cut) {
+      await retention.save('Retention saved');
+      return;
+    }
+    previewing = true;
+    retention.error = '';
+    try {
+      const cutoff = new Date(Date.now() - cut.keepMs);
+      const preview = await previewDeletion({
+        kind: 'before',
+        before: cutoff.toISOString(),
+      });
+      pendingCut = {
+        tiers: cut.tiers.map((key) => tierLabels[key]),
+        cutoff,
+        rows: preview.totalRows,
+      };
+      confirmOpen = true;
+    } catch (reason) {
+      retention.error = `Nothing was saved: the deletion preview failed. ${errorMessage(reason)}`;
+    } finally {
+      previewing = false;
+    }
+  }
 
   let budgetValue = $state('1');
   let budgetUnit = $state<ByteUnit>('GiB');
@@ -73,7 +123,9 @@
 
   $effect(() => {
     if (!snapshot) return;
-    form.reset();
+    retention.sync();
+    if (untrack(() => budget.dirty)) return;
+    budget.sync();
     const current = Number(
       snapshot.values['database.target_budget_bytes']?.value ?? 0,
     );
@@ -84,13 +136,13 @@
 
   function syncBudget() {
     const bytes = inputToBytes(Number(budgetValue), budgetUnit);
-    form.values['database.target_budget_bytes'] =
+    budget.values['database.target_budget_bytes'] =
       bytes == null ? '' : String(bytes);
   }
 
-  const preset = $derived(form.values['retention.preset'] ?? 'balanced');
+  const preset = $derived(retention.values['retention.preset'] ?? 'balanced');
   const budgetBytes = $derived(
-    Number(form.values['database.target_budget_bytes'] ?? 0),
+    Number(budget.values['database.target_budget_bytes'] ?? 0),
   );
   const usagePct = $derived(
     databaseBytes != null && budgetBytes > 0
@@ -127,15 +179,15 @@
   <SettingsSection
     title="Retention"
     description="How long each tier of history stays on disk. Expired data is removed on a schedule; in-retention history is never removed silently."
-    dirty={form.dirty}
-    saving={form.saving}
-    error={form.error}
-    onsave={() => void form.save('Retention saved')}
-    onreset={() => form.reset()}
+    dirty={retention.dirty}
+    saving={retention.saving || previewing}
+    error={retention.error}
+    onsave={() => void saveRetention()}
+    onreset={() => retention.reset()}
   >
     <RadioCards
       label="Retention preset"
-      bind:value={form.values['retention.preset']}
+      bind:value={retention.values['retention.preset']}
       options={retentionPresets.map((item) => ({
         value: item.value,
         title: item.title,
@@ -150,15 +202,16 @@
         {#each tierKeys as key (key)}
           <Field
             label={tierLabels[key]}
-            hint={form.values[key] === '0' || form.values[key] === '0s'
+            hint={retention.values[key] === '0' ||
+            retention.values[key] === '0s'
               ? 'Tier disabled'
-              : humanDuration(form.values[key] ?? '')}
-            error={form.errors[key]}
+              : humanDuration(retention.values[key] ?? '')}
+            error={retention.errors[key]}
           >
             {#snippet children({ id, invalid, describedBy })}
               <Input
                 {id}
-                bind:value={form.values[key]}
+                bind:value={retention.values[key]}
                 {invalid}
                 mono
                 aria-describedby={describedBy}
@@ -176,16 +229,21 @@
   <SettingsSection
     title="Storage budget"
     description="Binnacle reports pressure at 80% and 95% of this budget and pauses raw persistence at 98% so the disk never fills."
-    dirty={form.dirty}
-    saving={form.saving}
-    error={form.error}
-    onsave={() => void form.save('Storage budget saved')}
-    onreset={() => form.reset()}
+    dirty={budget.dirty}
+    saving={budget.saving}
+    error={budget.error}
+    onsave={() => void budget.save('Storage budget saved')}
+    onreset={() => {
+      budget.reset();
+      const input = bytesToInput(budgetBytes);
+      budgetValue = String(input.value);
+      budgetUnit = input.unit;
+    }}
   >
     <div class="budget">
       <Field
         label="Database budget"
-        error={form.errors['database.target_budget_bytes']}
+        error={budget.errors['database.target_budget_bytes']}
       >
         {#snippet children({ id, invalid })}
           <div class="budget-input">
@@ -229,6 +287,26 @@
   <HistoryDeletionCard snapshot={live} />
 </div>
 
+<ConfirmDialog
+  bind:open={confirmOpen}
+  title="Shorten retention?"
+  description="Keeping less history deletes what falls outside the new limits. The next retention pass removes it, and it cannot be brought back."
+  confirmLabel="Shorten and delete"
+  onconfirm={() => retention.save('Retention saved')}
+>
+  {#if pendingCut}
+    <p class="cut">
+      Shorter: {pendingCut.tiers.join(', ')}.
+    </p>
+    <p class="cut">
+      Up to <strong class="num">{pendingCut.rows.toLocaleString()}</strong>
+      rows are older than
+      <span class="num">{formatDate(pendingCut.cutoff)}</span>
+      today. Tiers that keep longer hold on to theirs.
+    </p>
+  {/if}
+</ConfirmDialog>
+
 <style>
   .stack {
     display: grid;
@@ -250,6 +328,9 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
+  }
+  .cut {
+    font-size: var(--text-meta);
   }
   .hint {
     color: var(--muted);

@@ -79,7 +79,7 @@
     if (!session) return;
     const here = location.pathname + location.search + location.hash;
     endSession();
-    router.navigate(loginPath(here), { replace: true });
+    router.navigate(loginPath(here), { replace: true, force: true });
   }
 
   $effect(() => {
@@ -172,7 +172,7 @@
 
   function signedOut() {
     endSession();
-    router.navigate('/login', { replace: true });
+    router.navigate('/login', { replace: true, force: true });
   }
 
   function setupClaimed() {
