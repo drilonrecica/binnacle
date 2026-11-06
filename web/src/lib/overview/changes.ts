@@ -13,10 +13,20 @@ export interface ChangeRow {
   live: boolean;
 }
 
-export interface ChangeGroup {
+/** What repeat grouping needs from a row. */
+export interface RepeatRow {
+  id: string;
+  at: string;
+  type: string;
+  resourceId?: string;
+}
+
+export interface ChangeGroup<T extends RepeatRow = ChangeRow> {
   key: string;
   /** The newest event of the group. */
-  latest: ChangeRow;
+  latest: T;
+  /** Every event of the group, newest first; members[0] is latest. */
+  members: T[];
   count: number;
   /** The oldest event's time; equals latest.at for a single event. */
   firstAt: string;
@@ -64,18 +74,19 @@ export function mergeChanges(
  * ("restarted · 3× in 10m"), while each repeat is within the window of the
  * group's newest event. Input and output are newest first.
  */
-export function groupRepeats(
-  rows: ChangeRow[],
+export function groupRepeats<T extends RepeatRow>(
+  rows: T[],
   limit = 10,
   windowMs = repeatWindowMs,
-): ChangeGroup[] {
-  const groups: ChangeGroup[] = [];
-  const open = new Map<string, ChangeGroup>();
+): ChangeGroup<T>[] {
+  const groups: ChangeGroup<T>[] = [];
+  const open = new Map<string, ChangeGroup<T>>();
   for (const row of rows) {
     const key = `${row.type}|${row.resourceId ?? ''}`;
     const group = open.get(key);
     if (group && Date.parse(group.latest.at) - Date.parse(row.at) <= windowMs) {
       group.count += 1;
+      group.members.push(row);
       group.firstAt = row.at;
       continue;
     }
@@ -84,9 +95,10 @@ export function groupRepeats(
       open.delete(key);
       continue;
     }
-    const next = {
+    const next: ChangeGroup<T> = {
       key: `${key}|${row.id}`,
       latest: row,
+      members: [row],
       count: 1,
       firstAt: row.at,
     };
@@ -97,7 +109,7 @@ export function groupRepeats(
 }
 
 /** "3× in 10m" for a group, or "" for a single event. */
-export function repeatText(group: ChangeGroup): string {
+export function repeatText(group: ChangeGroup<RepeatRow>): string {
   if (group.count < 2) return '';
   return `${group.count}× in ${formatSpan(group.firstAt, group.latest.at)}`;
 }
