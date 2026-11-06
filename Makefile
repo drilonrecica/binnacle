@@ -12,7 +12,7 @@ GO_SOURCE_FILES := $(shell find cmd internal -type f -name '*.go' -print)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev dev-demo dev-host test check build web-build image image-multi vuln licenses sbom scan format-check go-test web-test web-check packaging-check go-vet acceptance-auth benchmark benchmark-short benchmark-matrix
+.PHONY: help dev dev-demo dev-host test check build web-build image image-multi vuln licenses sbom scan format-check go-test web-test web-check packaging-check go-vet acceptance-auth acceptance-portability benchmark benchmark-short benchmark-matrix
 
 help: ## Show the supported local development commands.
 
@@ -119,6 +119,11 @@ acceptance-auth: build ## Run the advanced-auth acceptance suites (Go and Playwr
 
 	BINNACLE_ACCEPTANCE_BINARY=$(abspath $(BINNACLE_BIN)) $(GO) test -tags acceptance -count=1 -run '^TestAdvancedAuth' ./internal/acceptance/
 	BINNACLE_ACCEPTANCE_BINARY=$(abspath $(BINNACLE_BIN)) $(PNPM) --dir web test:acceptance advanced-auth.spec.ts
+
+acceptance-portability: build ## Run the portability acceptance suites (Go and Playwright) against the built binary with the gate on.
+
+	BINNACLE_ACCEPTANCE_BINARY=$(abspath $(BINNACLE_BIN)) $(GO) test -tags acceptance -count=1 -run '^TestPortability' ./internal/acceptance/
+	BINNACLE_ACCEPTANCE_BINARY=$(abspath $(BINNACLE_BIN)) $(PNPM) --dir web test:acceptance portability.spec.ts
 
 benchmark: build ## Run the long-run benchmark (30 and 100 containers, 48 h seeded history) and fail on a missed target.
 

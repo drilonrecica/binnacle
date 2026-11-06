@@ -1,34 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { finishOnboarding, password, signIn } from './app';
 import { Authenticator } from './totp';
 
 // Advanced-auth acceptance (PRC-1) against the real binary with
 // BINNACLE_FEATURE_ADVANCED_AUTH=true: nothing here is mocked.
-
-const username = 'admin';
-const password = 'acceptance correct horse battery';
-
-async function signIn(page: Page, code: string) {
-  await page.getByRole('textbox', { name: 'Username' }).fill(username);
-  await page
-    .getByRole('textbox', { name: 'Password', exact: true })
-    .fill(password);
-  await page.getByRole('textbox', { name: 'Authentication code' }).fill(code);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-}
-
-/** Walks a fresh install's first-run wizard so the app is reachable. */
-async function finishOnboarding(page: Page) {
-  await expect(
-    page.getByRole('heading', { name: 'Before you start' }),
-  ).toBeVisible();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Save and run checks' }).click();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByRole('button', { name: 'Open the dashboard' }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Before you start' }),
-  ).toHaveCount(0);
-}
 
 test('enrols TOTP in Settings, then signs in with a code and a recovery code', async ({
   page,

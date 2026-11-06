@@ -43,6 +43,8 @@ const (
 	startupTimeout = 45 * time.Second
 	stopTimeout    = 15 * time.Second
 	requestTimeout = 10 * time.Second
+	// maxResponseBytes holds a full-size export (16 MiB) with room to spare.
+	maxResponseBytes = 32 << 20
 )
 
 func TestMain(m *testing.M) {
@@ -340,7 +342,7 @@ func (b *browser) do(method, path string, body any) response {
 		b.t.Fatalf("%s %s: %v", method, path, err)
 	}
 	defer closeBody(b.t, resp)
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		b.t.Fatal(err)
 	}

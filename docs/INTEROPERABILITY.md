@@ -15,7 +15,11 @@ token may have only these read scopes: `server:read`, `resources:read`,
 `metrics:read`, `events:read`, and `incidents:read`.
 
 Tokens do not authorize mutations, settings, logs, processes, diagnostics,
-live SSE, notification configuration, preferences, or token management. Treat
+live SSE, notification configuration, preferences, or token management. A
+request that carries an `Authorization` header is judged by that header alone:
+a missing, revoked or malformed token is `401 invalid_token` and a token
+without the route's scope is `403 insufficient_scope`, even when the same
+request also carries a valid session cookie. Treat
 them as credentials, transmit them only over HTTPS, give each consumer its own
 token, set an expiry where practical, and revoke unused tokens.
 
@@ -96,7 +100,11 @@ scrape_configs:
       - targets: [binnacle:8080]
 ```
 
-Both settings are required. When either is disabled, `/metrics` returns 404.
+Both settings are required. With portability on and Prometheus off,
+`/metrics` returns 404; Prometheus on with portability off is a configuration
+error, and Binnacle refuses to start. A scrape authenticates only with the
+`Authorization: Bearer` header: a browser session cookie is not accepted, and
+a token without `metrics:read` gets `403 insufficient_scope`.
 The exporter emits only current bounded
 host/resource metrics, health-check state, collector state, and Binnacle
 self-metrics. Unavailable values are omitted. Labels exclude domains and

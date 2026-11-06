@@ -73,7 +73,8 @@ start the real `binnacle` binary in demo mode on an empty data directory and
 drive it over HTTP and in Chromium. They are not part of `make check`.
 
 ```bash
-make acceptance-auth   # advanced authentication, gate on
+make acceptance-auth          # advanced authentication, gate on
+make acceptance-portability   # API tokens, exports and Prometheus, gate on
 ```
 
 - The Go half lives in `internal/acceptance` behind the `acceptance` build
@@ -84,7 +85,11 @@ make acceptance-auth   # advanced authentication, gate on
   of `127.0.0.0/8` to loopback; elsewhere, add the alias first.
 - The Playwright half is `web/tests/acceptance` with
   `playwright.acceptance.config.ts`, which starts `bin/binnacle` (or
-  `BINNACLE_ACCEPTANCE_BINARY`) on port 4175.
+  `BINNACLE_ACCEPTANCE_BINARY`) once per suite: advanced auth on port 4175,
+  portability on 4176, each on its own empty data directory.
+- The export-bound cases write their events straight into the database
+  before the binary first opens it (10,001 small rows, and 1,100 rows of
+  16 KiB), so the row and byte caps are reached without hours of collection.
 - Both compute TOTP codes from RFC 6238 themselves rather than with the
   product's code, and use strictly increasing steps, since Binnacle refuses
   a step it has already accepted.

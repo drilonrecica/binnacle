@@ -290,7 +290,10 @@ func main() {
 		resourceAuthorizer = api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeResourcesRead}
 		metricsAuthorizer = api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeMetricsRead}
 		eventsAuthorizer = api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeEventsRead}
-		incidentsAuthorizer = api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeIncidentsRead, TokenPathPrefixes: []string{"/api/v1/incidents"}}
+		// The incidents authorizer also guards the notification routes, which
+		// tokens must not reach; it admits a token only on the incident reads
+		// and their export.
+		incidentsAuthorizer = api.ScopedAuthorizer{Sessions: sessions, Tokens: tokenRepository, Scope: auth.ScopeIncidentsRead, TokenPathPrefixes: []string{"/api/v1/incidents", "/api/v1/exports/incidents.json"}}
 	}
 	apiServer.EnableLive(engine, authorizer, protection, api.LiveOptions{Interval: config.Live.SSEInterval, MaxClients: config.Live.MaxClients, Logger: log}, alertRepository, coolifyIntegration)
 	apiServer.EnableCurrent(engine, serverAuthorizer)
