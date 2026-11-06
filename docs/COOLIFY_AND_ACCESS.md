@@ -54,7 +54,10 @@ Base32 seed and `otpauth://` URI; no QR library is included. Confirmation
 returns ten high-entropy recovery codes once. Only recovery-code hashes and the
 encrypted TOTP seed are stored.
 
-Changing MFA revokes other sessions. A recovery code is consumed atomically.
+Enabling MFA signs out every other session; the one that enrolled stays
+signed in so the recovery codes stay on screen until they are saved. Turning
+MFA off signs out every session, that one included. A recovery code is
+consumed atomically.
 A TOTP code is accepted once: Binnacle stores the last accepted 30-second step
 for the account and refuses any code for that step or an earlier one, so a code
 seen over someone's shoulder cannot be replayed inside the clock-drift window.

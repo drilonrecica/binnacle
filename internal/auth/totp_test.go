@@ -65,7 +65,7 @@ func TestMFAEnrollmentAndAtomicRecoveryConsumption(t *testing.T) {
 	mfa.mu.Lock()
 	seed := append([]byte(nil), mfa.pending[user.ID].seed...)
 	mfa.mu.Unlock()
-	codes, err := mfa.Confirm(ctx, user.ID, TOTP(seed, fixed))
+	codes, err := mfa.Confirm(ctx, user.ID, TOTP(seed, fixed), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,6 +86,54 @@ func TestMFAEnrollmentAndAtomicRecoveryConsumption(t *testing.T) {
 	var stored int
 	if err = store.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM recovery_codes WHERE user_id=? AND used_at IS NOT NULL", user.ID).Scan(&stored); err != nil || stored != 1 {
 		t.Fatalf("used recovery count=%d err=%v", stored, err)
+	}
+}
+
+// Enabling MFA signs out every other session but keeps the one that
+// enrolled, so the recovery codes it was just shown stay on screen (DSC-31).
+func TestMFAConfirmKeepsOnlyTheEnrollingSession(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store := storage.New(filepath.Join(dir, "db"), filepath.Join(dir, "runtime"))
+	if err := store.Open(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	credentials := NewCredentials(store.DB())
+	user, err := credentials.CreateAdmin(ctx, "admin", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions := NewSessions(store.DB(), SessionConfig{IdleTimeout: time.Hour, AbsoluteLifetime: 24 * time.Hour})
+	secrets, err := NewSecretStore(store.DB(), "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+	if err != nil {
+		t.Fatal(err)
+	}
+	enrolling, _, _, err := sessions.IssueWithCSRF(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, _, err := sessions.IssueWithCSRF(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mfa := NewMFA(store.DB(), credentials, secrets, sessions)
+	fixed := time.Unix(1_800_000_000, 0).UTC()
+	mfa.now = func() time.Time { return fixed }
+	if _, err = mfa.Begin(ctx, user, "correct horse battery staple"); err != nil {
+		t.Fatal(err)
+	}
+	mfa.mu.Lock()
+	seed := append([]byte(nil), mfa.pending[user.ID].seed...)
+	mfa.mu.Unlock()
+	if _, err = mfa.Confirm(ctx, user.ID, TOTP(seed, fixed), enrolling); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = sessions.Authenticate(ctx, enrolling); err != nil {
+		t.Fatalf("enrolling session was revoked: %v", err)
+	}
+	if _, err = sessions.Authenticate(ctx, other); err == nil {
+		t.Fatal("another session survived enabling MFA")
 	}
 }
 
@@ -157,7 +205,7 @@ func TestTOTPCodeIsAcceptedOnlyOnce(t *testing.T) {
 	mfa.mu.Lock()
 	seed := append([]byte(nil), mfa.pending[user.ID].seed...)
 	mfa.mu.Unlock()
-	if _, err = mfa.Confirm(ctx, user.ID, TOTP(seed, now)); err != nil {
+	if _, err = mfa.Confirm(ctx, user.ID, TOTP(seed, now), ""); err != nil {
 		t.Fatal(err)
 	}
 	// SEC-8: the code that confirmed enrollment is already spent.

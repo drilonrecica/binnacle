@@ -66,6 +66,29 @@ pnpm --dir web test:e2e live.spec.ts              # one suite
   images, then refresh the landing visual baseline with
   `pnpm --dir web test:landing --update-snapshots`.
 
+## Acceptance suites
+
+The acceptance suites are release gates. Nothing in them is mocked: they
+start the real `binnacle` binary in demo mode on an empty data directory and
+drive it over HTTP and in Chromium. They are not part of `make check`.
+
+```bash
+make acceptance-auth   # advanced authentication, gate on
+```
+
+- The Go half lives in `internal/acceptance` behind the `acceptance` build
+  tag (`go test -tags acceptance ./internal/acceptance/`). It builds the
+  binary itself unless `BINNACLE_ACCEPTANCE_BINARY` names one.
+- The trusted-proxy cases run a test proxy that connects from `127.0.0.2`,
+  so it is a different peer from a client on `127.0.0.1`. Linux routes all
+  of `127.0.0.0/8` to loopback; elsewhere, add the alias first.
+- The Playwright half is `web/tests/acceptance` with
+  `playwright.acceptance.config.ts`, which starts `bin/binnacle` (or
+  `BINNACLE_ACCEPTANCE_BINARY`) on port 4175.
+- Both compute TOTP codes from RFC 6238 themselves rather than with the
+  product's code, and use strictly increasing steps, since Binnacle refuses
+  a step it has already accepted.
+
 ## Pull requests
 
 Use a focused branch and explain the problem, approach, tests, and any

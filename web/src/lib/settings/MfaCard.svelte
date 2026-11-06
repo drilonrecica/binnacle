@@ -68,6 +68,9 @@
       enabled = true;
       code = '';
       seed = '';
+      // Close the dialog so the codes, shown only once, are not left behind
+      // its modal (DSC-31).
+      enrollOpen = false;
       toasts.success('Two-factor authentication enabled', {
         description: 'Other sessions were signed out.',
       });

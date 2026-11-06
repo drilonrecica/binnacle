@@ -290,7 +290,7 @@ func (s *Server) EnableMFA(mfa *auth.MFA, credentials *auth.Credentials, session
 			WriteError(w, 400, Error{Code: "invalid_request", Message: "Authentication code is required."})
 			return
 		}
-		codes, err := mfa.Confirm(r.Context(), user.ID, body.Code)
+		codes, err := mfa.Confirm(r.Context(), user.ID, body.Code, auth.TokenFromRequest(r))
 		if err != nil {
 			WriteError(w, 400, Error{Code: "mfa_confirmation_failed", Message: "Authentication code is invalid or expired."})
 			return

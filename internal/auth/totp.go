@@ -111,7 +111,12 @@ func (m *MFA) Begin(ctx context.Context, user User, password string) (Enrollment
 	values := url.Values{"secret": {encoded}, "issuer": {"Binnacle"}, "algorithm": {"SHA1"}, "digits": {"6"}, "period": {"30"}}
 	return Enrollment{Seed: encoded, URI: "otpauth://totp/" + url.PathEscape(label) + "?" + values.Encode(), ExpiresAt: expires}, nil
 }
-func (m *MFA) Confirm(ctx context.Context, userID, code string) ([]string, error) {
+
+// Confirm enables MFA when code matches the pending seed and returns the
+// recovery codes. Every session of the user except keepSession (the token of
+// the session that enrolled, which must keep showing the codes) is revoked;
+// an empty keepSession revokes them all.
+func (m *MFA) Confirm(ctx context.Context, userID, code, keepSession string) ([]string, error) {
 	m.mu.Lock()
 	pending, ok := m.pending[userID]
 	if !ok || !m.now().Before(pending.expires) {
@@ -166,7 +171,11 @@ func (m *MFA) Confirm(ctx context.Context, userID, code string) ([]string, error
 	}
 	// MFA is enabled and the codes must reach the user, so a failed revoke
 	// is logged rather than returned.
-	if err := m.sessions.RevokeAll(ctx, userID); err != nil {
+	revoke := func() error { return m.sessions.RevokeAll(ctx, userID) }
+	if keepSession != "" {
+		revoke = func() error { return m.sessions.RevokeOthers(ctx, userID, keepSession) }
+	}
+	if err := revoke(); err != nil {
 		fallbackLogger(m.Logger).Error("sessions were not revoked after enabling MFA", "user", userID, "error", err)
 	}
 	return codes, nil

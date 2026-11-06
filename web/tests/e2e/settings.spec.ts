@@ -439,6 +439,10 @@ test('enrolls two-factor authentication when advanced auth is enabled', async ({
   ).toBeVisible();
   await dialog.getByLabel('Code from your app').fill('123456');
   await dialog.getByRole('button', { name: 'Enable' }).click();
+  // The dialog closes so nothing covers the one-time codes (DSC-31).
+  await expect(dialog).toBeHidden();
   await expect(page.getByText('aaaa-bbbb')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Copy all' })).toBeVisible();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.getByText('aaaa-bbbb')).toHaveCount(0);
 });
