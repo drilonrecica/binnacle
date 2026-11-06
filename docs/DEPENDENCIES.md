@@ -18,8 +18,8 @@ Last reviewed: 2026-11-05
 | Vendored fonts and licenses | [`web/static/fonts/`](../web/static/fonts/), [`landing/assets/fonts/`](../landing/assets/fonts/) |
 
 The app vendors Barlow, Barlow Condensed and JetBrains Mono (all SIL OFL, see
-ADR 027) under `web/static/fonts/`; the landing page still carries Geist until
-it is restyled.
+ADR 027) under `web/static/fonts/`; the landing page carries copies of the
+weights it uses, with the same `OFL.txt` files, under `landing/assets/fonts/`.
 
 Production uses a Go binary, SQLite through CGO, and embedded frontend assets.
 Node.js and frontend packages are build-time dependencies only. Exact versions

@@ -16,7 +16,8 @@
     "test:run": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:visual": "playwright test --config=playwright.visual.config.ts visual.spec.ts",
-    "test:landing": "playwright test --config=playwright.landing.config.ts"
+    "test:landing": "playwright test --config=playwright.landing.config.ts",
+    "screenshots": "node scripts/demo-screenshots.mjs"
   },
   "dependencies": {
     "@floating-ui/dom": "1.8.0",

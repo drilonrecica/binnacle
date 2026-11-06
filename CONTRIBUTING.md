@@ -57,6 +57,14 @@ pnpm --dir web test:e2e live.spec.ts              # one suite
   intended UI change, regenerate them with
   `pnpm --dir web exec playwright test visual.spec.ts --update-snapshots`
   and review every changed image in the pull request.
+- The README, `docs/assets/screenshots/` and the landing page use real
+  captures of the demo, not the mocked baselines. After a visible UI change,
+  run `make build && pnpm --dir web screenshots`, which starts
+  `binnacle --demo` on a temporary database, signs in and captures each
+  screen (about five minutes, because the time-to-full estimate needs live
+  samples). The demo is live, so values differ between runs; review the
+  images, then refresh the landing visual baseline with
+  `pnpm --dir web test:landing --update-snapshots`.
 
 ## Pull requests
 

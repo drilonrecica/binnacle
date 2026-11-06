@@ -229,18 +229,3 @@ for (const theme of themes) {
     }
   });
 }
-
-// The landing page's hero image is this exact baseline (landing.spec.ts
-// compares the bytes), so the site always shows a screen the suite tests.
-test('landing hero', async ({ page }, testInfo) => {
-  test.skip(
-    testInfo.project.name !== 'chromium',
-    'The hero is the desktop screen.',
-  );
-  const screen = screens.find((item) => item.name === 'headroom-degraded')!;
-  await show(page, screen, 'dark');
-  await expect(page).toHaveScreenshot('landing-overview.png', {
-    ...screenshotOptions,
-    fullPage: false,
-  });
-});

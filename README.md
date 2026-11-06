@@ -4,14 +4,28 @@
 
 > Lightweight, Coolify-aware monitoring for Docker servers.
 
-Binnacle is a self-hosted dashboard for developers and small teams operating
-Docker workloads on a Linux server. It combines live host and workload metrics,
-local history, Coolify/Compose-aware grouping, HTTP checks, deterministic
-alerts, incident grouping, durable webhook/SMTP notifications, timed silences,
-effective resource health, bounded container logs, and read-only host process
-diagnostics, scoped exports, optional Prometheus exposition, and persisted
-personalization without requiring a
-separate observability stack.
+Binnacle tells you how much room your Docker server has left and when it runs
+out. It draws a gauge for CPU, memory and every disk, fits a line through the
+last 24 hours of each disk and of memory, and says "full in ~12 d" before a
+volume fills. Around that it shows your Coolify and Compose services with
+their containers, HTTP checks, incidents with webhook and SMTP notifications,
+and a log of every deploy, restart and OOM kill.
+
+It is one Go binary with the web interface embedded and one SQLite file on the
+server it watches. With 30 containers it peaks at 74 MiB of memory and 0.5 % of
+one CPU core ([benchmark](docs/operations/benchmarking.md)). It sends no
+telemetry and has no code path that changes a container.
+
+![The Headroom page in the dark theme: gauges for CPU, memory, the root disk, the Docker data disk and /boot, with memory full in about 12 days; resources that need attention; 30 resources grouped by project; recent changes.](docs/assets/screenshots/headroom-dark.png)
+
+| Resource detail | Incident |
+| --- | --- |
+| ![The api-shop resource: CPU, memory, network and block I/O, with 24-hour CPU and memory charts.](docs/assets/screenshots/resource-detail-dark.png) | ![A critical incident on search-shop with its firing out-of-memory alert and queued webhook notification.](docs/assets/screenshots/incident-dark.png) |
+| **Changes** | **Headroom, light theme** |
+| ![The Changes page: health changes, a folded restart, an alert, a deployment and an OOM kill.](docs/assets/screenshots/changes-dark.png) | ![The Headroom page in the light theme.](docs/assets/screenshots/headroom-light.png) |
+
+Screenshots are from `make dev-demo`: 30 synthetic containers with 24 hours of
+seeded history.
 
 ## Status
 

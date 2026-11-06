@@ -5,19 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Binnacle is a lightweight, read-only monitoring dashboard for Docker and Coolify hosts with local SQLite history, live metrics, service grouping, and no external telemetry."
+      content="Binnacle is a self-hosted, read-only monitoring dashboard for one Docker or Coolify server: a gauge for CPU, memory and every disk, a time-to-full estimate, incidents and a change log, from one Go binary and one SQLite file."
     />
-    <meta name="theme-color" content="#0c1117" />
+    <meta name="theme-color" content="#1f242b" />
     <link rel="canonical" href="https://drilonrecica.github.io/binnacle/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Binnacle" />
     <meta
       property="og:title"
-      content="Binnacle — Clear monitoring for Docker servers"
+      content="Binnacle — Lightweight, Coolify-aware monitoring for Docker servers"
     />
     <meta
       property="og:description"
-      content="A lightweight, read-only monitoring dashboard for Docker and Coolify hosts with local history and no external telemetry."
+      content="How much room your Docker server has left and when it runs out. One Go binary, one SQLite file, read-only toward Docker."
     />
     <meta property="og:url" content="https://drilonrecica.github.io/binnacle/" />
     <meta
@@ -33,11 +33,11 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
-      content="Binnacle — Clear monitoring for Docker servers"
+      content="Binnacle — Lightweight, Coolify-aware monitoring for Docker servers"
     />
     <meta
       name="twitter:description"
-      content="Read-only Docker and Coolify monitoring with local SQLite history and no external telemetry."
+      content="How much room your Docker server has left and when it runs out. One Go binary, one SQLite file, read-only toward Docker."
     />
     <meta
       name="twitter:image"
@@ -47,7 +47,7 @@
       name="twitter:image:alt"
       content="The Binnacle compass mark and wordmark on slate with the tagline: Lightweight, Coolify-aware monitoring for Docker servers."
     />
-    <title>Binnacle — Clear monitoring for Docker servers</title>
+    <title>Binnacle — Lightweight, Coolify-aware monitoring for Docker servers</title>
     <link rel="stylesheet" href="assets/style.css" />
     <link
       rel="icon"
@@ -74,14 +74,14 @@
     <header class="site-header">
       <div class="wrap">
         <a class="brand" href="./" aria-label="Binnacle home">
-          <img src="assets/brand/binnacle-mark.svg" alt="" />
+          <img src="assets/brand/binnacle-mark.svg" alt="" width="28" height="28" />
           <span>Binnacle</span>
         </a>
         <nav aria-label="Primary navigation">
-          <a href="#problem">Why</a>
-          <a href="#principles">Principles</a>
-          <a href="#comparison">Compare</a>
-          <a class="cta" href="#quickstart">Install</a>
+          <a href="#headroom">Headroom</a>
+          <a href="#screens">Screens</a>
+          <a href="#footprint">Footprint</a>
+          <a class="cta" href="#install">Install</a>
         </nav>
       </div>
     </header>
@@ -90,15 +90,19 @@
       <section class="hero" aria-labelledby="hero-title">
         <div class="wrap">
           <div class="hero-copy">
-            <p class="eyebrow">Read-only monitoring for one Docker server</p>
+            <p class="eyebrow">
+              Lightweight, Coolify-aware monitoring for Docker servers
+            </p>
             <h1 id="hero-title">
-              Know what your Docker server is doing before it runs out of room.
+              How much room your Docker server has left, and when it runs out.
             </h1>
-            <p class="hero-summary">
-              Binnacle shows <strong>host headroom</strong>, every Coolify and
-              Compose service with its containers, HTTP checks, incidents, and
-              what changed, in one lightweight dashboard that keeps its history
-              in a local SQLite file. No Prometheus, no Grafana, no telemetry.
+            <p class="lede">
+              Binnacle puts a gauge on CPU, memory and every disk, fits a line
+              through the last 24 hours and tells you “full in ~12 d” before a
+              volume fills up. Behind it: your Coolify and Compose services with
+              their containers, HTTP checks, incidents and a log of every
+              deploy, restart and OOM kill. One Go binary and one SQLite file
+              on the server it watches.
             </p>
             <div class="actions">
               <a
@@ -110,377 +114,259 @@
                 >View source</a
               >
             </div>
-            <p class="release-note">
-              <strong>Current release</strong> v0.6.0 is available for amd64 and
-              arm64 from GHCR with an immutable version tag.
+            <p class="release">
+              <strong>v0.6.0</strong> is available for amd64 and arm64 from
+              GHCR with an immutable version tag. AGPL-3.0.
             </p>
           </div>
 
-          <figure class="frame">
-            <div class="frame-bar" aria-hidden="true">
-              <span></span><span></span><span></span>
-              <span class="url">binnacle.your-server.example/overview</span>
-            </div>
+          <figure class="shot hero-shot">
             <img
-              src="assets/overview.png"
-              width="1280"
-              height="720"
+              src="assets/screens/headroom-dark.png"
+              width="1440"
+              height="900"
               fetchpriority="high"
               decoding="async"
-              alt="Binnacle Overview under pressure: high host CPU and memory, a nearly full mount, a degraded resource, a delayed Docker collector, and recent OOM and restart events."
+              alt="The Binnacle Headroom page from the demo: five gauges for CPU at 28 percent, memory at 3.1 of 8 GiB with “full in ~12 d”, the root disk, the Docker data disk at 163 of 200 GiB above its 80 percent line, and /boot; a row of resources that need attention; 30 resources grouped by Coolify project; and recent changes including an OOM kill."
             />
             <figcaption>
-              <span class="critical">Open incidents first</span>
-              <span class="warn">Headroom, not just usage</span>
-              <span>Resources grouped by project</span>
-              <span>Activity as it happens</span>
+              The Headroom page of <code>binnacle --demo</code>: 30 synthetic
+              containers with 24 hours of seeded history.
             </figcaption>
           </figure>
-
-          <ul class="trust-strip" aria-label="Project guarantees">
-            <li>AGPLv3</li>
-            <li>Read-only by design</li>
-            <li>Local SQLite</li>
-            <li>No external telemetry</li>
-            <li>Single-server first</li>
-            <li>Go + Svelte</li>
-            <li>Docker / Coolify</li>
-          </ul>
         </div>
       </section>
 
-      <section id="problem" class="section" aria-labelledby="problem-title">
+      <section class="facts" aria-labelledby="facts-title">
+        <div class="wrap">
+          <h2 id="facts-title" class="sr-only">Measured footprint</h2>
+          <dl>
+            <div>
+              <dt>Peak memory, 30 containers</dt>
+              <dd>74 MiB</dd>
+            </div>
+            <div>
+              <dt>CPU, 30 containers</dt>
+              <dd>0.5 % <small>of one core</small></dd>
+            </div>
+            <div>
+              <dt>Live sample interval</dt>
+              <dd>2 s</dd>
+            </div>
+            <div>
+              <dt>Processes and databases</dt>
+              <dd>1 + 1</dd>
+            </div>
+            <div>
+              <dt>Telemetry sent</dt>
+              <dd>0 bytes</dd>
+            </div>
+          </dl>
+          <p class="source">
+            Memory and CPU from the 5-minute benchmark on a 4-CPU x86_64 host
+            with 48 hours of history and 8 live browser streams; at 100
+            containers the peak is 90 MiB.
+            <a
+              href="https://github.com/drilonrecica/binnacle/blob/master/docs/operations/benchmarking.md"
+              >How it is measured</a
+            >
+          </p>
+        </div>
+      </section>
+
+      <section id="headroom" class="section" aria-labelledby="headroom-title">
         <div class="wrap">
           <div class="section-head">
-            <p class="eyebrow">The problem</p>
-            <h2 id="problem-title">
-              One VPS. Too many containers. Not enough visibility.
-            </h2>
-            <p>
-              Coolify makes it easy to deploy apps. Binnacle helps you
-              understand what those apps are doing to your server over time:
-              memory pressure, CPU spikes, disks filling up, restarts, OOM
-              kills, and noisy services.
-            </p>
+            <p class="eyebrow">The first screen</p>
+            <h2 id="headroom-title">Four questions answered in one screen.</h2>
           </div>
-          <div class="grid three">
-            <article class="card">
-              <span class="icon" aria-hidden="true"
-                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4" /></svg></span
-              >
-              <h3>Headroom at a glance</h3>
+          <ol class="answers">
+            <li>
+              <h3>How full is it?</h3>
               <p>
-                CPU, memory, every mounted filesystem, and network with an hour
-                of trend on the first screen, so “almost full” is visible before
-                it becomes an outage.
+                One arc gauge each for CPU, memory, the root disk, the Docker
+                data root and the fullest other mounts, up to eight. Each arc
+                is a true 0 to 100 scale with your alert thresholds marked on
+                it.
               </p>
-            </article>
-            <article class="card">
-              <span class="icon" aria-hidden="true"
-                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4-9 4-9-4z" /><path d="M3 12l9 4 9-4" /><path d="M3 17l9 4 9-4" /></svg></span
-              >
-              <h3>Services, not container IDs</h3>
+            </li>
+            <li>
+              <h3>Which way is it going?</h3>
               <p>
-                Containers roll up into logical resources with stable history
-                across deployments, grouped by Coolify project and environment
-                when that metadata exists.
+                Every five minutes a least-squares line is fitted to the last
+                24 hours of each disk and of memory. The gauge says
+                <code>full in ~N d</code>, <code>steady</code> or
+                <code>shrinking</code>, and “not enough history” for the first
+                three hours instead of guessing.
               </p>
-            </article>
-            <article class="card">
-              <span class="icon" aria-hidden="true"
-                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a8 8 0 0 0 8-8c0-4-3-6-4-9-1 2-2 3-4 3 0-3-1-5-3-6 1 4-3 6-3 12a8 8 0 0 0 6 8z" /></svg></span
-              >
-              <h3>Incidents you can act on</h3>
+            </li>
+            <li>
+              <h3>What needs attention?</h3>
               <p>
-                Deterministic alert rules and HTTP checks open incidents per
-                target, deliver to webhooks or email with retries, and resolve
-                themselves when the condition clears.
+                Open incidents, down and degraded resources and collector
+                problems sit in one row above the gauges. When the live stream
+                stops, the page says so; it never shows “all healthy” without
+                current data.
               </p>
-            </article>
-          </div>
+            </li>
+            <li>
+              <h3>What changed?</h3>
+              <p>
+                Deploys, restarts, OOM kills and health changes stream in as
+                they happen. Repeats fold into one line, such as
+                “restarted · 4× in 1m”.
+              </p>
+            </li>
+          </ol>
         </div>
       </section>
 
-      <section
-        id="principles"
-        class="section"
-        aria-labelledby="principles-title"
-      >
+      <section id="screens" class="section" aria-labelledby="screens-title">
         <div class="wrap">
           <div class="section-head">
-            <p class="eyebrow">Operating principles</p>
-            <h2 id="principles-title">Designed to observe, not operate.</h2>
+            <p class="eyebrow">From the demo</p>
+            <h2 id="screens-title">Each service, incident and change gets a page.</h2>
           </div>
-          <div class="grid three">
-            <article class="card">
-              <h3>Local-first</h3>
-              <p>
-                Metrics stay on your server in SQLite. No cloud account. No
-                external telemetry.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Low overhead</h3>
-              <p>
-                One Go process and one database file, with bounded queues and
-                retention, sized for a VPS rather than a fleet.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Coolify-aware</h3>
-              <p>
-                Uses Coolify and Compose metadata to present logical services
-                instead of transient container IDs.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Read-only by design</h3>
-              <p>
-                Observes Docker without stop, restart, delete, exec, shell, or
-                redeploy controls. There is nothing to click that changes your
-                workloads.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Live state</h3>
-              <p>
-                Streams current host and container state to the dashboard as
-                samples are collected, and never auto-scrolls under your
-                pointer.
-              </p>
-            </article>
-            <article class="card">
-              <h3>Useful history</h3>
-              <p>
-                Keeps local metric and event history in tiers so you can see
-                what changed, not just what is happening now.
-              </p>
-            </article>
+          <div class="gallery">
+            <figure class="shot">
+              <img
+                src="assets/screens/resource-detail-dark.png"
+                width="1440"
+                height="900"
+                decoding="async"
+                alt="The detail page of the api-shop resource: CPU 5.7 percent, memory 773.8 MiB, network and block I/O, then 24-hour CPU and memory charts with min, average and max."
+              />
+              <figcaption>
+                <strong>A service, across deploys.</strong> Containers roll up
+                into one resource by their Coolify or Compose labels, so its
+                history survives container replacement. Charts from 1 hour to
+                30 days, plus its containers, incidents, changes and logs.
+              </figcaption>
+            </figure>
+            <figure class="shot">
+              <img
+                src="assets/screens/incident-dark.png"
+                width="1440"
+                height="900"
+                decoding="async"
+                alt="A critical incident on search-shop: one firing out-of-memory-loop alert and its webhook notification, queued."
+              />
+              <figcaption>
+                <strong>Incidents that close themselves.</strong> Alerts on the
+                same target group into one incident that resolves when the last
+                alert clears. Webhook and SMTP deliveries are stored and
+                retried six times, from 1 minute up to 12 hours later.
+              </figcaption>
+            </figure>
+            <figure class="shot">
+              <img
+                src="assets/screens/changes-dark.png"
+                width="1440"
+                height="900"
+                decoding="async"
+                alt="The Changes page: a health change, a restart folded as four times in one minute, an alert, a deployment and an out-of-memory kill, each with its resource and source."
+              />
+              <figcaption>
+                <strong>A log of what happened.</strong> Deploys, container
+                lifecycle and health, collector state and alerts, filterable by
+                severity, family and resource.
+              </figcaption>
+            </figure>
           </div>
         </div>
       </section>
 
-      <section id="coolify" class="section" aria-labelledby="coolify-title">
+      <section id="footprint" class="section" aria-labelledby="footprint-title">
         <div class="wrap split">
           <div>
             <div class="section-head">
-              <p class="eyebrow">Resource model</p>
-              <h2 id="coolify-title">Coolify-aware, not Coolify-only.</h2>
+              <p class="eyebrow">Footprint</p>
+              <h2 id="footprint-title">
+                One binary and one SQLite file with a 1 GiB budget.
+              </h2>
             </div>
             <div class="prose">
               <p>
-                Binnacle works with plain Docker and Docker Compose. On Coolify
-                hosts it uses the labels and metadata already on your
-                containers to keep logical resources recognizable across
-                container replacement.
+                The collector, alerting, notifications and the web interface
+                run in one Go process with the frontend embedded. History lives
+                in a single SQLite database on the server, with a 1 GiB budget
+                by default. No Prometheus, no Grafana, no agent per container,
+                no cloud account.
               </p>
               <p>
-                <strong>Docker monitoring comes first.</strong> Coolify
-                awareness improves names and grouping without making the
-                dashboard depend on the Coolify API.
+                Every queue, query and log view has a limit. A log view keeps
+                the newest 5,000 lines, and an HTTP check reads at most 64 KiB.
+                When something falls behind, Binnacle drops stale work and says
+                so on the page.
               </p>
             </div>
           </div>
-          <div class="mapping" aria-label="Container metadata grouping example">
-            <span>Labels to logical resource</span>
-            <dl>
-              <div>
-                <dt>coolify.resource.uuid</dt>
-                <dd>personal-site</dd>
-              </div>
-              <div>
-                <dt>compose.project</dt>
-                <dd>personal-site</dd>
-              </div>
-              <div>
-                <dt>compose.service</dt>
-                <dd>web</dd>
-              </div>
-              <div>
-                <dt>containers</dt>
-                <dd>web-1, web-2</dd>
-              </div>
-              <div class="result">
-                <dt>logical resource</dt>
-                <dd>web · 2 containers</dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      </section>
-
-      <section
-        id="comparison"
-        class="section"
-        aria-labelledby="comparison-title"
-      >
-        <div class="wrap">
-          <div class="section-head">
-            <p class="eyebrow">Tool selection</p>
-            <h2 id="comparison-title">Not another observability stack.</h2>
+          <div class="table-card">
+            <table>
+              <caption>
+                Default history (balanced preset)
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Resolution</th>
+                  <th scope="col">Kept for</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Live, in memory</td>
+                  <td>every 2 s</td>
+                </tr>
+                <tr>
+                  <td>10 seconds</td>
+                  <td>48 hours</td>
+                </tr>
+                <tr>
+                  <td>1 minute</td>
+                  <td>30 days</td>
+                </tr>
+                <tr>
+                  <td>15 minutes</td>
+                  <td>1 year</td>
+                </tr>
+              </tbody>
+            </table>
             <p>
-              Binnacle is not trying to replace Prometheus, Grafana, or a
-              centralized multi-node metrics platform. It is for single Docker
-              servers and Coolify VPSs that need clear local visibility with
-              minimal operational overhead.
+              The minimal and long-term presets keep 12 hours or 7 days of
+              10-second samples.
             </p>
           </div>
-          <div class="choice-grid">
-            <section class="choice us" aria-labelledby="use-binnacle-title">
-              <span>Local dashboard</span>
-              <h3 id="use-binnacle-title">Use Binnacle when</h3>
-              <ul>
-                <li>You run many containers on one VPS.</li>
-                <li>You want local history without a monitoring stack.</li>
-                <li>Read-only workload safety is a requirement.</li>
-                <li>
-                  You want logical services instead of raw container noise.
-                </li>
-                <li>You want one focused Docker monitoring service.</li>
-              </ul>
-            </section>
-            <section class="choice" aria-labelledby="use-stack-title">
-              <span>Central observability</span>
-              <h3 id="use-stack-title">Use Prometheus / Grafana when</h3>
-              <ul>
-                <li>You need multi-server aggregation.</li>
-                <li>You need long-term centralized observability.</li>
-                <li>You need complex queries and alert routing.</li>
-                <li>You already operate a metrics stack.</li>
-                <li>You need broad integrations and custom dashboards.</li>
-              </ul>
-            </section>
-          </div>
-          <dl class="tool-fit">
-            <div>
-              <dt>Glances</dt>
-              <dd>Broad machine, process, and container inspection.</dd>
-            </div>
-            <div>
-              <dt>Uptime Kuma</dt>
-              <dd>
-                Endpoint availability checks, status pages, and notifications.
-              </dd>
-            </div>
-            <div>
-              <dt>Coolify</dt>
-              <dd>
-                Deployment control with built-in resource and status
-                monitoring.
-              </dd>
-            </div>
-            <div class="us">
-              <dt>Binnacle</dt>
-              <dd>
-                Read-only Docker headroom, service context, incidents, and
-                local history.
-              </dd>
-            </div>
-          </dl>
         </div>
       </section>
 
-      <section id="status" class="section" aria-labelledby="status-title">
-        <div class="wrap">
-          <div class="section-head">
-            <p class="eyebrow">Project status</p>
-            <h2 id="status-title">Current release.</h2>
-          </div>
-          <div class="status-grid">
-            <div>
-              <strong>Stable release</strong>
+      <section id="boundary" class="section" aria-labelledby="boundary-title">
+        <div class="wrap split">
+          <div>
+            <div class="section-head">
+              <p class="eyebrow">Boundary</p>
+              <h2 id="boundary-title">Read-only toward Docker, permanently.</h2>
+            </div>
+            <div class="prose">
               <p>
-                v0.6.0 passed release qualification and is published with a
-                multi-architecture container image and build provenance.
+                Binnacle has no code path that starts, stops, restarts,
+                deletes, execs into or redeploys a container, and no shell or
+                Docker API proxy. The guarantee is written into the product
+                boundaries, and no setting turns it off.
+              </p>
+              <p>
+                Plain Docker and Compose work without Coolify. On a Coolify
+                server the labels already on your containers name and group
+                them by project and environment.
               </p>
             </div>
-            <div class="next">
-              <strong>Next</strong>
-              <p>
-                Advanced authentication and portability remain disabled by
-                default pending acceptance. Multi-server monitoring remains
-                later scope; workload controls remain excluded.
-              </p>
-            </div>
           </div>
-        </div>
-      </section>
-
-      <section
-        id="quickstart"
-        class="section"
-        aria-labelledby="quickstart-title"
-      >
-        <div class="wrap">
-          <div class="section-head">
-            <p class="eyebrow">Deploy</p>
-            <h2 id="quickstart-title">Deploy v0.6.0.</h2>
-          </div>
-          <div class="requirements">
-            <span>Requirements</span>
+          <aside class="warning" aria-labelledby="socket-title">
+            <strong id="socket-title">The Docker socket is still privileged</strong>
             <p>
-              Linux on amd64 or arm64 · Docker Engine 29.5.1+ · read access to
-              host <code>/proc</code>, <code>/sys</code>, and Docker · one
-              persistent data volume
-            </p>
-          </div>
-          <ol class="sequence">
-            <li>
-              <div>
-                <h3>Create a one-time setup token</h3>
-                <p>
-                  The first browser session claims the installation with this
-                  token and creates the administrator.
-                </p>
-                <pre
-                  tabindex="0"
-                ><code>export BINNACLE_SETUP_TOKEN="$(openssl rand -hex 32)"</code></pre>
-              </div>
-            </li>
-            <li>
-              <div class="install-paths">
-                <section aria-labelledby="coolify-install-title">
-                  <span>Primary path</span>
-                  <h3 id="coolify-install-title">Coolify</h3>
-                  <p>
-                    Deploy the included service template, copy the generated
-                    setup token, attach a domain, and complete local
-                    onboarding.
-                  </p>
-                </section>
-                <section aria-labelledby="compose-install-title">
-                  <span>Portable path</span>
-                  <h3 id="compose-install-title">Docker Compose</h3>
-                  <p>
-                    Use the canonical Compose definition with host telemetry
-                    mounts, the Docker socket, and a persistent SQLite volume.
-                  </p>
-                </section>
-              </div>
-            </li>
-            <li>
-              <div>
-                <h3>Follow the release-aware guide</h3>
-                <p>
-                  Use the immutable <code>v0.6.0</code> image tag in production.
-                  The guide covers Coolify, Docker Compose, secrets, upgrades,
-                  and the restricted Docker socket boundary.
-                </p>
-                <a
-                  class="button primary"
-                  href="https://github.com/drilonrecica/binnacle/blob/master/docs/operations/install.md"
-                  >Open install guide</a
-                >
-              </div>
-            </li>
-          </ol>
-          <aside class="socket-warning" aria-labelledby="socket-warning-title">
-            <strong id="socket-warning-title">Docker socket boundary</strong>
-            <p>
-              Read-only by design describes Binnacle’s behavior, not Docker
-              socket isolation. The socket remains privileged even when mounted
-              <code>:ro</code>. Prefer a constrained read-only socket proxy for
-              hardened deployments.
+              Mounting <code>/var/run/docker.sock</code> with <code>:ro</code>
+              does not make it read-only to Docker. A compromised process with
+              socket access can control Docker. For hardened deployments, put a
+              socket proxy in front that allows only the read endpoints.
             </p>
             <a
               href="https://github.com/drilonrecica/binnacle/blob/master/SECURITY.md"
@@ -490,23 +376,103 @@
         </div>
       </section>
 
+      <section id="fit" class="section" aria-labelledby="fit-title">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Fit</p>
+            <h2 id="fit-title">Built for one server with a few dozen containers.</h2>
+          </div>
+          <div class="fit">
+            <section class="fit-card us" aria-labelledby="fit-us-title">
+              <h3 id="fit-us-title">Binnacle fits when</h3>
+              <ul>
+                <li>One Linux server runs your containers, with or without Coolify.</li>
+                <li>You want history and alerts without running a metrics stack.</li>
+                <li>The monitor must not be able to change your workloads.</li>
+                <li>You want each service with its containers under it.</li>
+              </ul>
+            </section>
+            <section class="fit-card" aria-labelledby="fit-other-title">
+              <h3 id="fit-other-title">Prometheus and Grafana fit when</h3>
+              <ul>
+                <li>You aggregate many servers in one place.</li>
+                <li>You need free-form queries and custom dashboards.</li>
+                <li>You already operate a metrics stack.</li>
+              </ul>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section id="install" class="section" aria-labelledby="install-title">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">Install</p>
+            <h2 id="install-title">Deploy v0.6.0.</h2>
+          </div>
+          <p class="requirements">
+            <span>Requirements</span>
+            Ubuntu 22.04/24.04 or Debian 12/13 · amd64 or arm64 · Docker Engine
+            29.5.1+ · read access to host <code>/proc</code>,
+            <code>/sys</code> and Docker · one persistent volume
+          </p>
+          <ol class="steps">
+            <li>
+              <h3>Create a one-time setup token</h3>
+              <p>
+                The first browser session claims the installation with it and
+                creates the administrator.
+              </p>
+              <pre
+                tabindex="0"
+              ><code>export BINNACLE_SETUP_TOKEN="$(openssl rand -hex 32)"</code></pre>
+            </li>
+            <li>
+              <h3>Deploy on Coolify or with Compose</h3>
+              <p>
+                On Coolify, deploy the included service template and attach a
+                domain. Elsewhere, use the Compose file with the host mounts,
+                the Docker socket and a volume for the SQLite database.
+              </p>
+            </li>
+            <li>
+              <h3>Pin the version</h3>
+              <p>
+                Use the immutable <code>v0.6.0</code> image tag in production.
+                The guide covers secrets, upgrades and the socket proxy.
+              </p>
+              <a
+                class="button primary"
+                href="https://github.com/drilonrecica/binnacle/blob/master/docs/operations/install.md"
+                >Open install guide</a
+              >
+            </li>
+          </ol>
+          <p class="try">
+            To look around first, run <code>make dev-demo</code> in a clone: the
+            screenshots on this page come from it.
+          </p>
+        </div>
+      </section>
+
       <section id="reference" class="section" aria-labelledby="reference-title">
         <div class="wrap">
           <div class="section-head">
             <p class="eyebrow">Reference</p>
-            <h2 id="reference-title">Documentation index.</h2>
+            <h2 id="reference-title">Documentation.</h2>
           </div>
           <nav class="reference" aria-label="Documentation">
             <a
               href="https://github.com/drilonrecica/binnacle/blob/master/docs/operations/install.md"
-              ><span>Guide</span>Installation guide</a
-            >
-            <a href="https://github.com/drilonrecica/binnacle"
-              ><span>Code</span>Source repository</a
+              ><span>Guide</span>Installation</a
             >
             <a
               href="https://github.com/drilonrecica/binnacle/blob/master/docs/PRODUCT.md"
               ><span>Scope</span>Product boundaries</a
+            >
+            <a
+              href="https://github.com/drilonrecica/binnacle/blob/master/docs/CHECKS_AND_ALERTS.md"
+              ><span>Alerts</span>Checks, alerts and time-to-full</a
             >
             <a
               href="https://github.com/drilonrecica/binnacle/blob/master/SECURITY.md"
@@ -516,9 +482,8 @@
               href="https://github.com/drilonrecica/binnacle/blob/master/ROADMAP.md"
               ><span>Plan</span>Roadmap</a
             >
-            <a
-              href="https://github.com/drilonrecica/binnacle/blob/master/LICENSE"
-              ><span>License</span>AGPLv3 license</a
+            <a href="https://github.com/drilonrecica/binnacle"
+              ><span>Code</span>Source repository</a
             >
           </nav>
         </div>
@@ -527,7 +492,9 @@
     <footer>
       <div class="wrap">
         <span>Binnacle · AGPL-3.0-only · v0.6.0</span>
-        <span>Observes, never operates.</span>
+        <a href="https://github.com/drilonrecica/binnacle/blob/master/LICENSE"
+          >License</a
+        >
         <a href="https://github.com/drilonrecica/binnacle">Source repository</a>
       </div>
     </footer>
