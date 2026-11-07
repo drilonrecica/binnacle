@@ -1,6 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { LiveStore, sessionActive } from './lib/live.svelte';
+  import { onMount, untrack } from 'svelte';
+  import {
+    LiveStore,
+    sessionActive,
+    type LiveSnapshot,
+  } from './lib/live.svelte';
   import { liveSeries } from './lib/live-series.svelte';
   import { fetchMetrics, fetchSparklines } from './lib/api/metrics';
   import { prefs } from './lib/preferences.svelte';
@@ -38,24 +42,25 @@
   );
 
   $effect(() => {
-    if (live.snapshot) {
-      liveSeries.push(live.snapshot);
-      void liveSeries.ensureHostSeeded(
-        (metrics, from, to) => fetchMetrics('host', metrics, from, to),
-        live.snapshot.host.memoryTotalBytes ?? null,
-      );
-      void liveSeries.ensureResourcesSeeded((windowMs) =>
-        fetchSparklines(
-          ['cpu', 'memory'],
-          windowMs <= 3_600_000
-            ? '1h'
-            : windowMs <= 3 * 3_600_000
-              ? '3h'
-              : '6h',
-        ),
-      );
-    }
+    const snapshot = live.snapshot;
+    // Only a new snapshot reruns this; the buffers it reads and writes are not
+    // dependencies of the effect that fills them.
+    if (snapshot) untrack(() => feedSeries(snapshot));
   });
+
+  function feedSeries(snapshot: LiveSnapshot) {
+    liveSeries.push(snapshot);
+    void liveSeries.ensureHostSeeded(
+      (metrics, from, to) => fetchMetrics('host', metrics, from, to),
+      snapshot.host.memoryTotalBytes ?? null,
+    );
+    void liveSeries.ensureResourcesSeeded((windowMs) =>
+      fetchSparklines(
+        ['cpu', 'memory'],
+        windowMs <= 3_600_000 ? '1h' : windowMs <= 3 * 3_600_000 ? '3h' : '6h',
+      ),
+    );
+  }
 
   function startSession(value: SessionInfo) {
     session = value;

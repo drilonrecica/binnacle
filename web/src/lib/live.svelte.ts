@@ -199,8 +199,10 @@ export function resumeURL(url: string, lastEventId: string): string {
  * opens a new stream with `?lastEventId=` so missed events are replayed.
  */
 export class LiveStore {
-  snapshot = $state<LiveSnapshot | null>(null);
-  events = $state<LiveEvent[]>([]);
+  // Raw state: each frame replaces the value whole, so deep proxies would
+  // only re-wrap every resource and event on each tick.
+  snapshot = $state.raw<LiveSnapshot | null>(null);
+  events = $state.raw<LiveEvent[]>([]);
   state = $state<ConnectionState>('disconnected');
   error = $state('');
   lastReceivedAt = $state<string | null>(null);

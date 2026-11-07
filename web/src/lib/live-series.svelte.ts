@@ -59,8 +59,13 @@ export function sparklineSamples(
  * after a gap; live samples newer than the seed are kept on top of it.
  */
 export class LiveSeriesStore {
-  host = $state<Record<HostSeriesKey, Sample[]>>(emptyHost());
-  resources = $state<Record<string, Record<ResourceSeriesKey, Sample[]>>>({});
+  // Raw, not deep, state: the buffers are only ever replaced whole, and a
+  // deep proxy would wrap every sample in a Proxy with its own signals. With
+  // an hour buffered that is ~100k samples re-wrapped on every 2 s tick.
+  host = $state.raw<Record<HostSeriesKey, Sample[]>>(emptyHost());
+  resources = $state.raw<Record<string, Record<ResourceSeriesKey, Sample[]>>>(
+    {},
+  );
 
   private windowMs = defaultWindowMs;
   private lastAt = -Infinity;
