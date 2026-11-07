@@ -9,6 +9,7 @@
   import Skeleton from '../ui/Skeleton.svelte';
   import StatusMarker from '../ui/StatusMarker.svelte';
   import { formatAbsolute, formatClock } from '../ui/relative-time';
+  import { dateFormat } from '../i18n';
   import { severityTone } from '../ui/status';
   import { SvelteSet } from 'svelte/reactivity';
   import { tooltip } from '../ui/tooltip';
@@ -78,9 +79,9 @@
       else
         out.push({
           key,
-          label: new Intl.DateTimeFormat(undefined, {
-            dateStyle: 'medium',
-          }).format(new Date(entry.latest.ts)),
+          label: dateFormat(undefined, { dateStyle: 'medium' }).format(
+            new Date(entry.latest.ts),
+          ),
           entries: [entry],
         });
     }

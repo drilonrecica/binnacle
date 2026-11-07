@@ -69,6 +69,18 @@ export class LiveSeriesStore {
 
   private windowMs = defaultWindowMs;
   private lastAt = -Infinity;
+  /**
+   * Finished sparkline slots per resource, metric and window. Cleared
+   * whenever history is seeded or dropped, since a seed can change slots that
+   * were already finished. Deliberately not reactive: it is filled from inside
+   * $derived computations, where writing state is an error, and nothing
+   * renders from it directly.
+   */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  private sparkCache = new Map<
+    string,
+    { end: number; settled: Array<number | null> }
+  >();
   private hostSeeded = false;
   private resourcesSeeded = false;
 
@@ -99,6 +111,7 @@ export class LiveSeriesStore {
   reset() {
     this.host = emptyHost();
     this.resources = {};
+    this.sparkCache.clear();
     this.windowMs = defaultWindowMs;
     this.lastAt = -Infinity;
     this.hostSeeded = false;
@@ -111,6 +124,7 @@ export class LiveSeriesStore {
   }
 
   seedResource(id: string, key: ResourceSeriesKey, samples: Sample[]) {
+    this.sparkCache.clear();
     const existing = this.resources[id] ?? { cpu: [], memory: [] };
     this.resources = {
       ...this.resources,
@@ -120,6 +134,7 @@ export class LiveSeriesStore {
 
   /** Seeds every resource from one sparkline response (the list endpoint). */
   seedResources(response: SparklineResponse) {
+    this.sparkCache.clear();
     const from = Date.parse(response.from);
     const to = Date.parse(response.to);
     const next = { ...this.resources };
@@ -258,7 +273,12 @@ export class LiveSeriesStore {
     );
   }
 
-  /** A resource sparkline of `slots` averages over the whole window. */
+  /**
+   * A resource sparkline of `slots` averages over the whole window. Slots sit
+   * on fixed clock boundaries (one minute each for an hour of 60), so between
+   * boundaries only the newest slot changes: the finished ones are cached and
+   * only the tail of the buffer is read again on each snapshot.
+   */
   resourceSparkline(
     id: string,
     key: ResourceSeriesKey,
@@ -266,12 +286,38 @@ export class LiveSeriesStore {
     now = Date.now(),
     slots = 60,
   ): Array<number | null> {
-    return bucketize(
-      this.resourceWindow(id, key, windowMs, now),
-      now - windowMs,
-      now,
-      slots,
-    );
+    const samples = this.resources[id]?.[key] ?? [];
+    if (windowMs <= 0 || slots < 1) return bucketize([], 0, 0, slots);
+    const width = windowMs / slots;
+    const end = (Math.floor(now / width) + 1) * width;
+    const from = end - windowMs;
+    const cacheKey = `${id}|${key}|${windowMs}|${slots}`;
+    let cached = this.sparkCache.get(cacheKey);
+    if (!cached || cached.end !== end) {
+      // Slots before the newest are complete: snapshots arrive in order, so
+      // nothing older than the current slot can still be added to them.
+      const full = bucketize(
+        samples.filter((sample) => sample.at >= from),
+        from,
+        end,
+        slots,
+      );
+      cached = { end, settled: full };
+      this.sparkCache.set(cacheKey, cached);
+    }
+    const out = cached.settled.slice();
+    let sum = 0;
+    let count = 0;
+    for (let index = samples.length - 1; index >= 0; index--) {
+      const sample = samples[index];
+      if (!sample || sample.at < end - width) break;
+      if (sample.at > end) continue;
+      if (sample.value == null || !Number.isFinite(sample.value)) continue;
+      sum += sample.value;
+      count += 1;
+    }
+    out[slots - 1] = count ? sum / count : null;
+    return out;
   }
 
   /** Seeded history, then the live samples newer than its last sample. */

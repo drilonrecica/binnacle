@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { LiveSnapshot } from './live.svelte';
+import { bucketize } from './series';
 import {
   defaultWindowMs,
   LiveSeriesStore,
@@ -132,5 +133,68 @@ describe('server seeding and merging', () => {
     expect(store.resources).toEqual({});
     store.push(snapshot(start));
     expect(store.host.cpu).toHaveLength(1);
+  });
+});
+
+describe('resource sparklines on clock slots', () => {
+  const minute = 60_000;
+
+  /** The same sparkline, bucketed from scratch over the aligned hour. */
+  function reference(store: LiveSeriesStore, now: number) {
+    const end = (Math.floor(now / minute) + 1) * minute;
+    return bucketize(
+      store.resources.r1?.cpu ?? [],
+      end - defaultWindowMs,
+      end,
+      60,
+    );
+  }
+
+  it('matches a full re-bucketing on every snapshot, across minute edges', () => {
+    const store = new LiveSeriesStore();
+    let at = start;
+    // Ninety minutes of 2 s snapshots, checked on every one of the last 400.
+    for (let index = 0; index < 2_700; index++) {
+      at += 2_000;
+      store.push(snapshot(at, (index * 7) % 100));
+      if (index < 2_300) continue;
+      expect(store.resourceSparkline('r1', 'cpu', defaultWindowMs, at)).toEqual(
+        reference(store, at),
+      );
+    }
+  });
+
+  it('keeps finished slots fixed within a minute', () => {
+    const store = new LiveSeriesStore();
+    const base = Math.floor(start / minute) * minute + 10 * minute;
+    for (let index = 0; index < 200; index++)
+      store.push(snapshot(base - 400_000 + index * 2_000, index % 50));
+    const first = store.resourceSparkline('r1', 'cpu', defaultWindowMs, base);
+    store.push(snapshot(base + 2_000, 99));
+    const next = store.resourceSparkline(
+      'r1',
+      'cpu',
+      defaultWindowMs,
+      base + 2_000,
+    );
+    expect(next.slice(0, -1)).toEqual(first.slice(0, -1));
+    expect(next.at(-1)).not.toEqual(first.at(-1));
+  });
+
+  it('recomputes finished slots after history is seeded', () => {
+    const store = new LiveSeriesStore();
+    const now = start + defaultWindowMs;
+    store.push(snapshot(now, 10));
+    const before = store.resourceSparkline('r1', 'cpu', defaultWindowMs, now);
+    expect(before.filter((value) => value != null)).toHaveLength(1);
+    store.seedResources({
+      from: new Date(now - defaultWindowMs).toISOString(),
+      to: new Date(now - 60_000).toISOString(),
+      stepSeconds: 60,
+      resources: { r1: { cpu: Array.from({ length: 59 }, () => 30) } },
+    });
+    const after = store.resourceSparkline('r1', 'cpu', defaultWindowMs, now);
+    expect(after).toEqual(reference(store, now));
+    expect(after.filter((value) => value != null).length).toBeGreaterThan(50);
   });
 });

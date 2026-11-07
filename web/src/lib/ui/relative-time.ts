@@ -1,4 +1,4 @@
-import { missing } from '../i18n';
+import { dateFormat, missing } from '../i18n';
 const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
   ['year', 365 * 86_400_000],
   ['month', 30 * 86_400_000],
@@ -69,7 +69,7 @@ export function formatAbsolute(
 ): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return missing;
-  return new Intl.DateTimeFormat(locale, {
+  return dateFormat(locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -87,7 +87,7 @@ export function formatClock(
 ): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return missing;
-  return new Intl.DateTimeFormat(locale, {
+  return dateFormat(locale, {
     timeStyle: seconds ? 'medium' : 'short',
   }).format(date);
 }
