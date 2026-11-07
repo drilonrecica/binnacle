@@ -144,16 +144,30 @@
     gap: var(--space-3);
     padding: var(--space-2) var(--space-4);
   }
+  /* A new change fades in from a tint. The tint is a layer behind the row
+     whose opacity animates, which the compositor runs; animating the row's
+     background would restyle and repaint it on the main thread every frame. */
   li.live {
+    position: relative;
+    isolation: isolate;
+  }
+  li.live::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--accent-bg);
+    opacity: 0;
+    pointer-events: none;
     animation: flash 1.2s var(--ease-out);
   }
   @keyframes flash {
     from {
-      background: var(--accent-bg);
+      opacity: 1;
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    li.live {
+    li.live::before {
       animation: none;
     }
   }

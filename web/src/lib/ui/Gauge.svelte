@@ -108,43 +108,56 @@
   aria-valuenow={reading ?? undefined}
   aria-valuetext={reading == null ? undefined : valueTextForAt}
 >
-  <svg viewBox="0 0 120 68" aria-hidden="true" focusable="false">
-    <path
-      class="track"
-      d={arcPath(cx, cy, radius, 0, 1)}
-      stroke-width={stroke}
-    />
-    {#if fillPath}
-      <path class="fill" d={fillPath} stroke-width={stroke} />
-    {/if}
-    {#if warnTick}
-      <line
-        class="tick warn-tick"
-        x1={warnTick.inner.x}
-        y1={warnTick.inner.y}
-        x2={warnTick.outer.x}
-        y2={warnTick.outer.y}
+  <div class="dial">
+    <svg viewBox="0 0 120 68" aria-hidden="true" focusable="false">
+      <path
+        class="track"
+        d={arcPath(cx, cy, radius, 0, 1)}
+        stroke-width={stroke}
       />
-    {/if}
-    {#if tick}
-      <line
-        class="tick"
-        x1={tick.inner.x}
-        y1={tick.inner.y}
-        x2={tick.outer.x}
-        y2={tick.outer.y}
-      />
-    {/if}
-    {#if reading != null}
-      <!-- Compass-needle shape drawn pointing at 0 and rotated to the reading. -->
-      <g class="needle" style:transform={`rotate(${needleAngle}deg)`}>
+      {#if fillPath}
+        <path class="fill" d={fillPath} stroke-width={stroke} />
+      {/if}
+      {#if warnTick}
+        <line
+          class="tick warn-tick"
+          x1={warnTick.inner.x}
+          y1={warnTick.inner.y}
+          x2={warnTick.outer.x}
+          y2={warnTick.outer.y}
+        />
+      {/if}
+      {#if tick}
+        <line
+          class="tick"
+          x1={tick.inner.x}
+          y1={tick.inner.y}
+          x2={tick.outer.x}
+          y2={tick.outer.y}
+        />
+      {/if}
+    </svg>
+    <!-- The needle is its own <svg> layered over the dial and rotated as a
+         whole: a transform on an <svg> element runs on the compositor, while
+         one on an SVG <g> restyles the page on the main thread every frame of
+         the sweep. The hub sits on the pivot, so rotating it changes nothing. -->
+    <svg
+      class="needle-layer"
+      viewBox="0 0 120 68"
+      aria-hidden="true"
+      focusable="false"
+      style:transform={`rotate(${needleAngle}deg)`}
+    >
+      {#if reading != null}
+        <!-- Compass-needle shape drawn pointing at 0 and rotated to the reading. -->
         <path
+          class="needle"
           d={`M${cx - radius + 9} ${cy} L${cx} ${cy - 2.2} L${cx} ${cy + 2.2} Z`}
         />
-      </g>
-    {/if}
-    <circle class="hub" {cx} {cy} r="3.2" />
-  </svg>
+      {/if}
+      <circle class="hub" {cx} {cy} r="3.2" />
+    </svg>
+  </div>
   <div class="readout">
     <span class="label">{label}</span>
     {#if sublabel}<span class="sublabel">{sublabel}</span>{/if}
@@ -176,13 +189,18 @@
     min-width: 0;
     text-align: center;
   }
-  svg {
+  .dial {
+    position: relative;
     width: 100%;
     max-width: 180px;
-    overflow: visible;
   }
-  .lg svg {
+  .lg .dial {
     max-width: 220px;
+  }
+  svg {
+    display: block;
+    width: 100%;
+    overflow: visible;
   }
   .track,
   .fill {
@@ -206,11 +224,15 @@
     stroke: var(--muted);
     stroke-width: 1.5;
   }
+  .needle-layer {
+    position: absolute;
+    inset: 0;
+    /* The pivot (60, 60) on the 120 x 68 view box. */
+    transform-origin: 50% 88.2353%;
+    transition: transform var(--motion-needle) var(--ease-out);
+  }
   .needle {
     fill: var(--fg);
-    transform-box: view-box;
-    transform-origin: 60px 60px;
-    transition: transform var(--motion-needle) var(--ease-out);
   }
   .hub {
     fill: var(--fg);

@@ -203,17 +203,18 @@ export const themes: Theme[] = ['dark', 'light'];
  * Fails on any WCAG 2.1/2.2 A/AA violation axe can detect on the page. The
  * suites run with motion on, so it first waits for dialogs and menus to
  * finish fading in: axe would otherwise measure contrast on a frame halfway
- * through the transition. Endless animations (the live pulse) are ignored.
+ * through the transition. Endless animations and the live pulse on the
+ * connection dot (a decorative ring axe does not measure) are ignored.
  */
 export async function scan(page: Page) {
   await page.waitForFunction(() =>
-    document
-      .getAnimations()
-      .every(
-        (animation) =>
-          animation.playState !== 'running' ||
-          animation.effect?.getComputedTiming().endTime === Infinity,
-      ),
+    document.getAnimations().every((animation) => {
+      if (animation.playState !== 'running') return true;
+      const effect = animation.effect;
+      if (effect?.getComputedTiming().endTime === Infinity) return true;
+      const target = effect instanceof KeyframeEffect ? effect.target : null;
+      return !!target?.closest('[data-testid="connection-status"]');
+    }),
   );
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])

@@ -214,12 +214,25 @@
     padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--line);
   }
+  /* The tint is a layer whose opacity fades, so the compositor runs it; see
+     ChangesFeed.svelte. */
   .event.live {
+    position: relative;
+    isolation: isolate;
+  }
+  .event.live::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--accent-bg);
+    opacity: 0;
+    pointer-events: none;
     animation: flash 1.4s var(--ease-out);
   }
   @keyframes flash {
     from {
-      background: var(--accent-bg);
+      opacity: 1;
     }
   }
   .time {

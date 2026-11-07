@@ -66,7 +66,10 @@
     border-radius: 50%;
     border: 1px solid var(--ok-solid);
     opacity: 0;
-    animation: ping 2.4s var(--ease-out) infinite;
+    /* A few pings when the stream comes (back) up, then a steady dot. A ring
+       that never stops keeps the blurred top bar repainting on every page;
+       the word "Live" carries the state from there on. */
+    animation: ping 2.4s var(--ease-out) 3;
   }
   [data-tone='warn'] .dot {
     background: transparent;
