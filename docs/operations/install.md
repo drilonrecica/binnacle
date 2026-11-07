@@ -61,9 +61,30 @@ is deleted once the administrator exists.
 
 1. Add the Binnacle service template to your Coolify instance (or use **Docker Compose Empty** and paste `packaging/coolify/binnacle.yaml`).
 2. In **General**, change the generated **Service Name** (`service-...`) to `binnacle`.
-3. Deploy the stack. Coolify generates a persistent 64-character setup token automatically.
-4. Expose the service on your chosen domain. Coolify's proxy routes to container port `8080`.
-5. Copy `SERVICE_HEX_64_BINNACLE` from the stack environment, open the URL, and complete onboarding.
+3. Set the domain of the `binnacle` service **with the container port**, for
+   example `https://binnacle.example.com:8080`. The port is not published; it
+   tells Coolify's proxy which container port to forward to. A domain without
+   it answers `502 Bad Gateway`, and the **Internal port** column in the
+   domains table shows a dash instead of `8080`.
+4. Deploy the stack. Coolify generates a persistent 64-character setup token automatically.
+5. Copy `SERVICE_HEX_64_BINNACLE` from the stack environment, open the domain
+   without the port, and complete onboarding.
+
+Renaming the domain later needs no other change: the proxy is trusted, so the
+origin used for the same-origin check, `Secure` cookies and HSTS follows the
+domain Coolify routes to the container. Leave `BINNACLE_PUBLIC_URL` empty
+unless the proxy stops forwarding `Host` and `X-Forwarded-Proto`. Do not set it
+to Coolify's `SERVICE_URL_*` magic variable: that value is fixed when the stack
+is created and is not updated when the domain changes.
+
+Two proxy-side symptoms are easy to mistake for a Binnacle fault:
+
+- `502 Bad Gateway` from the proxy: the domain lacks the `:8080` suffix.
+- Cloudflare error 525 with the orange cloud on: Coolify's proxy has not
+  obtained a certificate for the hostname yet. Caddy aborts the handshake
+  instead of serving a placeholder certificate. Check
+  `docker logs coolify-proxy` for the ACME result, or add a DNS-only record for
+  the hostname until the certificate is issued and switch it back afterwards.
 
 The Coolify template mounts the host `/proc`, `/sys`, `/etc/passwd`,
 `/etc/os-release`, the host root read-only at `/host/root`, and the Docker
@@ -192,10 +213,10 @@ sent only on secure responses. Two settings provide that knowledge:
 
 Without either setting, a deployment behind an HTTPS proxy accepts logins but
 rejects every mutation with `403 csrf_invalid`, and Binnacle logs a warning at
-startup. The Coolify files set both: `BINNACLE_PUBLIC_URL` from Coolify's
-`SERVICE_URL_BINNACLE_8080` magic variable and the RFC 1918 ranges as trusted
-proxies, because the container publishes no host port and only other
-containers can reach it. Narrow the ranges to the proxy's network if untrusted
+startup. The Coolify files trust the RFC 1918 ranges and leave
+`BINNACLE_PUBLIC_URL` empty, because the container publishes no host port and
+only other containers can reach it, so the forwarded headers from Coolify's
+proxy decide the origin and the domain can change at any time. Narrow the ranges to the proxy's network if untrusted
 workloads share it. The plain Docker Compose file leaves both empty, since its
 loopback port makes the Docker gateway the peer for every local client. The
 identity allowlist `BINNACLE_AUTH_PROXY_CIDRS` is separate and stays exact.

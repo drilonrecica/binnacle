@@ -77,9 +77,12 @@ services:
       BINNACLE_DOCKER_SOCKET: /var/run/binnacle-docker/docker.sock
       BINNACLE_COOLIFY_URL: ${BINNACLE_COOLIFY_URL:-}
       BINNACLE_COOLIFY_API_TOKEN: ${BINNACLE_COOLIFY_API_TOKEN:-}
-      # The origin browsers use. Coolify fills SERVICE_URL_* with the service
-      # domain including its scheme; CSRF, Secure cookies and HSTS follow it.
-      BINNACLE_PUBLIC_URL: ${SERVICE_URL_BINNACLE_8080}
+      # Leave empty. Coolify's proxy is trusted below, so the origin follows the
+      # domain it routes to this container and a domain change needs nothing
+      # else. Do not pin it to SERVICE_URL_BINNACLE_8080: Coolify fixes that
+      # value when the stack is created and never updates it. Set a literal
+      # origin only when the proxy does not forward Host and X-Forwarded-Proto.
+      BINNACLE_PUBLIC_URL: ${BINNACLE_PUBLIC_URL:-}
       # Coolify's proxy reaches this container from a Docker network whose
       # subnet is assigned at creation, and the proxy's own address changes on
       # every recreate. The service publishes no host port, so every peer is a
