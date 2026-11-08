@@ -193,6 +193,10 @@
     position: relative;
     width: 100%;
     max-width: 180px;
+    /* The needle layer is rotated as a box; its corners would otherwise
+       widen the page on narrow screens. Everything drawn stays inside the
+       120 x 68 view box, so clipping to it hides nothing. */
+    overflow: hidden;
   }
   .lg .dial {
     max-width: 220px;
