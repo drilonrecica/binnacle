@@ -7,7 +7,11 @@ import (
 	"strings"
 )
 
-type Memory struct{ Total, Available, Used, SwapTotal, SwapFree, Cached, Buffers uint64 }
+type Memory struct {
+	Total, Available, Used, SwapTotal, SwapFree, Cached, Buffers uint64
+	// Free, Active and Inactive are shown in the live view only.
+	Free, Active, Inactive uint64
+}
 type Load struct{ One, Five, Fifteen float64 }
 
 func ParseMeminfo(input string) (Memory, error) {
@@ -23,7 +27,7 @@ func ParseMeminfo(input string) (Memory, error) {
 		}
 		vals[strings.TrimSuffix(f[0], ":")] = n * 1024
 	}
-	m := Memory{Total: vals["MemTotal"], Available: vals["MemAvailable"], SwapTotal: vals["SwapTotal"], SwapFree: vals["SwapFree"], Cached: vals["Cached"], Buffers: vals["Buffers"]}
+	m := Memory{Total: vals["MemTotal"], Available: vals["MemAvailable"], SwapTotal: vals["SwapTotal"], SwapFree: vals["SwapFree"], Cached: vals["Cached"], Buffers: vals["Buffers"], Free: vals["MemFree"], Active: vals["Active"], Inactive: vals["Inactive"]}
 	if m.Total == 0 {
 		return m, fmt.Errorf("missing MemTotal")
 	}

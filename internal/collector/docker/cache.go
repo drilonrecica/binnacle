@@ -15,6 +15,7 @@ import (
 // Health comes from Inspect and from health_status events (ADR 022 §2, §5).
 type Metadata struct {
 	ID, Name, Image, Created, State, Health string
+	StartedAt                               string
 	Labels                                  map[string]string
 	Environment                             map[string]string
 	Networks                                []string
@@ -29,12 +30,12 @@ type Metadata struct {
 
 // MetadataFromInspect copies an Inspect result into cacheable metadata.
 func MetadataFromInspect(v dockerapi.Inspect, at time.Time) Metadata {
-	return Metadata{ID: v.ID, Name: v.Name, Image: v.Image, Created: v.Created, State: v.State, Health: v.Health, Labels: v.Labels, Environment: v.Environment, Networks: v.Networks, Mounts: v.Mounts, InspectedAt: at}
+	return Metadata{ID: v.ID, Name: v.Name, Image: v.Image, Created: v.Created, StartedAt: v.StartedAt, State: v.State, Health: v.Health, Labels: v.Labels, Environment: v.Environment, Networks: v.Networks, Mounts: v.Mounts, InspectedAt: at}
 }
 
 // Inspect converts cached metadata back into the Inspect shape.
 func (m Metadata) Inspect() dockerapi.Inspect {
-	return dockerapi.Inspect{ID: m.ID, Name: m.Name, Image: m.Image, Created: m.Created, State: m.State, Health: m.Health, Labels: m.Labels, Environment: m.Environment, Networks: m.Networks, Mounts: m.Mounts}
+	return dockerapi.Inspect{ID: m.ID, Name: m.Name, Image: m.Image, Created: m.Created, StartedAt: m.StartedAt, State: m.State, Health: m.Health, Labels: m.Labels, Environment: m.Environment, Networks: m.Networks, Mounts: m.Mounts}
 }
 
 type Cache struct {

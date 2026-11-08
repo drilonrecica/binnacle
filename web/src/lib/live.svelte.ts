@@ -32,6 +32,25 @@ export interface LiveSnapshot {
     networkTxBps?: number | null;
     /** Time-to-full estimate of used memory (SPEC §P3-12). */
     memoryTrend?: Trend | null;
+    memoryCachedBytes?: number | null;
+    memoryBuffersBytes?: number | null;
+    // Server › Live detail; live only, never stored as history.
+    cpuNicePct?: number | null;
+    cpuIrqPct?: number | null;
+    cpuSoftirqPct?: number | null;
+    cpuIdlePct?: number | null;
+    /** Busy percentage per core, in core order. */
+    cpuCores?: number[];
+    contextSwitchesPs?: number | null;
+    interruptsPs?: number | null;
+    softInterruptsPs?: number | null;
+    procsRunning?: number | null;
+    procsBlocked?: number | null;
+    memoryFreeBytes?: number | null;
+    memoryActiveBytes?: number | null;
+    memoryInactiveBytes?: number | null;
+    interfaces?: InterfaceRate[];
+    disks?: DiskDeviceRate[];
   };
   resources: Array<{
     id: string;
@@ -70,6 +89,20 @@ export interface LiveSnapshot {
     { state: CollectorState; reason?: string; freshAt?: string }
   >;
   filesystems?: FilesystemObservation[];
+}
+
+export interface InterfaceRate {
+  name: string;
+  rxBps?: number | null;
+  txBps?: number | null;
+}
+
+export interface DiskDeviceRate {
+  name: string;
+  readBps?: number | null;
+  writeBps?: number | null;
+  readIops?: number | null;
+  writeIops?: number | null;
 }
 
 export interface FilesystemObservation {

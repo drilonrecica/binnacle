@@ -104,6 +104,50 @@ type HostObservation struct {
 	// MemoryTrend is the time-to-full estimate of used memory; the engine
 	// attaches it, collectors leave it zero.
 	MemoryTrend Trend `json:"memoryTrend"`
+
+	// Detail for the Server › Live view. Live only: none of it is stored as
+	// history, and each list is bounded (see the host collector).
+	CPUNicePercent      *float64         `json:"cpuNicePct,omitempty"`
+	CPUIRQPercent       *float64         `json:"cpuIrqPct,omitempty"`
+	CPUSoftIRQPercent   *float64         `json:"cpuSoftirqPct,omitempty"`
+	CPUIdlePercent      *float64         `json:"cpuIdlePct,omitempty"`
+	CPUCores            []float64        `json:"cpuCores,omitempty"`
+	ContextSwitchesPS   *float64         `json:"contextSwitchesPs,omitempty"`
+	InterruptsPS        *float64         `json:"interruptsPs,omitempty"`
+	SoftInterruptsPS    *float64         `json:"softInterruptsPs,omitempty"`
+	ProcsRunning        *uint64          `json:"procsRunning,omitempty"`
+	ProcsBlocked        *uint64          `json:"procsBlocked,omitempty"`
+	MemoryFreeBytes     *int64           `json:"memoryFreeBytes,omitempty"`
+	MemoryActiveBytes   *int64           `json:"memoryActiveBytes,omitempty"`
+	MemoryInactiveBytes *int64           `json:"memoryInactiveBytes,omitempty"`
+	Interfaces          []InterfaceRate  `json:"interfaces,omitempty"`
+	Disks               []DiskDeviceRate `json:"disks,omitempty"`
+}
+
+// InterfaceRate is one network interface's throughput between two samples.
+type InterfaceRate struct {
+	Name  string   `json:"name"`
+	RXBPS *float64 `json:"rxBps"`
+	TXBPS *float64 `json:"txBps"`
+}
+
+// DiskDeviceRate is one block device's throughput between two samples.
+type DiskDeviceRate struct {
+	Name      string   `json:"name"`
+	ReadBPS   *float64 `json:"readBps"`
+	WriteBPS  *float64 `json:"writeBps"`
+	ReadIOPS  *float64 `json:"readIops"`
+	WriteIOPS *float64 `json:"writeIops"`
+}
+
+// HostIdentity describes the machine; it is read once and does not change
+// while Binnacle runs. Empty fields were not readable.
+type HostIdentity struct {
+	Hostname string `json:"hostname,omitempty"`
+	OS       string `json:"os,omitempty"`
+	Kernel   string `json:"kernel,omitempty"`
+	CPUModel string `json:"cpuModel,omitempty"`
+	CPUCores int    `json:"cpuCores,omitempty"`
 }
 type ContainerObservation struct {
 	ID             ContainerID    `json:"id"`
@@ -130,7 +174,36 @@ type ResourceComponent struct {
 	BlockReadBPS   *float64       `json:"blockReadBps,omitempty"`
 	BlockWriteBPS  *float64       `json:"blockWriteBps,omitempty"`
 	PIDs           *uint64        `json:"pids,omitempty"`
+	// Live-view detail: the memory limit in force, when the container
+	// started, its image and published ports. Kept out of the live frames,
+	// which every open page receives every 2 s; GET /api/v1/server/containers
+	// serves them to the one view that shows them.
+	MemoryLimitBytes *int64   `json:"-"`
+	StartedAt        string   `json:"-"`
+	Image            string   `json:"-"`
+	Ports            []string `json:"-"`
 }
+
+// ContainerDetail is the slowly changing detail of one container.
+type ContainerDetail struct {
+	ID               ContainerID `json:"id"`
+	MemoryLimitBytes *int64      `json:"memoryLimitBytes,omitempty"`
+	StartedAt        string      `json:"startedAt,omitempty"`
+	Image            string      `json:"image,omitempty"`
+	Ports            []string    `json:"ports,omitempty"`
+}
+
+// ContainerDetails lists the detail of every container in a snapshot.
+func ContainerDetails(resources []ResourceSnapshot) []ContainerDetail {
+	out := []ContainerDetail{}
+	for _, resource := range resources {
+		for _, c := range resource.Components {
+			out = append(out, ContainerDetail{ID: c.ID, MemoryLimitBytes: c.MemoryLimitBytes, StartedAt: c.StartedAt, Image: c.Image, Ports: c.Ports})
+		}
+	}
+	return out
+}
+
 type ResourceSnapshot struct {
 	ID             ResourceID     `json:"id"`
 	Name           string         `json:"name"`

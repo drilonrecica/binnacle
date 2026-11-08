@@ -31,9 +31,16 @@ func (s *Server) EnableCurrent(engine *metrics.Engine, auth Authorizer) {
 		WriteJSON(w, 200, struct {
 			At          string                          `json:"at"`
 			Boot        metrics.BootIdentity            `json:"bootIdentity"`
+			Identity    metrics.HostIdentity            `json:"identity"`
 			Host        metrics.HostObservation         `json:"host"`
 			Filesystems []metrics.FilesystemObservation `json:"filesystems"`
-		}{snap.At.UTC().Format("2006-01-02T15:04:05Z07:00"), snap.BootIdentity, snap.Host, filesystems})
+		}{snap.At.UTC().Format("2006-01-02T15:04:05Z07:00"), snap.BootIdentity, engine.HostIdentity(), snap.Host, filesystems})
+	}))
+	// Container detail for Server › Live: image, ports, start time and memory
+	// limit change rarely, so they are fetched here instead of riding along
+	// in every live frame.
+	s.Handle("/api/v1/server/containers", guard(func(w http.ResponseWriter, r *http.Request) {
+		WriteJSON(w, 200, map[string]any{"containers": metrics.ContainerDetails(engine.Snapshot().Resources)})
 	}))
 	s.Handle("/api/v1/collector-health", guard(func(w http.ResponseWriter, r *http.Request) { WriteJSON(w, 200, engine.Snapshot().Collectors) }))
 	// Per-mount filesystem usage drives the filesystem and inode alert

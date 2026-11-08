@@ -120,9 +120,16 @@ type Sampler struct {
 	previousNetworkAt time.Time
 	previousDisk      hostcollector.DiskCounters
 	previousDiskAt    time.Time
-	hostFailures      int
-	hostFreshAt       time.Time
-	hostNanos         atomic.Int64
+	// Live-view detail: per-core, per-interface and per-device counters and
+	// the /proc/stat system counters from the previous host tick.
+	previousCores      map[string]hostcollector.CPUCounters
+	previousInterfaces map[string]hostcollector.NetworkCounters
+	previousDevices    map[string]hostcollector.DiskCounters
+	previousExtras     hostcollector.StatExtras
+	previousExtrasAt   time.Time
+	hostFailures       int
+	hostFreshAt        time.Time
+	hostNanos          atomic.Int64
 
 	// Docker loop state.
 	previousStats  map[string]dockerSample
@@ -179,6 +186,7 @@ func (s *Sampler) Start(ctx context.Context) error {
 	if s.Engine == nil {
 		return errors.New("metrics engine is required")
 	}
+	s.Engine.SetHostIdentity(s.readIdentity())
 	ctx, s.cancel = context.WithCancel(ctx)
 	s.wg.Add(2)
 	go func() { defer s.wg.Done(); s.hostLoop(ctx) }()
@@ -626,19 +634,27 @@ func (s *Sampler) collectHost(tick time.Time) (metrics.HostObservation, []metric
 	}
 	network := hostcollector.AggregateNetwork(networks)
 
-	disk, diskErr := s.diskCounters(read)
+	disk, devices, diskErr := s.diskCounters(read)
 
 	var cpu, cpuUser, cpuSystem, cpuIOWait, cpuSteal *float64
+	var breakdown hostcollector.CPUBreakdown
+	var cores []float64
 	if s.haveCPU {
 		usage := hostcollector.CPUDelta(s.previousCPU, stats["cpu"])
 		cpu, cpuUser, cpuSystem, cpuIOWait, cpuSteal = usage.Busy, usage.User, usage.System, usage.IOWait, usage.Steal
+		breakdown = hostcollector.CPUDetail(s.previousCPU, stats["cpu"])
+		cores = hostcollector.CoreBusy(s.previousCores, stats)
 	}
 	s.previousCPU, s.haveCPU = stats["cpu"], true
+	s.previousCores = stats
+	extras := s.statExtras(hostcollector.ParseProcStatExtras(string(statRaw)), tick)
 
 	var rx, tx, rxPackets, txPackets *float64
 	var rxErrors, txErrors, rxDrops, txDrops *int64
+	var interfaces []metrics.InterfaceRate
 	if !s.previousNetworkAt.IsZero() {
 		elapsed := tick.Sub(s.previousNetworkAt).Seconds()
+		interfaces = hostcollector.InterfaceRates(s.previousInterfaces, networks, elapsed)
 		rx = hostcollector.Rate(network.RXBytes, s.previousNetwork.RXBytes, elapsed)
 		tx = hostcollector.Rate(network.TXBytes, s.previousNetwork.TXBytes, elapsed)
 		rxPackets = hostcollector.Rate(network.RXPackets, s.previousNetwork.RXPackets, elapsed)
@@ -649,10 +665,13 @@ func (s *Sampler) collectHost(tick time.Time) (metrics.HostObservation, []metric
 		txDrops = deltaInt64(network.TXDrops, s.previousNetwork.TXDrops)
 	}
 	s.previousNetwork, s.previousNetworkAt = network, tick
+	s.previousInterfaces = networks
 
 	var diskReadBPS, diskWriteBPS, diskReadIOPS, diskWriteIOPS *float64
+	var deviceRates []metrics.DiskDeviceRate
 	if diskErr == nil && !s.previousDiskAt.IsZero() {
 		elapsed := tick.Sub(s.previousDiskAt).Seconds()
+		deviceRates = hostcollector.DeviceRates(s.previousDevices, devices, elapsed)
 		diskReadBPS = hostcollector.Rate(hostcollector.SectorToBytes(disk.ReadSectors), hostcollector.SectorToBytes(s.previousDisk.ReadSectors), elapsed)
 		diskWriteBPS = hostcollector.Rate(hostcollector.SectorToBytes(disk.WriteSectors), hostcollector.SectorToBytes(s.previousDisk.WriteSectors), elapsed)
 		diskReadIOPS = hostcollector.Rate(disk.Reads, s.previousDisk.Reads, elapsed)
@@ -661,8 +680,10 @@ func (s *Sampler) collectHost(tick time.Time) (metrics.HostObservation, []metric
 	if diskErr != nil {
 		// Unknown, not zero; the next good sample starts a fresh baseline.
 		s.previousDisk, s.previousDiskAt = hostcollector.DiskCounters{}, time.Time{}
+		s.previousDevices = nil
 	} else {
 		s.previousDisk, s.previousDiskAt = disk, tick
+		s.previousDevices = devices
 	}
 
 	used, total := int64(memory.Used), int64(memory.Total)
@@ -691,7 +712,13 @@ func (s *Sampler) collectHost(tick time.Time) (metrics.HostObservation, []metric
 		NetworkRXBPS: rx, NetworkTXBPS: tx, NetworkRXPacketsPS: rxPackets, NetworkTXPacketsPS: txPackets,
 		NetworkRXErrorsDelta: rxErrors, NetworkTXErrorsDelta: txErrors, NetworkRXDropsDelta: rxDrops, NetworkTXDropsDelta: txDrops,
 		DiskReadBPS: diskReadBPS, DiskWriteBPS: diskWriteBPS, DiskReadIOPS: diskReadIOPS, DiskWriteIOPS: diskWriteIOPS,
-		UptimeSeconds: &uptime,
+		UptimeSeconds:  &uptime,
+		CPUNicePercent: breakdown.Nice, CPUIRQPercent: breakdown.IRQ, CPUSoftIRQPercent: breakdown.SoftIRQ, CPUIdlePercent: breakdown.Idle,
+		CPUCores:          cores,
+		ContextSwitchesPS: extras.contextSwitches, InterruptsPS: extras.interrupts, SoftInterruptsPS: extras.softInterrupts,
+		ProcsRunning: extras.running, ProcsBlocked: extras.blocked,
+		MemoryFreeBytes: int64Ptr(memory.Free), MemoryActiveBytes: int64Ptr(memory.Active), MemoryInactiveBytes: int64Ptr(memory.Inactive),
+		Interfaces: interfaces, Disks: deviceRates,
 	}
 
 	fsystems, fsReason := s.collectFilesystems(now)
@@ -723,14 +750,14 @@ func (s *Sampler) collectHost(tick time.Time) (metrics.HostObservation, []metric
 // diskCounters sums /proc/diskstats over the whole devices listed in
 // <HostSys>/block, so partitions and stacked devices are not double counted
 // (COL-3). Without the device list the counters are unknown.
-func (s *Sampler) diskCounters(read func(string) ([]byte, error)) (hostcollector.DiskCounters, error) {
+func (s *Sampler) diskCounters(read func(string) ([]byte, error)) (hostcollector.DiskCounters, map[string]hostcollector.DiskCounters, error) {
 	raw, err := read("diskstats")
 	if err != nil {
-		return hostcollector.DiskCounters{}, err
+		return hostcollector.DiskCounters{}, nil, err
 	}
 	disks, err := hostcollector.ParseDiskstats(string(raw))
 	if err != nil {
-		return hostcollector.DiskCounters{}, err
+		return hostcollector.DiskCounters{}, nil, err
 	}
 	hostSys := s.HostSys
 	if hostSys == "" {
@@ -738,9 +765,53 @@ func (s *Sampler) diskCounters(read func(string) ([]byte, error)) (hostcollector
 	}
 	whole, err := hostcollector.WholeDevices(filepath.Join(hostSys, "block"))
 	if err != nil {
-		return hostcollector.DiskCounters{}, err
+		return hostcollector.DiskCounters{}, nil, err
 	}
-	return hostcollector.SumWholeDevices(disks, whole), nil
+	return hostcollector.SumWholeDevices(disks, whole), disks, nil
+}
+
+// hostExtras are the /proc/stat system counters as rates per second.
+type hostExtras struct {
+	contextSwitches, interrupts, softInterrupts *float64
+	running, blocked                            *uint64
+}
+
+// statExtras turns the cumulative /proc/stat counters into rates against the
+// previous tick; the first tick has gauges only.
+func (s *Sampler) statExtras(current hostcollector.StatExtras, tick time.Time) hostExtras {
+	var out hostExtras
+	if current.HaveProcsRunning {
+		v := current.ProcsRunning
+		out.running = &v
+	}
+	if current.HaveProcsBlocked {
+		v := current.ProcsBlocked
+		out.blocked = &v
+	}
+	if !s.previousExtrasAt.IsZero() {
+		elapsed := tick.Sub(s.previousExtrasAt).Seconds()
+		previous := s.previousExtras
+		if current.HaveContextSwitches && previous.HaveContextSwitches {
+			out.contextSwitches = hostcollector.Rate(current.ContextSwitches, previous.ContextSwitches, elapsed)
+		}
+		if current.HaveInterrupts && previous.HaveInterrupts {
+			out.interrupts = hostcollector.Rate(current.Interrupts, previous.Interrupts, elapsed)
+		}
+		if current.HaveSoftInterrupts && previous.HaveSoftInterrupts {
+			out.softInterrupts = hostcollector.Rate(current.SoftInterrupts, previous.SoftInterrupts, elapsed)
+		}
+	}
+	s.previousExtras, s.previousExtrasAt = current, tick
+	return out
+}
+
+// int64Ptr reports a meminfo value, or nil when the kernel did not list it.
+func int64Ptr(v uint64) *int64 {
+	if v == 0 {
+		return nil
+	}
+	n := int64(v)
+	return &n
 }
 
 func joinReason(a, b string) string {
@@ -1031,7 +1102,10 @@ func (s *Sampler) collectDocker(ctx context.Context, tick time.Time, hostTotal *
 		}
 		status := containerStatus(inspect.State, inspect.Health)
 		group.status = append(group.status, status)
-		component := metrics.ResourceComponent{ID: metrics.ContainerID(container.ID), Name: inspect.Name, Status: status, RuntimeState: inspect.State, HealthStatus: inspect.Health}
+		component := metrics.ResourceComponent{ID: metrics.ContainerID(container.ID), Name: inspect.Name, Status: status, RuntimeState: inspect.State, HealthStatus: inspect.Health, Image: container.Image, Ports: container.Ports}
+		if inspect.State == "running" {
+			component.StartedAt = inspect.StartedAt
+		}
 		if inspect.State != "running" {
 			// No rate across a stop, even when the die event was lost.
 			delete(s.previousStats, container.ID)
@@ -1058,6 +1132,14 @@ func (s *Sampler) addStats(group *resourceGroup, component *metrics.ResourceComp
 	memory := dockercollector.NormalizeMemory(dockercollector.MemoryStats{Usage: stats.Memory.Usage, Limit: stats.Memory.Limit, InactiveFile: stats.Memory.InactiveFile, PIDs: stats.PIDs}, uint64Value(hostTotal))
 	component.MemoryBytes = int64PtrFromFloat64Bytes(memory.WorkingSet)
 	component.PIDs = stats.PIDs
+	// The effective limit: an unlimited container reports a huge or host-sized
+	// limit, and the percentage is taken against host memory then.
+	limit := memory.Limit
+	if hostTotal != nil && *hostTotal > 0 && (limit == nil || *limit > float64(*hostTotal)) {
+		total := float64(*hostTotal)
+		limit = &total
+	}
+	component.MemoryLimitBytes = int64PtrFromFloat64Bytes(limit)
 	if memory.WorkingSet != nil {
 		group.memory += *memory.WorkingSet
 		group.memoryOK = true

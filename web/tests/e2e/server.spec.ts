@@ -102,3 +102,63 @@ test('tabs show filesystems, processes and collectors', async ({ page }) => {
   // Collectors read as a word and a reason, never only a dot.
   await expect(page.getByRole('tabpanel')).toContainText(/healthy/i);
 });
+
+test('the Live tab shows the whole machine and refreshes processes', async ({
+  page,
+}) => {
+  await mockApp(page);
+  let scans = 0;
+  await page.route('**/api/v1/processes?*', (route) => {
+    scans++;
+    return route.fulfill({
+      json: {
+        sampled: true,
+        sampledAt: '2026-07-11T12:00:00Z',
+        tasks: {
+          total: 292,
+          threads: 1126,
+          running: 1,
+          sleeping: 219,
+          other: 72,
+        },
+        processes: [
+          {
+            pid: 2758,
+            command: 'python3 -m glances -w',
+            cpuPct: 13.7,
+            memPct: 7.3,
+            rssBytes: 593_494_016,
+            virtBytes: 682_622_976,
+            user: 'root',
+            state: 'S',
+            threads: 33,
+            nice: 0,
+            cpuTimeSeconds: 1_665_724,
+          },
+        ],
+      },
+    });
+  });
+  await page.goto('/server?tab=live');
+  const panel = page.getByRole('tabpanel');
+  await expect(page.getByTestId('live-identity')).toContainText('vps-01');
+  await expect(page.getByTestId('live-identity')).toContainText(
+    'Ubuntu 24.04.1 LTS',
+  );
+  await expect(
+    panel
+      .getByRole('list', { name: 'Busy share per core' })
+      .getByRole('listitem'),
+  ).toHaveCount(4);
+  await expect(panel).toContainText('eth0');
+  await expect(panel).toContainText('sda');
+  await expect(panel).toContainText('api-1');
+  await expect(panel).toContainText('210 MiB / 8 GiB');
+  await expect(panel).toContainText('3000/tcp');
+  await expect(panel).toContainText('python3 -m glances -w');
+  await expect(panel).toContainText('462:42:04');
+  await expect(panel).toContainText('1126');
+  // Refreshes while visible, every 5 s.
+  const first = scans;
+  await expect.poll(() => scans, { timeout: 12_000 }).toBeGreaterThan(first);
+});

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/drilonrecica/binnacle/internal/diagnostics"
 )
@@ -28,7 +29,7 @@ func (s *Server) EnableProcesses(scanner *diagnostics.ProcessScanner, sessions A
 				return
 			}
 		}
-		values, err := scanner.Scan(r.Context(), limit)
+		result, err := scanner.ScanHost(r.Context(), limit)
 		if errors.Is(err, diagnostics.ErrProcessScanBusy) {
 			WriteError(w, 429, Error{Code: "scan_busy", Message: "A process scan is already running."})
 			return
@@ -37,6 +38,6 @@ func (s *Server) EnableProcesses(scanner *diagnostics.ProcessScanner, sessions A
 			WriteError(w, 503, Error{Code: "processes_unavailable", Message: "Host processes are unavailable."})
 			return
 		}
-		WriteJSON(w, 200, map[string]any{"processes": values, "sampled": true})
+		WriteJSON(w, 200, map[string]any{"processes": result.Processes, "tasks": result.Tasks, "sampledAt": result.SampledAt.UTC().Format(time.RFC3339Nano), "sampled": true})
 	}))
 }

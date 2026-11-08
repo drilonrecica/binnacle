@@ -11,10 +11,27 @@ export interface HostProcess {
   state?: string;
   uptimeSeconds?: number | null;
   containerId?: string;
+  threads?: number;
+  nice?: number;
+  virtBytes?: number;
+  cpuTimeSeconds?: number;
+  memPct?: number | null;
+}
+
+/** Counts over every process the scan saw, not only the returned rows. */
+export interface TaskCounts {
+  total: number;
+  threads: number;
+  running: number;
+  sleeping: number;
+  other: number;
 }
 
 export interface ProcessSample {
   processes: HostProcess[];
+  tasks?: TaskCounts;
+  /** When the server took the sample; a recent one is shared for 4 s. */
+  sampledAt?: string;
   sampled: boolean;
 }
 

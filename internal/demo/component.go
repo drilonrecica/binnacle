@@ -21,6 +21,7 @@ func (c *Component) Start(ctx context.Context) error {
 	if c.Interval <= 0 {
 		c.Interval = 2 * time.Second
 	}
+	c.Engine.SetHostIdentity(Identity)
 	ctx, c.cancel = context.WithCancel(ctx)
 	c.wg.Add(1)
 	go func() {

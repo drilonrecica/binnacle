@@ -21,7 +21,11 @@ diagnostics expose no signal, renice, or mutation operation.
 - live follows end after 30 minutes and stop on client cancellation;
 - custom redaction accepts at most 16 valid RE2 expressions;
 - process scans are serialized, use two bounded samples, and return at most
-  100 rows (25 by default).
+  100 rows (25 by default);
+- a finished scan answers every request for 4 seconds, and the Server › Live
+  view refreshes it every 5 seconds only while it is open and visible, so a
+  live process list costs at most one `/proc` walk per 4 seconds however many
+  tabs show it (amended for Binnacle 1.1).
 
 Redaction is best-effort. Operators must still treat diagnostic output as
 sensitive and avoid placing secrets in application logs.

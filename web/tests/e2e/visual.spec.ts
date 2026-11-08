@@ -146,6 +146,15 @@ const screens: Screen[] = [
     },
   },
   {
+    name: 'server-live',
+    path: '/server?tab=live',
+    ready: async (page) => {
+      await heading('Server')(page);
+      await expect(page.getByTestId('live-identity')).toContainText('vps-01');
+      await expect(page.getByRole('tabpanel')).toContainText('api-1');
+    },
+  },
+  {
     name: 'incidents',
     path: '/incidents',
     ready: async (page) => {

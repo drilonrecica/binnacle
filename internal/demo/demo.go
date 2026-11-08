@@ -92,6 +92,9 @@ func (g *Generator) SnapshotAt(step uint64, now time.Time) metrics.Snapshot {
 	diskTotal := int64(80 << 30)
 	diskUsed := int64(42<<30) + int64(step%86_400)*int64(3<<10)
 	uptime := (demoBootOffset + time.Duration(step)*2*time.Second).Seconds()
+	// Live-view detail. Derived from the values above and the phase, never
+	// from r, so adding it left every earlier demo value unchanged.
+	live := liveHostDetail(step, phase, cpu, iowait, memory, memoryAvailable, rx, tx, diskRead, diskWrite, diskReadIops, diskWriteIops)
 
 	count := max(g.Containers, 1)
 	resources := make([]metrics.ResourceSnapshot, count)
@@ -162,6 +165,7 @@ func (g *Generator) SnapshotAt(step uint64, now time.Time) metrics.Snapshot {
 				BlockWriteBPS:  &cBlockWrite,
 				PIDs:           &pids,
 			}
+			describeComponent(&components[c], tpl, i, c, memoryTotal, now, status)
 		}
 		resources[i] = metrics.ResourceSnapshot{
 			ID:             metrics.ResourceID(id),
@@ -220,6 +224,23 @@ func (g *Generator) SnapshotAt(step uint64, now time.Time) metrics.Snapshot {
 			DiskUsedBytes:        &diskUsed,
 			DiskTotalBytes:       &diskTotal,
 			UptimeSeconds:        &uptime,
+			CPUNicePercent:       &live.nice,
+			CPUIRQPercent:        &live.irq,
+			CPUSoftIRQPercent:    &live.softirq,
+			CPUIdlePercent:       &live.idle,
+			CPUCores:             live.cores,
+			ContextSwitchesPS:    &live.contextSwitches,
+			InterruptsPS:         &live.interrupts,
+			SoftInterruptsPS:     &live.softInterrupts,
+			ProcsRunning:         &live.running,
+			ProcsBlocked:         &live.blocked,
+			MemoryFreeBytes:      &live.memoryFree,
+			MemoryActiveBytes:    &live.memoryActive,
+			MemoryInactiveBytes:  &live.memoryInactive,
+			MemoryCachedBytes:    &live.memoryCached,
+			MemoryBuffersBytes:   &live.memoryBuffers,
+			Interfaces:           live.interfaces,
+			Disks:                live.disks,
 		},
 		Resources: resources,
 		Collectors: map[string]metrics.CollectorHealth{

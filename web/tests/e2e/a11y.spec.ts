@@ -195,7 +195,12 @@ for (const theme of themes) {
       ).toBeVisible();
       await scan(page);
       await page.keyboard.press('Escape');
-      await scanTabs(page, [/Filesystems/, /Processes/, /Collectors/]);
+      await scanTabs(page, [
+        /^Live$/,
+        /Filesystems/,
+        /Processes/,
+        /Collectors/,
+      ]);
     });
 
     test('incidents: every tab, row menus and dialogs', async ({ page }) => {

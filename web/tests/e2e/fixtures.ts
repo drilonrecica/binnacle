@@ -31,6 +31,34 @@ export const snapshot = {
     networkTxBps: 4_194_304,
     diskReadBps: 1_048_576,
     diskWriteBps: 2_097_152,
+    cpuNicePct: 0.4,
+    cpuIrqPct: 0.2,
+    cpuSoftirqPct: 0.6,
+    cpuIdlePct: 75,
+    cpuCores: [31, 18, 27, 20],
+    contextSwitchesPs: 13_870,
+    interruptsPs: 9_141,
+    softInterruptsPs: 3_004,
+    procsRunning: 2,
+    procsBlocked: 0,
+    memoryFreeBytes: 601_882_624,
+    memoryActiveBytes: 3_146_000_000,
+    memoryInactiveBytes: 2_545_000_000,
+    memoryCachedBytes: 3_930_000_000,
+    memoryBuffersBytes: 201_326_592,
+    interfaces: [
+      { name: 'eth0', rxBps: 29_696, txBps: 799_744 },
+      { name: 'lo', rxBps: 5_120, txBps: 5_120 },
+    ],
+    disks: [
+      {
+        name: 'sda',
+        readBps: 0,
+        writeBps: 338_944,
+        readIops: 0,
+        writeIops: 12,
+      },
+    ],
   },
   resources: [
     {
@@ -52,6 +80,9 @@ export const snapshot = {
           status: 'healthy',
           runtimeState: 'running',
           healthStatus: 'healthy',
+          cpuHostPct: 4.1,
+          memoryBytes: 220_200_960,
+          pids: 9,
         },
         {
           id: 'api-2-000000000000',
@@ -451,6 +482,38 @@ export async function mockApp(page: Page, options: MockOptions = {}) {
   );
   await page.route('**/api/v1/processes?*', (route) =>
     route.fulfill({ json: { processes: [], sampled: true } }),
+  );
+  await page.route('**/api/v1/server', (route) =>
+    route.fulfill({
+      json: {
+        at: '2026-07-11T12:00:00Z',
+        bootIdentity: 'boot-1',
+        identity: {
+          hostname: 'vps-01',
+          os: 'Ubuntu 24.04.1 LTS',
+          kernel: '6.8.0-137-generic',
+          cpuModel: 'Intel(R) Xeon(R) CPU',
+          cpuCores: 4,
+        },
+        host: {},
+        filesystems: [],
+      },
+    }),
+  );
+  await page.route('**/api/v1/server/containers', (route) =>
+    route.fulfill({
+      json: {
+        containers: [
+          {
+            id: 'api-1-000000000000',
+            memoryLimitBytes: 8_589_934_592,
+            startedAt: '2026-07-01T12:00:00Z',
+            image: 'ghcr.io/acme/api:1.4.2',
+            ports: ['3000/tcp'],
+          },
+        ],
+      },
+    }),
   );
   await page.route('**/api/v1/logs?*', (route) =>
     route.fulfill({

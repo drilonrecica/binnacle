@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -32,14 +33,20 @@ type Client interface {
 // Container is one row of the container list. State is the runtime state the
 // daemon reports ("running", "exited", ...); the sampler takes it as the
 // authoritative state on every tick (ADR 022 §2).
-type Container struct{ ID, Name, Image, State string }
+type Container struct {
+	ID, Name, Image, State string
+	// Ports lists published and exposed ports, e.g. "8080->80/tcp".
+	Ports []string
+}
 type Inspect struct {
 	ID, Name, Image, Created, State, Health string
-	TTY                                     bool
-	Labels                                  map[string]string
-	Environment                             map[string]string
-	Networks                                []string
-	Mounts                                  []Mount
+	// StartedAt is when the container last started (RFC 3339).
+	StartedAt   string
+	TTY         bool
+	Labels      map[string]string
+	Environment map[string]string
+	Networks    []string
+	Mounts      []Mount
 }
 type Mount struct{ Source, Destination, Type string }
 type Event struct{ ID, Action, Time string }
@@ -179,7 +186,7 @@ func (e *Engine) List(ctx context.Context) ([]Container, error) {
 		if len(value.Names) > 0 {
 			name = strings.TrimPrefix(value.Names[0], "/")
 		}
-		result = append(result, Container{ID: value.ID, Name: name, Image: value.Image, State: string(value.State)})
+		result = append(result, Container{ID: value.ID, Name: name, Image: value.Image, State: string(value.State), Ports: formatPorts(value.Ports)})
 	}
 	return result, nil
 }
@@ -197,6 +204,7 @@ func (e *Engine) Inspect(ctx context.Context, id string) (Inspect, error) {
 	}
 	if value.State != nil {
 		result.State = string(value.State.Status)
+		result.StartedAt = value.State.StartedAt
 		if value.State.Health != nil {
 			result.Health = string(value.State.Health.Status)
 		}
@@ -210,6 +218,32 @@ func (e *Engine) Inspect(ctx context.Context, id string) (Inspect, error) {
 		result.Mounts = append(result.Mounts, Mount{Source: mount.Source, Destination: mount.Destination, Type: string(mount.Type)})
 	}
 	return result, nil
+}
+
+// maxPorts bounds the ports listed per container in a live frame.
+const maxPorts = 8
+
+// formatPorts renders a container's ports as "public->private/type" when
+// published, else "private/type", without the duplicate IPv4/IPv6 entries
+// Docker lists for one binding; sorted and bounded by maxPorts.
+func formatPorts(ports []containertypes.PortSummary) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(ports))
+	for _, port := range ports {
+		value := fmt.Sprintf("%d/%s", port.PrivatePort, port.Type)
+		if port.PublicPort != 0 {
+			value = fmt.Sprintf("%d->%s", port.PublicPort, value)
+		}
+		if !seen[value] {
+			seen[value] = true
+			out = append(out, value)
+		}
+	}
+	sort.Strings(out)
+	if len(out) > maxPorts {
+		out = out[:maxPorts]
+	}
+	return out
 }
 
 type LogOptions struct {

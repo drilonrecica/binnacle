@@ -95,3 +95,88 @@ func TestProcessScanRedactsCommandLines(t *testing.T) {
 		t.Fatalf("app command=%q", commands[43])
 	}
 }
+
+func writeProcFixture(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	for name, body := range files {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+func TestProcessScanReportsDetailAndTaskCounts(t *testing.T) {
+	// stat fields after the command: state ... nice(16) threads(17) ... start(19) vsize(20) rss(21)
+	root := writeProcFixture(t, map[string]string{
+		"stat":      "cpu 100 0 100 1000 0 0 0 0 0 0\n",
+		"uptime":    "500.00 400.00\n",
+		"meminfo":   "MemTotal: 1000 kB\n",
+		"42/stat":   "42 (web) R 1 1 1 0 0 0 0 0 0 0 150 50 0 0 0 -5 7 0 500 4096000 25",
+		"42/status": "Uid:\t0\t0\t0\t0\n",
+		"43/stat":   "43 (idle) S 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 500 0 1",
+		"44/stat":   "44 (kworker) I 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 500 0 0",
+		"45/stat":   "45 (zombie) Z 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 500 0 0",
+	})
+	scanner := NewProcessScanner(root, filepath.Join(root, "passwd"))
+	scanner.SampleInterval = time.Millisecond
+	result, err := scanner.ScanHost(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Tasks != (TaskCounts{Total: 4, Threads: 10, Running: 1, Sleeping: 2, Other: 1}) {
+		t.Fatalf("tasks %+v", result.Tasks)
+	}
+	var web Process
+	for _, value := range result.Processes {
+		if value.PID == 42 {
+			web = value
+		}
+	}
+	if web.Threads != 7 || web.Nice != -5 || web.VirtBytes != 4096000 || web.CPUTimeSeconds != 2 {
+		t.Fatalf("web %+v", web)
+	}
+	wantMem := float64(25*os.Getpagesize()) * 100 / (1000 * 1024)
+	if web.MemPercent == nil || *web.MemPercent != wantMem {
+		t.Fatalf("mem%% %v, want %v", web.MemPercent, wantMem)
+	}
+}
+
+func TestProcessScanReusesARecentResult(t *testing.T) {
+	root := writeProcFixture(t, map[string]string{
+		"stat":    "cpu 100 0 100 1000 0 0 0 0 0 0\n",
+		"42/stat": "42 (web) R 1 1 1 0 0 0 0 0 0 0 150 50 0 0 0 0 1 0 500 0 25",
+		"43/stat": "43 (db) S 1 1 1 0 0 0 0 0 0 0 10 5 0 0 0 0 1 0 500 0 25",
+	})
+	now := time.Unix(1_000, 0)
+	scanner := NewProcessScanner(root, filepath.Join(root, "passwd"))
+	scanner.SampleInterval = time.Millisecond
+	scanner.now = func() time.Time { return now }
+	first, err := scanner.ScanHost(context.Background(), 10)
+	if err != nil || len(first.Processes) != 2 {
+		t.Fatalf("%+v %v", first, err)
+	}
+	// A new process appears; within ReuseFor the previous scan still answers,
+	// cut to the smaller limit asked for.
+	if err := os.MkdirAll(filepath.Join(root, "44"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "44", "stat"), []byte("44 (new) R 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 500 0 1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(3 * time.Second)
+	reused, err := scanner.ScanHost(context.Background(), 1)
+	if err != nil || len(reused.Processes) != 1 || !reused.SampledAt.Equal(first.SampledAt) || reused.Tasks.Total != 2 {
+		t.Fatalf("reused %+v %v", reused, err)
+	}
+	now = now.Add(2 * time.Second)
+	fresh, err := scanner.ScanHost(context.Background(), 10)
+	if err != nil || fresh.Tasks.Total != 3 || !fresh.SampledAt.After(first.SampledAt) {
+		t.Fatalf("fresh %+v %v", fresh, err)
+	}
+}

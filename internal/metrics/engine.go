@@ -28,6 +28,23 @@ type Engine struct {
 	// trends holds the latest time-to-full estimates (SPEC §P3-12), set by
 	// the estimator every few minutes and attached to every snapshot.
 	trends trendSet
+	// identity describes the machine; set once by the host collector.
+	identity HostIdentity
+}
+
+// SetHostIdentity records what the machine is (hostname, OS, kernel, CPU).
+func (e *Engine) SetHostIdentity(identity HostIdentity) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.identity = identity
+}
+
+// HostIdentity returns the identity set by the host collector, or the zero
+// value before it has been read.
+func (e *Engine) HostIdentity() HostIdentity {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.identity
 }
 
 // trendSet is one estimator run: the memory estimate and one per mount key.

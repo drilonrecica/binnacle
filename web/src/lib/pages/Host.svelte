@@ -21,6 +21,7 @@
   import { connectionView } from '../shell/connection';
   import { gaugeThresholds, diskLabel } from '../overview/headroom';
   import Instruments from '../overview/Instruments.svelte';
+  import LiveBoard from '../server/LiveBoard.svelte';
   import {
     chartFocus,
     collectorViews,
@@ -476,6 +477,7 @@
     bind:active={tab}
     tabs={[
       { id: 'metrics', label: 'Metrics' },
+      { id: 'live', label: 'Live' },
       {
         id: 'filesystems',
         label: 'Filesystems',
@@ -529,6 +531,17 @@
     heading="Server instruments"
     headingId="server-instruments-title"
   />
+
+  <div
+    id={tabPanelId('host', 'live')}
+    role="tabpanel"
+    aria-labelledby={tabId('host', 'live')}
+    hidden={tab !== 'live'}
+  >
+    {#if tab === 'live'}
+      <LiveBoard {snapshot} {now} />
+    {/if}
+  </div>
 
   <div
     id={tabPanelId('host', 'metrics')}

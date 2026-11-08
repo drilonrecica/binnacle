@@ -36,9 +36,17 @@ best-effort, not a guarantee. Applications should never write secrets to logs.
 Up to 16 additional Go RE2 expressions can be supplied with
 `BINNACLE_LOGS_REDACTION_PATTERNS`, separated by `||`.
 
-The Server page samples host processes only when requested. It uses two bounded
-reads of the host `/proc`, serializes scans, returns 25 rows by default (100
-maximum), and does not persist results. `/etc/passwd` is mounted read-only only
+The Server page samples host processes only when requested: once on the
+Processes tab (plus "Sample now"), and every 5 seconds while the Live tab is open
+and the browser tab is visible. A scan uses two bounded reads of the host
+`/proc`, serializes scans, returns 25 rows by default (100 maximum), and does not
+persist results. A finished scan answers any request for 4 seconds, so several
+open Live tabs still cause at most one `/proc` walk per 4 seconds. Each row has
+CPU and memory share, resident and virtual size, cumulative CPU time, threads,
+nice value, state, user and container; the response also counts every task seen
+(total, threads, running, sleeping, other). Per-process I/O rates are not shown:
+`/proc/<pid>/io` needs ptrace rights that the unprivileged Binnacle container
+does not have. `/etc/passwd` is mounted read-only only
 to display usernames; numeric UIDs are used when it is unavailable. Process
 command lines pass through the same redaction rules as logs, so credential
 URLs and `--password=` style arguments are masked; the glued short forms

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -33,6 +34,31 @@ type Process struct {
 	State         string  `json:"state"`
 	UptimeSeconds float64 `json:"uptimeSeconds"`
 	ContainerID   string  `json:"containerId,omitempty"`
+	// Live-view detail, all from the same /proc/<pid>/stat read.
+	Threads        int64    `json:"threads"`
+	Nice           int64    `json:"nice"`
+	VirtBytes      int64    `json:"virtBytes"`
+	CPUTimeSeconds float64  `json:"cpuTimeSeconds"`
+	MemPercent     *float64 `json:"memPct,omitempty"`
+}
+
+// TaskCounts summarises every process seen by a scan, not only the returned
+// rows: R is running; S and I (idle kernel threads) are sleeping; D, Z, T and
+// the rest are other.
+type TaskCounts struct {
+	Total    int   `json:"total"`
+	Threads  int64 `json:"threads"`
+	Running  int   `json:"running"`
+	Sleeping int   `json:"sleeping"`
+	Other    int   `json:"other"`
+}
+
+// ProcessScan is one finished scan: the busiest processes and the task
+// counts, as of SampledAt.
+type ProcessScan struct {
+	Processes []Process  `json:"processes"`
+	Tasks     TaskCounts `json:"tasks"`
+	SampledAt time.Time  `json:"sampledAt"`
 }
 
 type ProcessScanner struct {
@@ -41,11 +67,25 @@ type ProcessScanner struct {
 	// Redact runs over every returned command line, normally the log
 	// redactor, so secrets passed as arguments never reach the UI.
 	Redact func(string) string
-	sem    chan struct{}
+	// ReuseFor is how long a finished scan answers later requests: a view
+	// that refreshes every few seconds, open in several tabs, still costs at
+	// most one /proc walk per ReuseFor (ADR 017). Zero disables reuse.
+	ReuseFor time.Duration
+	sem      chan struct{}
+	now      func() time.Time
+	mu       sync.Mutex
+	last     ProcessScan
 }
 
 func NewProcessScanner(procRoot, passwdPath string) *ProcessScanner {
-	return &ProcessScanner{ProcRoot: procRoot, PasswdPath: passwdPath, SampleInterval: 200 * time.Millisecond, sem: make(chan struct{}, 1)}
+	return &ProcessScanner{ProcRoot: procRoot, PasswdPath: passwdPath, SampleInterval: 200 * time.Millisecond, ReuseFor: 4 * time.Second, sem: make(chan struct{}, 1)}
+}
+
+func (s *ProcessScanner) clock() time.Time {
+	if s.now != nil {
+		return s.now()
+	}
+	return time.Now()
 }
 
 type processSample struct {
@@ -55,35 +95,87 @@ type processSample struct {
 	StartTicks                  uint64
 	RSSBytes                    int64
 	UID                         uint64
+	Threads, Nice, VirtBytes    int64
 }
 
+// Scan returns the busiest processes; see ScanHost.
 func (s *ProcessScanner) Scan(ctx context.Context, limit int) ([]Process, error) {
+	result, err := s.ScanHost(ctx, limit)
+	return result.Processes, err
+}
+
+// ScanHost samples /proc twice and returns up to limit processes, busiest
+// first, with counts over every process seen. A scan finished less than
+// ReuseFor ago is returned again instead of walking /proc once more.
+func (s *ProcessScanner) ScanHost(ctx context.Context, limit int) (ProcessScan, error) {
 	if limit == 0 {
 		limit = DefaultProcesses
 	}
 	if limit < 1 || limit > MaxProcesses {
-		return nil, fmt.Errorf("process limit must be between 1 and %d", MaxProcesses)
+		return ProcessScan{}, fmt.Errorf("process limit must be between 1 and %d", MaxProcesses)
+	}
+	if recent, ok := s.recent(limit); ok {
+		return recent, nil
 	}
 	select {
 	case s.sem <- struct{}{}:
 		defer func() { <-s.sem }()
 	default:
-		return nil, ErrProcessScanBusy
+		return ProcessScan{}, ErrProcessScanBusy
 	}
+	// A scan that finished while this one waited for the semaphore serves it.
+	if recent, ok := s.recent(limit); ok {
+		return recent, nil
+	}
+	result, err := s.scan(ctx)
+	if err != nil {
+		return ProcessScan{}, err
+	}
+	if s.ReuseFor > 0 {
+		s.mu.Lock()
+		s.last = result
+		s.mu.Unlock()
+	}
+	return truncateScan(result, limit), nil
+}
+
+// recent returns the last scan when it is younger than ReuseFor.
+func (s *ProcessScanner) recent(limit int) (ProcessScan, bool) {
+	if s.ReuseFor <= 0 {
+		return ProcessScan{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.last.SampledAt.IsZero() || s.clock().Sub(s.last.SampledAt) >= s.ReuseFor {
+		return ProcessScan{}, false
+	}
+	return truncateScan(s.last, limit), true
+}
+
+func truncateScan(result ProcessScan, limit int) ProcessScan {
+	if len(result.Processes) > limit {
+		result.Processes = result.Processes[:limit:limit]
+	}
+	return result
+}
+
+// scan does the two-sample walk and keeps the MaxProcesses busiest, so one
+// result can answer any limit.
+func (s *ProcessScanner) scan(ctx context.Context) (ProcessScan, error) {
 	firstTotal, first, err := s.sample(ctx)
 	if err != nil {
-		return nil, err
+		return ProcessScan{}, err
 	}
 	timer := time.NewTimer(s.SampleInterval)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return ProcessScan{}, ctx.Err()
 	case <-timer.C:
 	}
 	secondTotal, second, err := s.sample(ctx)
 	if err != nil {
-		return nil, err
+		return ProcessScan{}, err
 	}
 	deltaTotal := secondTotal - firstTotal
 	if secondTotal < firstTotal || deltaTotal == 0 {
@@ -91,6 +183,20 @@ func (s *ProcessScanner) Scan(ctx context.Context, limit int) ([]Process, error)
 	}
 	users := readPasswd(s.PasswdPath)
 	uptime := readUptime(s.ProcRoot)
+	memTotal := readMemTotal(s.ProcRoot)
+	var tasks TaskCounts
+	for _, current := range second {
+		tasks.Total++
+		tasks.Threads += current.Threads
+		switch current.State {
+		case "R":
+			tasks.Running++
+		case "S", "I":
+			tasks.Sleeping++
+		default:
+			tasks.Other++
+		}
+	}
 	values := make([]Process, 0, len(second))
 	for pid, current := range second {
 		previous, ok := first[pid]
@@ -109,7 +215,13 @@ func (s *ProcessScanner) Scan(ctx context.Context, limit int) ([]Process, error)
 		if age < 0 {
 			age = 0
 		}
-		values = append(values, Process{PID: pid, Command: current.Command, CPUPercent: float64(delta) * 100 / float64(deltaTotal), RSSBytes: current.RSSBytes, User: user, UID: current.UID, State: current.State, UptimeSeconds: age, ContainerID: current.ContainerID})
+		value := Process{PID: pid, Command: current.Command, CPUPercent: float64(delta) * 100 / float64(deltaTotal), RSSBytes: current.RSSBytes, User: user, UID: current.UID, State: current.State, UptimeSeconds: age, ContainerID: current.ContainerID,
+			Threads: current.Threads, Nice: current.Nice, VirtBytes: current.VirtBytes, CPUTimeSeconds: float64(current.Ticks) / 100}
+		if memTotal > 0 {
+			pct := float64(current.RSSBytes) * 100 / float64(memTotal)
+			value.MemPercent = &pct
+		}
+		values = append(values, value)
 	}
 	sort.Slice(values, func(i, j int) bool {
 		if values[i].CPUPercent == values[j].CPUPercent {
@@ -117,13 +229,13 @@ func (s *ProcessScanner) Scan(ctx context.Context, limit int) ([]Process, error)
 		}
 		return values[i].CPUPercent > values[j].CPUPercent
 	})
-	if len(values) > limit {
-		values = values[:limit]
+	if len(values) > MaxProcesses {
+		values = values[:MaxProcesses]
 	}
 	for i := range values {
 		values[i].Command = s.redactCommand(values[i].Command)
 	}
-	return values, nil
+	return ProcessScan{Processes: values, Tasks: tasks, SampledAt: s.clock()}, nil
 }
 
 // inlineSecretFlags lists clients that take a secret glued to a short flag,
@@ -206,6 +318,9 @@ func readProcess(root string, pid int) (processSample, error) {
 	if e1 != nil || e2 != nil || e3 != nil || e4 != nil {
 		return processSample{}, errors.New("invalid process counters")
 	}
+	nice := displayInt(fields[16])
+	threads := displayInt(fields[17])
+	virt := displayInt(fields[20])
 	command := strings.TrimSpace(stat[open+1 : close])
 	if raw, err := readBounded(filepath.Join(dir, "cmdline")); err == nil {
 		if value := strings.TrimSpace(strings.ReplaceAll(raw, "\x00", " ")); value != "" {
@@ -233,7 +348,8 @@ func readProcess(root string, pid int) (processSample, error) {
 	if cgroup, err := readBounded(filepath.Join(dir, "cgroup")); err == nil {
 		container = containerFromCgroup(cgroup)
 	}
-	return processSample{PID: pid, Command: command, State: fields[0], Ticks: utime + stime, StartTicks: start, RSSBytes: max(0, rss) * int64(os.Getpagesize()), UID: uid, ContainerID: container}, nil
+	return processSample{PID: pid, Command: command, State: fields[0], Ticks: utime + stime, StartTicks: start, RSSBytes: max(0, rss) * int64(os.Getpagesize()), UID: uid, ContainerID: container,
+		Threads: max(0, threads), Nice: nice, VirtBytes: max(0, virt)}, nil
 }
 
 func readCPUTotal(path string) (uint64, error) {
@@ -255,6 +371,35 @@ func readCPUTotal(path string) (uint64, error) {
 		total += value
 	}
 	return total, nil
+}
+
+// displayInt parses a display-only stat field; one that does not parse reads
+// as zero rather than dropping the whole process from the scan.
+func displayInt(field string) int64 {
+	value, err := strconv.ParseInt(field, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return value
+}
+
+// readMemTotal returns the host's MemTotal in bytes, or 0 when unreadable.
+func readMemTotal(root string) int64 {
+	raw, err := readBounded(filepath.Join(root, "meminfo"))
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(raw, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == "MemTotal:" {
+			kb, err := strconv.ParseInt(fields[1], 10, 64)
+			if err != nil {
+				return 0
+			}
+			return kb * 1024
+		}
+	}
+	return 0
 }
 func readUptime(root string) float64 {
 	raw, err := readBounded(filepath.Join(root, "uptime"))
