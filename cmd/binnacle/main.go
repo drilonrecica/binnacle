@@ -44,6 +44,11 @@ type realClock struct{}
 func (realClock) Now() time.Time { return time.Now() }
 
 func main() {
+	// reset-password is the one subcommand; it has its own flags and never
+	// starts the server, so it is dispatched before the server flags parse.
+	if len(os.Args) > 1 && os.Args[1] == resetCommand {
+		os.Exit(runResetPassword(os.Args[2:], os.Stdin, os.Stdout, os.Stderr, cgroupRoot))
+	}
 	demoMode := flag.Bool("demo", false, "run with deterministic synthetic monitoring data")
 	demoSeed := flag.Uint64("demo-seed", 1, "seed for synthetic demo data")
 	demoContainers := flag.Int("demo-containers", 30, "number of synthetic containers to generate in demo mode")

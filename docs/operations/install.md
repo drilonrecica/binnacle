@@ -253,6 +253,10 @@ and does not reveal the version.
 `/healthz` on the configured listen address (an unspecified host such as
 `:8080` or `0.0.0.0` means `127.0.0.1`), giving up after 3 s.
 
+`binnacle reset-password` is the other host-side command: it recovers a
+forgotten administrator username or password. See
+[Locked out of the admin account](recovery.md#locked-out-of-the-admin-account).
+
 `/healthz` is the liveness probe. `/readyz` is the readiness probe: it answers
 `200` while Binnacle is running and the database answers a query within 2 s,
 and `503` otherwise. Its body carries `ready`, the lifecycle `state`,

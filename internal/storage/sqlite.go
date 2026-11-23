@@ -424,10 +424,9 @@ func (m *Manager) migrate(ctx context.Context, db *sql.DB) error {
 	}
 	sort.Strings(entries)
 	for _, entry := range entries {
-		base := filepath.Base(entry)
-		var version int
-		if _, err := fmt.Sscanf(base, "%03d_", &version); err != nil {
-			return fmt.Errorf("invalid migration name %s", base)
+		version, err := migrationVersion(entry)
+		if err != nil {
+			return err
 		}
 		var present int
 		err = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations WHERE version=?", version).Scan(&present)

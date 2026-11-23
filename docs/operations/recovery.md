@@ -187,6 +187,69 @@ docker compose -f packaging/docker/docker-compose.yml start binnacle
 Do not copy an open `binnacle.db` without its WAL. For an online backup, use a
 trusted host-side SQLite tool and its backup API against the persistent volume.
 
+## Locked out of the admin account
+
+Binnacle has no "forgot password" page: that would need email and a public
+unauthenticated endpoint. Recovery is a command you run on the host, which
+shows the administrator's username and sets a new password:
+
+```bash
+docker exec binnacle binnacle reset-password
+```
+
+```text
+Administrator: skipper
+New password:  <24 random characters, shown once>
+Every session was signed out. API tokens were kept.
+```
+
+Sign in with the printed password and change it in Settings → Access if you
+want your own. To set one directly, pipe it in instead; it must be 12 to 128
+characters and is not echoed back:
+
+```bash
+printf '%s\n' 'my new long password' | docker exec -i binnacle binnacle reset-password --password-stdin
+```
+
+The first argument is the container name (`binnacle` in the packaged Compose
+file; Coolify adds a suffix, see `docker ps`).
+
+What it changes:
+
+- The password is replaced and every session is signed out, on a running
+  instance immediately.
+- The username, API tokens, preferences, settings and all monitoring data are
+  kept.
+- Two-factor authentication is kept, and the output says so. If the
+  authenticator and the recovery codes are lost as well, add `--disable-mfa`
+  to remove the enrollment; enroll again in Settings afterwards.
+
+The command works while Binnacle is running. Login throttling lives in the
+running process, so after many wrong guesses the first sign-in can still
+answer "Too many login attempts" for up to five minutes.
+
+Hashing a password needs about 40 MiB, and under `docker exec` the command
+shares the container's memory limit with the server. When less than 44 MiB of
+that limit is free it waits for the server to release memory, for up to four
+minutes; a login attempt alone keeps 32 MiB busy for two to three minutes, so
+expect that wait right after trying to sign in. If there is still not enough
+room it refuses, rather than risk the server being killed, and changes
+nothing. In that case, or when the container does not stay up, stop Binnacle
+and run the command in a one-off container on the same volume:
+
+```bash
+docker compose -f packaging/docker/docker-compose.yml stop binnacle
+docker compose -f packaging/docker/docker-compose.yml run --rm --no-deps binnacle reset-password
+docker compose -f packaging/docker/docker-compose.yml start binnacle
+```
+
+The database must already be at the schema version of the binary that runs the
+command; the command never migrates it. Using the same image as the server, as
+above, guarantees that.
+
+Anyone who can run this can already read and write the database file, so the
+command grants nothing new: protect access to the Docker host.
+
 ## Reset monitoring history
 
 From the Settings page you can delete history for one resource, data before a date, or all monitoring history. These operations require typed confirmation and run in bounded batches. They do not delete users or configuration.

@@ -90,6 +90,12 @@ Settings → Access can change the administrator password. The current password
 is required, the request is CSRF-protected and login-throttled, and every other
 session is signed out while the one making the change stays signed in.
 
+A forgotten username or password is recovered on the host with
+`binnacle reset-password`, which prints the username, sets a new password and
+signs out every session; see
+[Locked out of the admin account](operations/recovery.md#locked-out-of-the-admin-account).
+There is no web reset flow, and the command is not reachable over HTTP.
+
 ## Trusted-proxy authentication
 
 Set `BINNACLE_AUTH_MODE` to `local`, `proxy`, or `local_and_proxy` (`local` is
