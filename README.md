@@ -71,6 +71,11 @@ make dev-demo
 Open `http://127.0.0.1:8080` and complete setup. This uses a fresh temporary
 database on each run.
 
+Forgot the administrator username or password on a real install? Run
+`docker exec <container> binnacle reset-password` on the server: it prints the
+username and a new password. Details are in
+[Locked out of the admin account](docs/operations/recovery.md#locked-out-of-the-admin-account).
+
 > **Docker socket warning:** a Docker socket is privileged even when its
 > filesystem mount is read-only. Binnacle contains no mutation paths, but a
 > compromised process with socket access may control Docker. Prefer a
@@ -101,6 +106,7 @@ Frontend end-to-end suites require Playwright and are documented by
 - [Coolify enrichment and administrator access](docs/COOLIFY_AND_ACCESS.md)
 - [API tokens, exports, Prometheus, and personalization](docs/INTEROPERABILITY.md)
 - [Installation](docs/operations/install.md), [upgrades](docs/operations/upgrade.md), and [recovery](docs/operations/recovery.md)
+- [Recovering a forgotten username or password](docs/operations/recovery.md#locked-out-of-the-admin-account)
 - [Security policy](SECURITY.md)
 - [Contributing guide](CONTRIBUTING.md) and [governance](GOVERNANCE.md)
 - [Architecture decision records](adr/README.md)

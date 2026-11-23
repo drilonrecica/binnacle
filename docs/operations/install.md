@@ -101,6 +101,11 @@ refused with `429 server_busy` and `Retry-After: 1`; the browser retries after
 a second. Hashes written by earlier releases at 64 MiB keep verifying, but each
 one takes both slots until the password is changed.
 
+`binnacle reset-password` run through `docker exec` hashes in its own process
+but inside the same container limit, outside those two slots. It therefore
+waits until 44 MiB of the limit is free before hashing; see
+[Locked out of the admin account](recovery.md#locked-out-of-the-admin-account).
+
 The template intentionally exposes only first-run setup and optional Coolify
 enrichment variables. Binnacle's secure defaults apply to advanced
 authentication, portability, private-network access, Prometheus, and
@@ -152,6 +157,8 @@ environment:
 ```
 
 When bootstrap credentials are present and no user exists, Binnacle creates the account automatically. The setup token is still required for public/non-loopback first runs unless you are using local development mode.
+
+Once an administrator exists these variables are ignored, so changing them does not change the username or password. To recover a forgotten username or password, use `binnacle reset-password`; see [Locked out of the admin account](recovery.md#locked-out-of-the-admin-account).
 
 ## Docker socket security
 

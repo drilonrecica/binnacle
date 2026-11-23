@@ -32,6 +32,12 @@ Binnacle sends no telemetry by default. Secrets stored through supported
 configuration surfaces are encrypted at rest using an operator-supplied master
 key and are never returned through an API.
 
+There is no password reset over the network. A forgotten administrator
+password is replaced with `binnacle reset-password`, which has no HTTP route
+and must be run on the host by someone who can already read and write the
+database file. Access to the Docker host is therefore access to the
+administrator account; protect it accordingly.
+
 ## Dependency policy
 
 Dependencies must be maintained, license-compatible with AGPL-3.0-only, and
