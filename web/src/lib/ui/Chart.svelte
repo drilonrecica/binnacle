@@ -327,10 +327,9 @@
       firstRender = false;
       return;
     }
-    if (plot) {
-      plot.setData(aligned);
-      plot.redraw();
-    }
+    // setData rescales the time axis and repaints, gaps and markers
+    // included. A redraw() after it would restore the previous x range.
+    plot?.setData(aligned);
   });
 
   const hoverValues = $derived.by(() => {

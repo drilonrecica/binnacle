@@ -74,6 +74,67 @@ test('charts switch ranges and surface data gaps', async ({ page }) => {
   await expect(page).toHaveURL(/range=custom/);
 });
 
+test('charts rescale the time axis when the range changes', async ({
+  page,
+}) => {
+  await mockApp(page);
+  // 61 evenly spaced points across whatever window was asked for; each
+  // point's value is its own index, so the hover readout says where on the
+  // time axis the cursor landed.
+  const count = 61;
+  const requests: string[] = [];
+  await page.route('**/api/v1/metrics?*', (route) => {
+    const url = new URL(route.request().url());
+    requests.push(url.search);
+    const from = new Date(url.searchParams.get('from') ?? '').getTime();
+    const to = new Date(url.searchParams.get('to') ?? '').getTime();
+    const step = (to - from) / (count - 1);
+    const metrics = (url.searchParams.get('metrics') ?? '').split(',');
+    return route.fulfill({
+      json: {
+        scope: 'host',
+        from: new Date(from).toISOString(),
+        to: new Date(to).toISOString(),
+        resolution: '1m',
+        series: metrics.map((metric) => ({
+          metric,
+          unit: 'percent',
+          points: Array.from({ length: count }, (_, index) => ({
+            at: new Date(from + index * step).toISOString(),
+            min: index,
+            avg: index,
+            max: index,
+            count: 1,
+          })),
+        })),
+        gaps: [],
+      },
+    });
+  });
+  await page.goto('/server?range=7d');
+  const cpu = page.locator('.chart-slot').filter({
+    has: page.getByRole('heading', { name: 'CPU', exact: true }),
+  });
+  const plot = cpu.locator('.u-over');
+  await expect(plot).toBeVisible();
+
+  const before = requests.length;
+  await page.getByRole('button', { name: '1h', exact: true }).click();
+  await expect(page).toHaveURL(/range=1h/);
+  await expect.poll(() => requests.length).toBeGreaterThan(before);
+
+  // The middle of the plot is the middle of the hour. An axis left on the
+  // first week would put the whole hour at the right edge and snap to 0.
+  const value = cpu.locator('.tooltip-value').first();
+  await expect(async () => {
+    await page.mouse.move(0, 0);
+    await plot.hover();
+    const hovered = Number.parseFloat((await value.textContent()) ?? '');
+    expect(hovered).toBeGreaterThan(25);
+    expect(hovered).toBeLessThan(35);
+  }).toPass({ timeout: 5000 });
+});
+
 test('tabs show filesystems, processes and collectors', async ({ page }) => {
   await mockApp(page);
   await page.route('**/api/v1/processes?*', (route) =>
