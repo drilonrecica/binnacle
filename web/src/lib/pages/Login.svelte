@@ -182,6 +182,13 @@
   {#snippet aside()}
     Sign-in attempts are rate limited. Sessions end after inactivity and can be
     revoked from Settings.
+    {#if methods?.local !== false}
+      <p class="recover">
+        Forgot the username or password? Run
+        <code>binnacle reset-password</code> on the server. It shows the username
+        and sets a new password.
+      </p>
+    {/if}
   {/snippet}
 </AuthShell>
 
@@ -195,7 +202,15 @@
     font-size: var(--text-meta);
     overflow-wrap: anywhere;
   }
-  .returning code {
+  .recover {
+    margin-top: var(--space-2);
+  }
+  /* A command that breaks at its hyphen reads as two words. */
+  .recover code {
+    white-space: nowrap;
+  }
+  .returning code,
+  .recover code {
     color: var(--fg);
     font-family: var(--font-mono);
     font-size: var(--text-mono);
