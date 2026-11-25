@@ -50,6 +50,9 @@ for qualification details.
 - **Docker-compatible, Coolify-aware:** ordinary Docker and Compose work without
   Coolify; available metadata improves logical resource grouping.
 - **Single-server:** one Binnacle instance monitors one Linux Docker server.
+- **Domain sweep:** the operator's public domains are probed hourly for DNS,
+  HTTPS reachability, certificate expiry, SPF/DMARC and security headers,
+  with alerts and a change feed, independent of any container.
 
 Supported targets are Ubuntu 22.04/24.04 and Debian 12/13 on amd64 or arm64,
 with Docker Engine 29.5.1 or newer. Coolify is the primary deployment path and
@@ -100,7 +103,7 @@ Frontend end-to-end suites require Playwright and are documented by
 
 - [Product boundaries and guarantees](docs/PRODUCT.md)
 - [Roadmap](ROADMAP.md)
-- [Checks and alerts](docs/CHECKS_AND_ALERTS.md)
+- [Checks, alerts and the domain sweep](docs/CHECKS_AND_ALERTS.md)
 - [Incidents and notifications](docs/INCIDENTS_AND_NOTIFICATIONS.md)
 - [Logs and process diagnostics](docs/DIAGNOSTICS.md)
 - [Coolify enrichment and administrator access](docs/COOLIFY_AND_ACCESS.md)

@@ -10,6 +10,22 @@ Container state comes from the Docker container list on every collection tick, s
 
 Resolved alerts are retained for one year. Expired silences are retained for 90 days. Alert evaluation continues during a silence or deployment grace period, so a persistent failure fires when suppression ends. Each alert family is evaluated on its own every ten seconds: an error in one family (for example a failed query) is logged and the other families are still evaluated.
 
+## Domain sweep
+
+The domain sweep watches the operator's public domains, independent of Docker resources (ADR 028). Each domain is probed on its own interval, 10 minutes to 24 hours, one hour by default (`sweep.default_interval`, `BINNACLE_SWEEP_DEFAULT_INTERVAL`), and one probe records:
+
+- DNS: the NS set (the domain is registered) and the A/AAAA set (it resolves).
+- HTTPS: one `GET https://<domain>/` through the same outbound policy as the checks (private targets blocked unless `checks.allow_private_targets` is set, at most three redirects, 64 KiB of body drained and never kept, a 20-second budget). The final status is recorded as is: a Cloudflare 525 is a status, not a failure code. A request that gets no response records the checks' failure code (`dns`, `timeout`, `connection`, `tls_handshake`, `target_blocked`).
+- TLS: the leaf certificate's issuer, expiry and whole days left (negative once expired).
+- Headers: whether `Strict-Transport-Security` and `Content-Security-Policy` are on the final response.
+- Mail authentication: the apex TXT record starting with `v=spf1`, and the `p=` policy of the `_dmarc.<domain>` record (`none`, `quarantine`, `reject`, or empty when there is none).
+
+Only the latest result per domain is stored. A fingerprint over the status, the certificate's issuer and expiry, the NS and address sets, SPF, the DMARC policy and the two headers is kept with it; when a run's fingerprint differs from the stored one, a `domain_change` event ("example.com changed: HTTP 200 → 525; DMARC policy reject → missing") is written to the Changes page under Health. Days left and timestamps change on their own and are not part of the fingerprint.
+
+Five built-in rules read the latest results every ten seconds, all global and not overridable per domain: **Domain unreachable** (critical: no response or a 5xx), **Domain certificate expiring** (warning, threshold 14 days, editable), **Domain DNS missing** (critical: no NS records or no address), **Domain mail authentication missing** (warning: no SPF or no DMARC policy) and **Domain security headers missing** (warning: no HSTS or no CSP). A value the sweep could not observe holds its rule rather than failing or recovering it: a domain that does not answer does not also fire the headers rule, and an unregistered domain does not also fire the mail rule. Their alerts have target type `domain` and open one incident per domain, so notification channels deliver them unchanged. Removing a domain resolves its alerts.
+
+Domains are managed under Settings › Alerting › Domains (add, pause, run now, remove) or through the API: `GET /api/v1/sweep/domains` lists every domain with its state, `POST /api/v1/sweep/domains` with `{"domain":"example.com"}` (optional `intervalSeconds` 600–86400 and `enabled`) adds one, `GET`, `PATCH` and `DELETE /api/v1/sweep/domains/{id}` read, change and remove one, and `POST /api/v1/sweep/domains/{id}/run` probes it at once. Mutations need a session and its CSRF token, as for checks. The scheduler's worker count is `sweep.max_concurrency` (default 4); `sweep.enabled=false` (`BINNACLE_SWEEP_ENABLED`) keeps the list and the API but stops the scheduler. Demo mode seeds seven synthetic domains that cover every state.
+
 ## Time-to-full estimates
 
 Binnacle estimates when each filesystem and host memory will run out. Every five minutes it fits a least-squares line to the used bytes of the last 24 hours (`estimator.window_hours`, 6 to 168, environment `BINNACLE_ESTIMATOR_WINDOW_HOURS`, editable live in Settings) and reports one of:

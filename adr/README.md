@@ -34,3 +34,4 @@ or extends it and says so.
 | [025](025-live-stream-fan-out.md) | Live stream fan-out and precompressed assets |
 | [026](026-time-to-full-estimator.md) | Time-to-full estimator |
 | [027](027-headroom-design-system.md) | Headroom design system (supersedes the visual parts of 020) |
+| [028](028-domain-sweep.md) | Domain sweep: public domains probed for DNS, HTTPS, certificates, mail authentication and headers (supersedes the certificate-expiry exclusion of 015) |

@@ -326,7 +326,8 @@ Key variables you may need to set at deployment time:
 - `BINNACLE_MASTER_KEY_FILE` — absolute path to a file containing the master key; preferred for production secrets.
 - `BINNACLE_COOLIFY_URL` and `BINNACLE_COOLIFY_API_TOKEN[_FILE]` — optional read-only Coolify enrichment.
 - `BINNACLE_COOLIFY_ALLOW_PRIVATE_TARGETS` — lets a Coolify URL entered in Settings resolve to a private address; a URL from `BINNACLE_COOLIFY_URL` never needs it. Defaults to `false` and requires restart.
-- `BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS` — private HTTP check target opt-in; defaults to `false` and requires restart.
+- `BINNACLE_CHECKS_ALLOW_PRIVATE_TARGETS` — private HTTP check and domain sweep target opt-in; defaults to `false` and requires restart.
+- `BINNACLE_SWEEP_ENABLED`, `BINNACLE_SWEEP_MAX_CONCURRENCY` and `BINNACLE_SWEEP_DEFAULT_INTERVAL` — the domain sweep scheduler (ADR 028); default `true`, `4` workers and `1h` for a newly added domain, and require restart. The Coolify files carry them as comments.
 - `BINNACLE_FEATURE_ADVANCED_AUTH` — enables TOTP and trusted-proxy authentication; defaults to `true` in the packaged Compose and Coolify files and `false` in a standalone binary.
 - `BINNACLE_FEATURE_PORTABILITY` — enables personal API tokens, exports, and eligibility for Prometheus; defaults to `true` in the packaged Compose and Coolify files and `false` in a standalone binary.
 - `BINNACLE_PROMETHEUS_ENABLED` — enables token-authenticated `/metrics` only when portability is also enabled; defaults to `false`.

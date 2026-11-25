@@ -15,3 +15,5 @@ This extends the durable [security and bounded-runtime guarantees](../docs/PRODU
 ## Consequences
 
 The implementation is predictable, restart-safe, and resource-bounded. Adding a rule family requires code and tests. Arbitrary expressions, external delivery, incidents, recurring maintenance, TCP checks, and certificate-expiry checks remain out of scope.
+
+Certificate expiry of the operator's public domains is covered since [ADR 028](028-domain-sweep.md) by the domain sweep, which is separate from the resource-bound checks described here.
