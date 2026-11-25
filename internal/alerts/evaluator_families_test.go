@@ -100,3 +100,37 @@ func TestEvaluatorLogsErrors(t *testing.T) {
 		t.Fatalf("logs=%q", logs.String())
 	}
 }
+
+// An alert's resolution writes an alert_resolved event beside the
+// alert_triggered one. Before the fix both events were given the alert's id,
+// so the resolution transaction failed on the events primary key and a
+// firing alert could never resolve.
+func TestEvaluatorResolutionWritesItsEvent(t *testing.T) {
+	ctx := context.Background()
+	store, repo := healthStore(t)
+	engine := metrics.NewEngine(4)
+	now := time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC)
+	evaluator := alerts.NewEvaluator(repo, engine)
+	evaluator.Now = func() time.Time { return now }
+	tick := func(step time.Duration) {
+		t.Helper()
+		if err := evaluator.Evaluate(ctx); err != nil {
+			t.Fatal(err)
+		}
+		now = now.Add(step)
+	}
+	hostCPU(engine, 95)
+	tick(6 * time.Minute)  // pending
+	tick(10 * time.Second) // firing
+	hostCPU(engine, 20)
+	tick(3 * time.Minute)  // recovering
+	tick(10 * time.Second) // healthy, resolved
+	var status string
+	if err := store.DB().QueryRowContext(ctx, `SELECT status FROM alerts WHERE dedup_key='host_cpu_warning:server'`).Scan(&status); err != nil || status != "resolved" {
+		t.Fatalf("alert status=%s err=%v", status, err)
+	}
+	var triggered, resolved int
+	if err := store.DB().QueryRowContext(ctx, `SELECT SUM(type='alert_triggered'),SUM(type='alert_resolved') FROM events WHERE correlation_key='host_cpu_warning:server'`).Scan(&triggered, &resolved); err != nil || triggered != 1 || resolved != 1 {
+		t.Fatalf("triggered=%d resolved=%d err=%v", triggered, resolved, err)
+	}
+}

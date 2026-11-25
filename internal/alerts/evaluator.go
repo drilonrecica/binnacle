@@ -482,7 +482,9 @@ func (e *Evaluator) evaluate(ctx context.Context, rule Rule, targetType, target 
 				err = e.Repo.sink.AlertResolvedTx(ctx, tx, alertID, now)
 			}
 			if err == nil {
-				err = insertEvent(ctx, tx, alertID, rule, target, metrics.EventAlertResolved, now)
+				// The trigger event already carries the alert's id; an alert
+				// resolves once, so its resolution event is named after it.
+				err = insertEvent(ctx, tx, alertID+"-resolved", rule, target, metrics.EventAlertResolved, now)
 			}
 		}
 	} else if state.Phase == Firing || state.Phase == Recovering {
