@@ -147,6 +147,41 @@ export const ruleCatalog: Record<string, RuleInfo> = {
     scope: 'Binnacle storage',
     editable: ['recoverySeconds', 'severity'],
   },
+  domain_unreachable: {
+    title: 'Domain unreachable',
+    description:
+      'A swept domain gives no HTTPS response or answers with a 5xx status, a Cloudflare 525 included.',
+    scope: 'Every swept domain',
+    editable: ['triggerSeconds', 'recoverySeconds', 'severity'],
+  },
+  domain_cert_expiring: {
+    title: 'Domain certificate expiring',
+    description:
+      'The certificate of a swept domain expires within the threshold.',
+    unit: 'days',
+    scope: 'Every swept domain',
+    editable: ['threshold', 'triggerSeconds', 'recoverySeconds', 'severity'],
+  },
+  domain_dns_missing: {
+    title: 'Domain DNS missing',
+    description:
+      'A swept domain has no NS records (unregistered or lapsed) or does not resolve to an address.',
+    scope: 'Every swept domain',
+    editable: ['triggerSeconds', 'recoverySeconds', 'severity'],
+  },
+  domain_mail_auth_missing: {
+    title: 'Domain mail authentication missing',
+    description: 'A swept domain publishes no SPF record or no DMARC policy.',
+    scope: 'Every swept domain',
+    editable: ['triggerSeconds', 'recoverySeconds', 'severity'],
+  },
+  domain_headers_missing: {
+    title: 'Domain security headers missing',
+    description:
+      'A swept domain answers without Strict-Transport-Security or Content-Security-Policy.',
+    scope: 'Every swept domain',
+    editable: ['triggerSeconds', 'recoverySeconds', 'severity'],
+  },
 };
 
 export function ruleInfo(family: string, fallbackName: string): RuleInfo {

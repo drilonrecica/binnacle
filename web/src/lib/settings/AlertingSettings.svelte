@@ -3,7 +3,9 @@
   import type { LiveSnapshot } from '../live.svelte';
   import { listRules, type Rule } from '../api/alerts';
   import { listChecks } from '../api/checks';
+  import { listDomains } from '../api/sweep';
   import ChecksTab from '../alerts/ChecksTab.svelte';
+  import DomainsTab from '../alerts/DomainsTab.svelte';
   import RulesTab from '../alerts/RulesTab.svelte';
   import SourceState from '../alerts/SourceState.svelte';
   import { TabSource } from '../alerts/tab-source.svelte';
@@ -18,6 +20,7 @@
 
   const rules = new TabSource((signal) => listRules(signal));
   const checks = new TabSource((signal) => listChecks(signal));
+  const domains = new TabSource((signal) => listDomains(signal));
   let controller: AbortController | undefined;
 
   const names = $derived(
@@ -37,6 +40,7 @@
     controller = new AbortController();
     void rules.load(controller.signal);
     void checks.load(controller.signal);
+    void domains.load(controller.signal);
     return () => controller?.abort();
   });
 </script>
@@ -76,6 +80,24 @@
         snapshot={live}
         {names}
         onchanged={() => void checks.load(controller?.signal)}
+      />
+    </SourceState>
+  </Card>
+
+  <Card
+    title="Domains"
+    description="Public domains swept hourly by default for DNS, HTTPS, certificate expiry, SPF and DMARC, and security headers. Changes appear on the Changes page."
+    padded={false}
+  >
+    <SourceState
+      source={domains}
+      what="Swept domains"
+      onretry={() => void domains.load(controller?.signal)}
+    >
+      <DomainsTab
+        domains={domains.data ?? []}
+        loading={domains.loading}
+        onchanged={() => void domains.load(controller?.signal)}
       />
     </SourceState>
   </Card>
