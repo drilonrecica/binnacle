@@ -52,6 +52,8 @@ func groupFor(a alerts.Alert) (string, string, string) {
 		return "resource:" + a.TargetID, "resource", a.TargetID
 	case a.TargetType == "filesystem":
 		return "filesystem:" + a.TargetID, "filesystem", a.TargetID
+	case a.TargetType == "domain":
+		return "domain:" + a.TargetID, "domain", a.TargetID
 	case a.TargetType == "host":
 		return "host:server", "host", "server"
 	default:

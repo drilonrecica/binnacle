@@ -122,6 +122,7 @@ func (e *Evaluator) Evaluate(ctx context.Context) error {
 	step(FamilyPersistence, e.evaluatePersistence(ctx, rules, now))
 	step("deployments", e.correlateDeployments(ctx, now))
 	step("checks", e.evaluateChecks(ctx, rules, now))
+	step("domains", e.evaluateDomains(ctx, rules, now))
 	return errors.Join(errs...)
 }
 
@@ -189,6 +190,121 @@ func (e *Evaluator) evaluateChecks(ctx context.Context, rules []Rule, now time.T
 		}
 		if err := e.evaluate(ctx, rule, "resource", v.resource, 0, failing, recovered, now); err != nil {
 			errs = append(errs, fmt.Errorf("%s %s: %w", family, v.resource, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// domainFamilies are the families evaluateDomains judges per domain.
+var domainFamilies = []string{FamilyDomainUnreachable, FamilyDomainCertExpiring, FamilyDomainDNSMissing, FamilyDomainMailAuthMissing, FamilyDomainHeadersMissing}
+
+// evaluateDomains judges the latest sweep result of every enabled domain
+// against the domain families (ADR 028). A value the sweep could not observe
+// (no certificate without a TLS handshake, no headers without a response, no
+// mail records without NS records) neither fails nor recovers its family, so
+// an alert holds until the next complete sweep. Domains that are no longer
+// swept recover whatever was firing for them.
+func (e *Evaluator) evaluateDomains(ctx context.Context, rules []Rule, now time.Time) error {
+	rows, err := e.Repo.db.QueryContext(ctx, `SELECT d.domain,COALESCE(s.http_status,0),COALESCE(s.failure_code,''),s.cert_days_left,s.ns_present,s.resolves,COALESCE(s.spf,''),COALESCE(s.dmarc_policy,''),s.hsts,s.csp FROM sweep_domains d JOIN sweep_state s ON s.domain_id=d.id WHERE d.enabled=1`)
+	if err != nil {
+		return err
+	}
+	type observation struct {
+		domain, failure, spf, dmarc string
+		status                      int
+		certDays                    sql.NullInt64
+		nsPresent, resolves         bool
+		hsts, csp                   bool
+	}
+	observations := []observation{}
+	for rows.Next() {
+		var v observation
+		if err = rows.Scan(&v.domain, &v.status, &v.failure, &v.certDays, &v.nsPresent, &v.resolves, &v.spf, &v.dmarc, &v.hsts, &v.csp); err != nil {
+			rows.Close()
+			return err
+		}
+		observations = append(observations, v)
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	var errs []error
+	seen := map[string]bool{}
+	for _, v := range observations {
+		seen[v.domain] = true
+		unreachable := v.failure != "" || v.status == 0 || v.status >= 500
+		for _, family := range domainFamilies {
+			rule := effectiveRule(rules, family, "domain", v.domain)
+			if rule.ID == "" {
+				continue
+			}
+			var value float64
+			var failing, recovered bool
+			switch family {
+			case FamilyDomainUnreachable:
+				value, failing, recovered = float64(v.status), unreachable, !unreachable
+			case FamilyDomainDNSMissing:
+				failing = !v.nsPresent || !v.resolves
+				recovered = v.nsPresent && v.resolves
+			case FamilyDomainCertExpiring:
+				if !v.certDays.Valid || rule.Threshold == nil {
+					continue
+				}
+				recovery := *rule.Threshold
+				if rule.RecoveryThreshold != nil {
+					recovery = math.Max(recovery, *rule.RecoveryThreshold)
+				}
+				value = float64(v.certDays.Int64)
+				failing, recovered = value <= *rule.Threshold, value > recovery
+			case FamilyDomainMailAuthMissing:
+				if !v.nsPresent {
+					continue
+				}
+				failing = v.spf == "" || v.dmarc == ""
+				recovered = v.spf != "" && v.dmarc != ""
+			case FamilyDomainHeadersMissing:
+				if v.status == 0 {
+					continue
+				}
+				failing = !v.hsts || !v.csp
+				recovered = v.hsts && v.csp
+			}
+			if err := e.evaluate(ctx, rule, "domain", v.domain, value, failing, recovered, now); err != nil {
+				errs = append(errs, fmt.Errorf("%s %s: %w", family, v.domain, err))
+			}
+		}
+	}
+	stateRows, err := e.Repo.db.QueryContext(ctx, `SELECT DISTINCT target_id FROM alert_evaluation_state WHERE target_type='domain' AND phase!='healthy'`)
+	if err != nil {
+		return errors.Join(append(errs, err)...)
+	}
+	unseen := []string{}
+	for stateRows.Next() {
+		var domain string
+		if err = stateRows.Scan(&domain); err != nil {
+			stateRows.Close()
+			return errors.Join(append(errs, err)...)
+		}
+		if !seen[domain] {
+			unseen = append(unseen, domain)
+		}
+	}
+	if err = stateRows.Err(); err != nil {
+		stateRows.Close()
+		return errors.Join(append(errs, err)...)
+	}
+	stateRows.Close()
+	for _, domain := range unseen {
+		for _, family := range domainFamilies {
+			rule := effectiveRule(rules, family, "domain", domain)
+			if rule.ID == "" {
+				continue
+			}
+			if err := e.evaluate(ctx, rule, "domain", domain, 0, false, true, now); err != nil {
+				errs = append(errs, fmt.Errorf("%s %s: %w", family, domain, err))
+			}
 		}
 	}
 	return errors.Join(errs...)

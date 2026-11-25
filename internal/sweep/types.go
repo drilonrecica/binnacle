@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/drilonrecica/binnacle/internal/metrics"
 )
 
 const (
@@ -27,7 +29,7 @@ const (
 	CertExpiringDays = 14
 	// EventType is the events-table type written when a domain's
 	// fingerprint changes between two runs.
-	EventType = "domain_change"
+	EventType = metrics.EventDomainChange
 )
 
 type FailureCode string
@@ -139,6 +141,18 @@ type Result struct {
 // or a 5xx status (a Cloudflare 525 included).
 func (r Result) Failed() bool {
 	return r.FailureCode != "" || r.HTTPStatus == 0 || r.HTTPStatus >= 500
+}
+
+// completed fills in what a prober may leave out: the time of the probe and
+// the fingerprint of what it observed.
+func (r Result) completed() Result {
+	if r.CheckedAt.IsZero() {
+		r.CheckedAt = time.Now().UTC()
+	}
+	if r.Fingerprint == "" {
+		r.Fingerprint = r.fingerprint()
+	}
+	return r
 }
 
 // State is the stored latest result of a domain plus its schedule.

@@ -28,6 +28,10 @@ const (
 	EventAlertTriggered       = "alert_triggered"
 	EventAlertRepeated        = "alert_repeated"
 	EventAlertResolved        = "alert_resolved"
+	// EventDomainChange is written by the domain sweep when a domain's
+	// fingerprint (status, certificate, DNS, mail authentication, headers)
+	// differs from the previous run (ADR 028).
+	EventDomainChange = "domain_change"
 )
 
 // EventTypeInfo describes one event type for the UI.
@@ -60,4 +64,5 @@ var EventTypes = []EventTypeInfo{
 	{EventAlertTriggered, false},
 	{EventAlertRepeated, false},
 	{EventAlertResolved, false},
+	{EventDomainChange, false},
 }

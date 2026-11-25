@@ -59,6 +59,7 @@ export function eventTypeLabel(type: string): string {
     alert_triggered: 'Alert triggered',
     alert_repeated: 'Alert repeated',
     alert_resolved: 'Alert resolved',
+    domain_change: 'Domain changed',
   };
   return labels[type] ?? type.replaceAll('_', ' ');
 }
@@ -104,6 +105,7 @@ const familyOfType: Record<EventType, EventFamily> = {
   persistence_emergency: 'system',
   persistence_resumed: 'system',
   retention_shortened: 'system',
+  domain_change: 'health',
 };
 
 export function isEventFamily(value: string): value is EventFamily {

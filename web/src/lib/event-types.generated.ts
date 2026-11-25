@@ -22,6 +22,7 @@ export const eventTypes = [
   'alert_triggered',
   'alert_repeated',
   'alert_resolved',
+  'domain_change',
 ] as const;
 
 export type EventType = (typeof eventTypes)[number];

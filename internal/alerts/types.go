@@ -43,6 +43,14 @@ const (
 	FamilyOptionalCheck  = "optional_check_failure"
 	FamilyDockerDown     = "docker_collector_down"
 	FamilyPersistence    = "persistence_failure"
+	// The domain families read the latest sweep result of every enabled
+	// domain (ADR 028). Their target type is "domain" and the target is the
+	// domain name.
+	FamilyDomainUnreachable     = "domain_unreachable"
+	FamilyDomainCertExpiring    = "domain_cert_expiring"
+	FamilyDomainDNSMissing      = "domain_dns_missing"
+	FamilyDomainMailAuthMissing = "domain_mail_auth_missing"
+	FamilyDomainHeadersMissing  = "domain_headers_missing"
 )
 
 type Rule struct {
@@ -132,6 +140,13 @@ func DefaultRules() []Rule {
 		{ID: "builtin-optional-check", Family: FamilyOptionalCheck, Name: "Optional check failure", BuiltIn: true, Enabled: true, Severity: Warning, ScopeType: "global", TriggerDuration: 2 * time.Minute, RecoveryDuration: 2 * time.Minute, SuppressDuringDeployment: true},
 		{ID: "builtin-docker-down", Family: FamilyDockerDown, Name: "Docker collector down", BuiltIn: true, Enabled: true, Severity: Critical, ScopeType: "global", TriggerDuration: 2 * time.Minute, RecoveryDuration: time.Minute},
 		{ID: "builtin-persistence-failure", Family: FamilyPersistence, Name: "Persistence failure", BuiltIn: true, Enabled: true, Severity: Critical, ScopeType: "global", TriggerDuration: 0, RecoveryDuration: time.Minute},
+		// Domains are swept hourly by default, so a trigger duration would
+		// only delay the alert; the next sweep decides whether it recovers.
+		{ID: "builtin-domain-unreachable", Family: FamilyDomainUnreachable, Name: "Domain unreachable", BuiltIn: true, Enabled: true, Severity: Critical, ScopeType: "global", TriggerDuration: 0, RecoveryDuration: 0},
+		{ID: "builtin-domain-cert-expiring", Family: FamilyDomainCertExpiring, Name: "Domain certificate expiring", BuiltIn: true, Enabled: true, Severity: Warning, ScopeType: "global", Threshold: ptr(14), RecoveryThreshold: ptr(14), TriggerDuration: 0, RecoveryDuration: 0},
+		{ID: "builtin-domain-dns-missing", Family: FamilyDomainDNSMissing, Name: "Domain DNS missing", BuiltIn: true, Enabled: true, Severity: Critical, ScopeType: "global", TriggerDuration: 0, RecoveryDuration: 0},
+		{ID: "builtin-domain-mail-auth-missing", Family: FamilyDomainMailAuthMissing, Name: "Domain mail authentication missing", BuiltIn: true, Enabled: true, Severity: Warning, ScopeType: "global", TriggerDuration: 0, RecoveryDuration: 0},
+		{ID: "builtin-domain-headers-missing", Family: FamilyDomainHeadersMissing, Name: "Domain security headers missing", BuiltIn: true, Enabled: true, Severity: Warning, ScopeType: "global", TriggerDuration: 0, RecoveryDuration: 0},
 	}
 }
 

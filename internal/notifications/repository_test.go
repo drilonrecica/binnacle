@@ -111,7 +111,7 @@ func TestGroupKeys(t *testing.T) {
 		name string
 		a    alerts.Alert
 		want string
-	}{{"resource", alerts.Alert{TargetType: "resource", TargetID: "r"}, "resource:r"}, {"check", alerts.Alert{TargetType: "check", TargetID: "r"}, "resource:r"}, {"host", alerts.Alert{TargetType: "host", TargetID: "server"}, "host:server"}, {"filesystem", alerts.Alert{TargetType: "filesystem", TargetID: "/data"}, "filesystem:/data"}, {"docker", alerts.Alert{Family: alerts.FamilyDockerDown, TargetType: "resource", TargetID: "docker"}, "subsystem:docker"}, {"persistence", alerts.Alert{Family: alerts.FamilyPersistence, TargetType: "server", TargetID: "persistence"}, "subsystem:persistence"}}
+	}{{"resource", alerts.Alert{TargetType: "resource", TargetID: "r"}, "resource:r"}, {"check", alerts.Alert{TargetType: "check", TargetID: "r"}, "resource:r"}, {"host", alerts.Alert{TargetType: "host", TargetID: "server"}, "host:server"}, {"filesystem", alerts.Alert{TargetType: "filesystem", TargetID: "/data"}, "filesystem:/data"}, {"domain", alerts.Alert{TargetType: "domain", TargetID: "example.com"}, "domain:example.com"}, {"docker", alerts.Alert{Family: alerts.FamilyDockerDown, TargetType: "resource", TargetID: "docker"}, "subsystem:docker"}, {"persistence", alerts.Alert{Family: alerts.FamilyPersistence, TargetType: "server", TargetID: "persistence"}, "subsystem:persistence"}}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			got, _, _ := groupFor(tt.a)

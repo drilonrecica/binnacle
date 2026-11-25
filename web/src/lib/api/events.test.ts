@@ -57,7 +57,11 @@ describe('event families (UI-14)', () => {
     });
     const url = new URL(String(fetcher.mock.calls[0]?.[0]), 'http://x');
     const sent = url.searchParams.get('type')?.split(',') ?? [];
-    expect(sent).toEqual(['container_oom', 'container_health_status_change']);
+    expect(sent).toEqual([
+      'container_oom',
+      'container_health_status_change',
+      'domain_change',
+    ]);
     expect(sent.every((type) => eventFamily(type) === 'health')).toBe(true);
   });
 });
