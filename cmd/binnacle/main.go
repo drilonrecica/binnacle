@@ -34,6 +34,7 @@ import (
 	"github.com/drilonrecica/binnacle/internal/preferences"
 	"github.com/drilonrecica/binnacle/internal/settings"
 	"github.com/drilonrecica/binnacle/internal/storage"
+	"github.com/drilonrecica/binnacle/internal/sweep"
 	"github.com/drilonrecica/binnacle/internal/webembed"
 )
 
@@ -115,6 +116,7 @@ func main() {
 	trendEstimator.WindowHours = func() int { return settingsService.Current().Estimator.WindowHours }
 	onboardingService.SetRetentionSettings(settingsService)
 	checkRepository := checks.NewRepository(nil)
+	sweepRepository := sweep.NewRepository(nil)
 	alertRepository := alerts.NewRepository(nil)
 	secretStore, err := auth.NewSecretStore(nil, config.Paths.MasterKey)
 	if err != nil {
@@ -135,13 +137,19 @@ func main() {
 	var checkRunner interface {
 		Run(context.Context, checks.Check) checks.Result
 	} = &checks.Runner{AllowPrivate: config.Checks.AllowPrivateTargets}
+	// The sweep probes public domains, so it shares the checks' private-target
+	// opt-in rather than having one of its own.
+	var domainProber sweep.Runner = &sweep.Prober{AllowPrivate: config.Checks.AllowPrivateTargets}
 	if *demoMode || config.Demo {
 		checkRunner = demo.CheckRunner{}
+		domainProber = demo.DomainProber{}
 	}
 	notificationWorker.Logger = log
 	setup.Logger, sessions.Logger, tokenRepository.Logger, mfaService.Logger, coolifyIntegration.Logger = log, log, log, log, log
 	checkScheduler := checks.NewScheduler(checkRepository, checkRunner, config.Checks.MaxConcurrency)
 	checkScheduler.Logger = log
+	sweepScheduler := sweep.NewScheduler(sweepRepository, domainProber, config.Sweep.MaxConcurrency)
+	sweepScheduler.Logger = log
 	alertEvaluator := alerts.NewEvaluator(alertRepository, engine)
 	alertEvaluator.Logger = log
 
@@ -208,6 +216,7 @@ func main() {
 		onboardingService.SetDB(store.DB())
 		settingsService.SetDB(store.DB())
 		checkRepository.SetDB(store.DB())
+		sweepRepository.SetDB(store.DB())
 		alertRepository.SetDB(store.DB())
 		secretStore.SetDB(store.DB())
 		mfaService.SetDB(store.DB())
@@ -221,6 +230,9 @@ func main() {
 		}
 		if *demoMode || config.Demo {
 			if err := demo.SeedChecksAlerts(ctx, store.DB(), *demoChecks, *demoContainers, time.Now().UTC()); err != nil {
+				return err
+			}
+			if err := demo.SeedDomains(ctx, store.DB(), time.Now().UTC()); err != nil {
 				return err
 			}
 		}
@@ -255,6 +267,11 @@ func main() {
 	runChecks := (!*demoMode && !config.Demo) || *demoRunChecks
 	if runChecks {
 		application.Add(checkScheduler)
+	}
+	// The sweep follows the same rule: demo mode keeps its seeded results
+	// unless the benchmark flag asks for the schedulers. Run now still works.
+	if config.Sweep.Enabled && runChecks {
+		application.Add(sweepScheduler)
 	}
 	application.Add(trendEstimator)
 	application.Add(alertEvaluator)
@@ -366,6 +383,7 @@ func main() {
 	apiServer.EnableOnboarding(onboardingService, sessions, sessions)
 	apiServer.EnableSettings(settingsService, sessions, sessions)
 	apiServer.EnableChecks(checkRepository, checkScheduler, sessions, sessions, protection)
+	apiServer.EnableSweep(sweepRepository, sweepScheduler, config.Sweep.DefaultInterval, sessions, sessions, protection)
 	apiServer.EnableAlerts(alertRepository, sessions, sessions, protection)
 	apiServer.EnableIncidentsNotifications(notificationRepository, notificationWorker, incidentsAuthorizer, sessions, protection)
 	apiServer.EnablePreferences(preferenceRepository, sessions)

@@ -100,3 +100,45 @@ func TestPrivateTargetOptInsAreDeploymentSettings(t *testing.T) {
 		t.Fatal("coolify opt-in missing from effective settings")
 	}
 }
+
+func TestSweepDeploymentSettings(t *testing.T) {
+	config := Defaults()
+	if !config.Sweep.Enabled || config.Sweep.MaxConcurrency != 4 || config.Sweep.DefaultInterval != time.Hour {
+		t.Fatalf("sweep defaults=%+v", config.Sweep)
+	}
+	for env, key := range map[string]string{"BINNACLE_SWEEP_ENABLED": "sweep.enabled", "BINNACLE_SWEEP_MAX_CONCURRENCY": "sweep.max_concurrency", "BINNACLE_SWEEP_DEFAULT_INTERVAL": "sweep.default_interval"} {
+		if environment[env] != key {
+			t.Fatalf("%s maps to %q, want %q", env, environment[env], key)
+		}
+		if UIOverridable(key) {
+			t.Fatalf("%s must require restart", key)
+		}
+	}
+	values := map[string]string{"sweep.enabled": "false", "sweep.max_concurrency": "8", "sweep.default_interval": "6h"}
+	if err := apply(&config, values); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if config.Sweep.Enabled || config.Sweep.MaxConcurrency != 8 || config.Sweep.DefaultInterval != 6*time.Hour {
+		t.Fatalf("sweep settings=%+v", config.Sweep)
+	}
+	for key, want := range map[string]string{"sweep.enabled": "false", "sweep.max_concurrency": "8", "sweep.default_interval": "6h0m0s"} {
+		if got := lookup(config, key); got != want {
+			t.Fatalf("lookup(%s)=%q want %q", key, got, want)
+		}
+	}
+	if err := apply(&config, map[string]string{"sweep.enabled": "sometimes"}); err == nil {
+		t.Fatal("sweep.enabled accepted a non-boolean")
+	}
+	for _, bad := range []map[string]string{{"sweep.max_concurrency": "0"}, {"sweep.max_concurrency": "17"}, {"sweep.default_interval": "5m"}, {"sweep.default_interval": "25h"}} {
+		config := Defaults()
+		if err := apply(&config, bad); err != nil {
+			t.Fatal(err)
+		}
+		if err := config.Validate(); err == nil {
+			t.Fatalf("%v was accepted", bad)
+		}
+	}
+}

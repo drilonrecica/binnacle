@@ -85,6 +85,12 @@ services:
       # either to false to turn the feature off. Prometheus stays opt-in.
       BINNACLE_FEATURE_ADVANCED_AUTH: ${BINNACLE_FEATURE_ADVANCED_AUTH:-true}
       BINNACLE_FEATURE_PORTABILITY: ${BINNACLE_FEATURE_PORTABILITY:-true}
+      # Domain sweep defaults (public domains probed hourly for DNS, HTTPS,
+      # certificate expiry, SPF/DMARC and security headers). Uncomment to
+      # change them; the validated environment above stays as it is.
+      # BINNACLE_SWEEP_ENABLED: ${BINNACLE_SWEEP_ENABLED:-true}
+      # BINNACLE_SWEEP_MAX_CONCURRENCY: ${BINNACLE_SWEEP_MAX_CONCURRENCY:-4}
+      # BINNACLE_SWEEP_DEFAULT_INTERVAL: ${BINNACLE_SWEEP_DEFAULT_INTERVAL:-1h}
     volumes:
       - binnacle-data:/var/lib/binnacle
       - /proc:/host/proc:ro

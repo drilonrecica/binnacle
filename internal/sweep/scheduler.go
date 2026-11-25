@@ -150,7 +150,7 @@ func (s *Scheduler) worker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case d := <-s.queue:
-			result := s.Prober.Probe(ctx, d)
+			result := s.Prober.Probe(ctx, d).completed()
 			if changes, err := s.Repo.SaveResult(ctx, d, result); err != nil {
 				if ctx.Err() == nil {
 					s.failures.Inc()
@@ -190,7 +190,7 @@ func (s *Scheduler) RunNow(ctx context.Context, id string) (Result, error) {
 		return Result{}, errors.New("domain is already being swept")
 	}
 	defer s.release(entry.ID)
-	result := s.Prober.Probe(ctx, entry.Domain)
+	result := s.Prober.Probe(ctx, entry.Domain).completed()
 	if _, err = s.Repo.SaveResult(ctx, entry.Domain, result); err != nil {
 		return Result{}, err
 	}

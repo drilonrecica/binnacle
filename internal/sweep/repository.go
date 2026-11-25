@@ -215,12 +215,7 @@ func (r *Repository) SaveResult(ctx context.Context, d Domain, result Result) ([
 	if r.db == nil {
 		return nil, errUnavailable
 	}
-	if result.CheckedAt.IsZero() {
-		result.CheckedAt = time.Now().UTC()
-	}
-	if result.Fingerprint == "" {
-		result.Fingerprint = result.fingerprint()
-	}
+	result = result.completed()
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
