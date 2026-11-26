@@ -380,6 +380,9 @@ export async function mockApp(page: Page, options: MockOptions = {}) {
     route.fulfill({ json: [] }),
   );
   await page.route('**/api/v1/checks', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/sweep/domains', (route) =>
+    route.fulfill({ json: [] }),
+  );
   await page.route('**/api/v1/silences?*', (route) =>
     route.fulfill({ json: [] }),
   );
@@ -550,6 +553,61 @@ const firingAlert = {
   incidentId: 'inc-1',
 };
 
+/** Swept domains in the states the Domains card ranks (ADR 028). */
+const sweptState = {
+  checkedAt: '2026-07-11T11:56:00Z',
+  nextRunAt: '2026-07-11T12:56:00Z',
+  httpStatus: 200,
+  certIssuer: "CN=R11,O=Let's Encrypt,C=US",
+  certNotAfter: '2026-09-08T00:00:00Z',
+  certDaysLeft: 58,
+  nsPresent: true,
+  resolves: true,
+  spf: 'v=spf1 include:_spf.example.net -all',
+  dmarcPolicy: 'reject',
+  hsts: true,
+  csp: true,
+  fingerprint: 'fp',
+  consecutiveFailures: 0,
+};
+
+function sweptDomain(
+  id: string,
+  domain: string,
+  state: Partial<typeof sweptState> | null,
+) {
+  return {
+    id,
+    domain,
+    interval: 3_600_000_000_000,
+    enabled: true,
+    createdAt: '2026-07-10T09:00:00Z',
+    updatedAt: '2026-07-10T09:00:00Z',
+    ...(state ? { state: { ...sweptState, domainId: id, ...state } } : {}),
+  };
+}
+
+const sweptDomains = [
+  sweptDomain('domain_1', 'example.com', {}),
+  sweptDomain('domain_2', 'shop.example.com', {
+    httpStatus: 525,
+    certIssuer: undefined,
+    certNotAfter: undefined,
+    certDaysLeft: undefined,
+    consecutiveFailures: 3,
+  }),
+  sweptDomain('domain_3', 'example.org', {
+    certNotAfter: '2026-07-17T00:00:00Z',
+    certDaysLeft: 5,
+  }),
+  sweptDomain('domain_4', 'example.net', {
+    spf: '',
+    dmarcPolicy: 'none',
+    csp: false,
+  }),
+  sweptDomain('domain_5', 'new.example.com', null),
+];
+
 const rule = {
   id: 'builtin-host-cpu-warning',
   family: 'host_cpu_warning',
@@ -662,6 +720,7 @@ export async function mockPopulated(page: Page) {
   await page.route('**/api/v1/alert-rules', json([rule]));
   await page.route('**/api/v1/checks?*', json([check]));
   await page.route('**/api/v1/checks', json([check]));
+  await page.route('**/api/v1/sweep/domains', json(sweptDomains));
   const silence = {
     id: 'sil-1',
     scopeType: 'resource',
