@@ -29,7 +29,7 @@ seeded history.
 
 ## Status
 
-The current stable release is v0.6.0. Advanced authentication (TOTP and
+The current stable release is v1.2.0. Advanced authentication (TOTP and
 trusted-proxy authentication) and portability (personal API tokens, exports,
 and Prometheus eligibility) have passed their acceptance suites, which run in
 CI and in the release gate, and are enabled in the packaged Compose and Coolify
@@ -61,7 +61,7 @@ hosts, and workload control are unsupported.
 
 ## Quick start
 
-For production installation with the published `v0.6.0` image, follow the
+For production installation with the published `v1.2.0` image, follow the
 [installation guide](docs/operations/install.md). To evaluate Binnacle locally
 with synthetic data:
 

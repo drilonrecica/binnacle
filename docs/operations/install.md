@@ -3,7 +3,7 @@
 Binnacle is distributed as a container image. The supported paths are Coolify
 (one-click service), Docker Compose, or GHCR.
 
-> **Current release:** For production, pin the immutable `v0.6.0` image tag.
+> **Current release:** For production, pin the immutable `v1.2.0` image tag.
 > The `stable` tag tracks the latest stable release. Qualify a source-built
 > `local` image before using it in production.
 
