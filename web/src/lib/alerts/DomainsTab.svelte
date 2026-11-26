@@ -147,49 +147,41 @@
     {
       key: 'status',
       label: 'Status',
-      width: '160px',
+      width: '172px',
       sortable: true,
       sortValue: (row) => rank[domainStatus(row).label] ?? 5,
       cell: statusCell,
     },
     {
-      key: 'http',
-      label: 'HTTP',
-      align: 'right',
-      width: '90px',
-      cell: httpCell,
-    },
-    {
       key: 'cert',
       label: 'Cert',
       align: 'right',
-      width: '90px',
+      width: '64px',
       sortable: true,
       sortValue: (row) => row.state?.certDaysLeft ?? Number.MAX_SAFE_INTEGER,
       cell: certCell,
     },
-    { key: 'spf', label: 'SPF', align: 'center', width: '64px', cell: spfCell },
+    { key: 'spf', label: 'SPF', align: 'center', width: '52px', cell: spfCell },
     {
       key: 'dmarc',
       label: 'DMARC',
       align: 'center',
-      width: '100px',
+      width: '84px',
       cell: dmarcCell,
     },
     {
       key: 'hsts',
       label: 'HSTS',
       align: 'center',
-      width: '64px',
+      width: '56px',
       cell: hstsCell,
     },
-    { key: 'csp', label: 'CSP', align: 'center', width: '64px', cell: cspCell },
+    { key: 'csp', label: 'CSP', align: 'center', width: '52px', cell: cspCell },
     {
       key: 'checked',
-      label: 'Last checked',
+      label: 'Checked',
       align: 'right',
-      width: '120px',
-      hideBelow: 'lg',
+      width: '84px',
       sortable: true,
       sortValue: (row) =>
         row.state ? Date.parse(row.state.checkedAt) : Number.MIN_SAFE_INTEGER,
@@ -200,7 +192,7 @@
       label: 'Actions',
       srOnly: true,
       align: 'right',
-      width: '56px',
+      width: '48px',
       cell: actionsCell,
       card: 'hide',
     },
@@ -217,13 +209,16 @@
   {/if}
 {/snippet}
 {#snippet domainCell(row: SweptDomain)}
+  {@const issuer = row.state?.certIssuer?.replace(/^CN=([^,]+).*$/, '$1')}
   <div class="name">
     <span class="title mono">{row.domain}</span>
     {#if row.state?.failureCode}
       <span class="failure">{failureLabel(row.state.failureCode)}</span>
-    {:else if row.state?.certIssuer}
-      <span class="meta" use:tooltip={row.state.certIssuer}
-        >{row.state.certIssuer.replace(/^CN=([^,]+).*$/, '$1')}</span
+    {:else if row.state}
+      <span class="meta" use:tooltip={row.state.certIssuer ?? ''}
+        ><span class:bad={unreachable(row.state)}
+          >HTTP {httpLabel(row.state)}</span
+        >{#if issuer}&nbsp;· {issuer}{/if}</span
       >
     {/if}
   </div>
@@ -231,9 +226,6 @@
 {#snippet statusCell(row: SweptDomain)}
   {@const state = domainStatus(row)}
   <Status tone={state.tone} label={state.label} />
-{/snippet}
-{#snippet httpCell(row: SweptDomain)}
-  <span class="num">{httpLabel(row.state)}</span>
 {/snippet}
 {#snippet certCell(row: SweptDomain)}
   {@const days = row.state?.certDaysLeft}
